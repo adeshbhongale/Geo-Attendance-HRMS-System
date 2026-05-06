@@ -38,11 +38,14 @@ exports.sendOTP = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate 7-digit OTP
+    const otp = Math.floor(1000000 + Math.random() * 9000000).toString();
     user.otp = otp;
-    user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 mins
+    user.otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
     await user.save();
+
+    console.log(`[AUTH] OTP generated for ${identifier}: ${otp}`);
+    console.log(`[AUTH] OTP Expires at: ${user.otpExpires}`);
 
     // Console log OTP for testing as requested
     console.log(`[TESTING] OTP for ${identifier}: ${otp}`);
@@ -71,7 +74,17 @@ exports.login = async (req, res, next) => {
       $or: [{ email: identifier }, { mobile: identifier }]
     });
 
-    if (!user || user.otp !== otp || user.otpExpires < Date.now()) {
+    if (!user) {
+      console.log(`[LOGIN] User not found for ${identifier}`);
+      return res.status(401).json({ success: false, message: 'Invalid or expired OTP' });
+    }
+
+    console.log(`[LOGIN] Verifying OTP for ${user.email}`);
+    console.log(`[LOGIN] Stored OTP: ${user.otp} (Type: ${typeof user.otp}), Provided OTP: ${otp} (Type: ${typeof otp})`);
+    console.log(`[LOGIN] Expires: ${user.otpExpires}, Current: ${new Date()}`);
+
+    if (String(user.otp) !== String(otp) || user.otpExpires < Date.now()) {
+      console.log(`[LOGIN] OTP Mismatch or Expired`);
       return res.status(401).json({ success: false, message: 'Invalid or expired OTP' });
     }
 
@@ -82,6 +95,7 @@ exports.login = async (req, res, next) => {
 
     sendTokenResponse(user, 200, res);
   } catch (err) {
+    console.error(`[LOGIN] Error: ${err.message}`);
     res.status(400).json({ success: false, message: err.message });
   }
 };
@@ -127,7 +141,7 @@ const sendTokenResponse = (user, statusCode, res) => {
 
   const options = {
     expires: new Date(
-      Date.now() + process.env.JWT_EXPIRE_COOKIE * 24 * 60 * 60 * 1000
+      Date.now() + (process.env.JWT_EXPIRE_COOKIE || 30) * 24 * 60 * 60 * 1000
     ),
     httpOnly: true,
   };

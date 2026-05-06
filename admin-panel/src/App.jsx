@@ -8,6 +8,7 @@ import Attendance from './pages/Attendance';
 import Leaves from './pages/Leaves';
 import Shifts from './pages/Shifts';
 import Settings from './pages/Settings';
+import Profile from './pages/Profile';
 import Layout from './components/Layout';
 import { Provider } from 'react-redux';
 import { store } from './store';
@@ -30,6 +31,7 @@ function App() {
               <Route path="leaves" element={<Leaves />} />
               <Route path="shifts" element={<Shifts />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="profile" element={<Profile />} />
             </Route>
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

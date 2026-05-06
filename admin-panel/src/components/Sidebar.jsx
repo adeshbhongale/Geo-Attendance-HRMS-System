@@ -1,71 +1,94 @@
-import React from 'react';
-import { NavLink } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Users, 
-  CalendarCheck, 
-  Clock, 
-  FileText, 
-  Settings, 
+import {
+  Activity,
+  CalendarCheck,
+  Clock,
+  FileText,
+  LayoutDashboard,
   LogOut,
-  MapPin
+  MapPin,
+  Users,
+  X
 } from 'lucide-react';
 import { useDispatch } from 'react-redux';
+import { NavLink } from 'react-router-dom';
 import { logout } from '../store/authSlice';
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen, toggleSidebar }) => {
   const dispatch = useDispatch();
 
   const navItems = [
-    { name: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
-    { name: 'Employees', icon: <Users size={20} />, path: '/employees' },
-    { name: 'Attendance', icon: <CalendarCheck size={20} />, path: '/attendance' },
-    { name: 'Leave Requests', icon: <FileText size={20} />, path: '/leaves' },
-    { name: 'Shifts', icon: <Clock size={20} />, path: '/shifts' },
-    { name: 'Office Setup', icon: <MapPin size={20} />, path: '/settings' },
+    { name: 'Dashboard', icon: <LayoutDashboard size={18} />, path: '/' },
+    { name: 'Employees', icon: <Users size={18} />, path: '/employees' },
+    { name: 'Attendance', icon: <CalendarCheck size={18} />, path: '/attendance' },
+    { name: 'Leave Requests', icon: <FileText size={18} />, path: '/leaves' },
+    { name: 'Shifts', icon: <Clock size={18} />, path: '/shifts' },
+    { name: 'Office Setup', icon: <MapPin size={18} />, path: '/settings' },
   ];
 
   return (
-    <div className="sidebar glass-card" style={{ margin: '1rem', height: 'calc(100vh - 2rem)' }}>
-      <div style={{ padding: '1rem 0.5rem', marginBottom: '2rem', textAlign: 'center' }}>
-        <h2 style={{ color: 'var(--primary)', fontWeight: 700, fontSize: '1.5rem' }}>HRMS Geo</h2>
-        <p className="text-muted" style={{ fontSize: '0.8rem' }}>Admin Portal</p>
-      </div>
+    <>
+      {/* Mobile Overlay */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] lg:hidden transition-opacity"
+          onClick={toggleSidebar}
+        />
+      )}
 
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        {navItems.map((item) => (
-          <NavLink
-            key={item.name}
-            to={item.path}
-            className={({ isActive }) => 
-              `btn ${isActive ? 'btn-primary' : ''}`
-            }
-            style={({ isActive }) => ({
-              backgroundColor: isActive ? 'var(--primary)' : 'transparent',
-              color: isActive ? 'white' : 'var(--text-main)',
-              justifyContent: 'flex-start',
-              padding: '0.8rem 1rem',
-              width: '100%',
-              textDecoration: 'none'
-            })}
+      <div className={`
+        fixed lg:sticky top-0 left-0 z-[101] h-screen lg:h-[calc(100vh-2rem)] 
+        w-[280px] m-0 lg:m-4 flex flex-col p-8
+        transition-transform duration-300 ease-in-out lg:translate-x-0
+        ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+        bg-white border border-slate-200 rounded-3xl shadow-xl
+      `}>
+        <div className="mb-12 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-100">
+              <Activity className="text-white" size={28} />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-slate-900 tracking-tighter leading-none">HRMS <span className="text-indigo-600">Geo</span></h2>
+              <p className="text-[11px] font-bold text-slate-500 tracking-tight mt-1.5">Admin control suite</p>
+            </div>
+          </div>
+          <button onClick={toggleSidebar} className="lg:hidden p-2.5 text-slate-400 hover:text-slate-900 bg-slate-50 rounded-xl transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+
+        <nav className="flex flex-col gap-2 flex-1">
+          {navItems.map((item) => (
+            <NavLink
+              key={item.name}
+              to={item.path}
+              onClick={() => window.innerWidth < 1024 && toggleSidebar()}
+              className={({ isActive }) =>
+                `group flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 font-bold text-sm ${isActive
+                  ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 scale-[1.02]'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600'
+                }`
+              }
+            >
+              <span className="transition-transform duration-300 group-hover:scale-110">
+                {item.icon}
+              </span>
+              {item.name}
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="mt-auto pt-8 border-t border-slate-200">
+          <button
+            onClick={() => dispatch(logout())}
+            className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-bold text-sm bg-rose-50 text-rose-600 hover:bg-rose-100 transition-all duration-300 active:scale-95 group border border-rose-100"
           >
-            {item.icon}
-            {item.name}
-          </NavLink>
-        ))}
-      </nav>
-
-      <div style={{ position: 'absolute', bottom: '1.5rem', width: 'calc(100% - 3rem)' }}>
-        <button 
-          onClick={() => dispatch(logout())}
-          className="btn" 
-          style={{ width: '100%', justifyContent: 'flex-start', color: '#ef4444' }}
-        >
-          <LogOut size={20} />
-          Logout
-        </button>
+            <LogOut size={18} className="group-hover:-translate-x-1 transition-transform" />
+            Logout
+          </button>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 

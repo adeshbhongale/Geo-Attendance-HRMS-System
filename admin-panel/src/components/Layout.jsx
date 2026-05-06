@@ -1,50 +1,55 @@
-import React from 'react';
-import { Outlet, Navigate } from 'react-router-dom';
+import { Menu } from 'lucide-react';
+import { useState } from 'react';
 import { useSelector } from 'react-redux';
+import { Navigate, Outlet, Link } from 'react-router-dom';
 import Sidebar from './Sidebar';
 
 const Layout = () => {
-  const { isAuthenticated } = useSelector((state) => state.auth);
+  const { isAuthenticated, user } = useSelector((state) => state.auth);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" />;
   }
 
+  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar />
-      <main className="main-content" style={{ flex: 1 }}>
-        <header style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
-          marginBottom: '2rem' 
-        }}>
-          <div>
-            <h1 style={{ marginBottom: '0.2rem' }}>Welcome back, Admin</h1>
-            <p className="text-muted">Here is what's happening today</p>
-          </div>
-          <div className="glass-card" style={{ padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ textAlign: 'right' }}>
-              <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>Adesh Bhongale</p>
-              <p className="text-muted" style={{ fontSize: '0.7rem' }}>Super Admin</p>
-            </div>
-            <div style={{ 
-              width: '40px', 
-              height: '40px', 
-              borderRadius: '50%', 
-              backgroundColor: 'var(--primary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontWeight: 700
-            }}>
-              AB
+    <div className="flex min-h-screen bg-slate-100/50">
+      <Sidebar isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} />
+
+      <main className="flex-1 p-4 md:p-6 lg:p-8">
+        <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8 animate-fade-up">
+          <div className="flex items-center gap-4 w-full xl:w-auto">
+            <button
+              onClick={toggleSidebar}
+              className="lg:hidden p-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 transition-colors shadow-sm"
+            >
+              <Menu size={20} />
+            </button>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight mb-0.5">Welcome back, Admin</h1>
+              <p className="text-slate-600 font-bold text-[13px]">Monitoring the organization's heartbeat</p>
             </div>
           </div>
+
+          <Link 
+            to="/profile"
+            className="bg-white flex items-center gap-4 px-5 py-3 border border-slate-200 rounded-2xl shadow-lg shadow-slate-200/40 w-full xl:w-auto hover:border-indigo-200 transition-all active:scale-95 group cursor-pointer"
+          >
+            <div className="text-right flex-1 xl:flex-initial">
+              <p className="text-sm font-bold text-slate-900 tracking-tight mb-0.5">{user?.name || 'Adesh Bhongale'}</p>
+              <p className="text-[10px] font-bold text-indigo-600 tracking-tight bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 inline-block">
+                Infrastructure administrator
+              </p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-lg shadow-indigo-100 group-hover:rotate-6 transition-transform">
+              {user?.name?.charAt(0) || 'A'}
+            </div>
+          </Link>
         </header>
-        <div className="animate-fade-in">
+
+        <div className="relative">
           <Outlet />
         </div>
       </main>

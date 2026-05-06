@@ -1,159 +1,113 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
-import { theme } from '../theme';
-import { User, Mail, Phone, Briefcase, LogOut, ChevronRight } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Briefcase, ChevronRight, LogOut, Mail, Phone, Shield, User } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
+import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 const ProfileScreen = ({ navigation }) => {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    loadUser();
+  }, []);
+
+  const loadUser = async () => {
+    try {
+      const userData = await AsyncStorage.getItem('user');
+      if (userData) setUser(JSON.parse(userData));
+    } catch (err) {
+      console.error('Error loading user:', err);
+    }
+  };
+
+  const handleLogout = async () => {
+    Alert.alert('Logout', 'Are you sure you want to exit?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: async () => {
+          await AsyncStorage.clear();
+          navigation.replace('Login');
+        }
+      }
+    ]);
+  };
+
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.avatarContainer}>
-          <Text style={styles.avatarText}>JD</Text>
+    <ScrollView className="flex-1 bg-slate-50">
+      <View className="pt-20 pb-10 bg-white items-center rounded-b-[40px] shadow-sm shadow-slate-200">
+        <View className="w-28 h-28 rounded-full bg-indigo-600 justify-center items-center mb-5 shadow-xl shadow-indigo-200">
+          <Text className="text-white text-4xl font-bold">{user?.name?.charAt(0) || 'U'}</Text>
         </View>
-        <Text style={styles.name}>John Doe</Text>
-        <Text style={styles.role}>Senior Developer • IT Department</Text>
+        <Text className="text-2xl font-bold text-slate-900 tracking-tight">{user?.name || 'Loading...'}</Text>
+        <View className="flex-row items-center mt-2 bg-indigo-50 px-4 py-1.5 rounded-full">
+          <Briefcase size={14} color="#4f46e5" />
+          <Text className="text-indigo-600 font-bold ml-2 text-xs  tracking-widest">
+            {user?.designation || 'Staff'} • {user?.department || 'Department'}
+          </Text>
+        </View>
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.infoCard}>
-          <View style={styles.infoItem}>
-            <Mail size={20} color={theme.colors.textMuted} />
-            <View style={styles.infoTextContainer}>
-              <Text style={styles.infoLabel}>Email</Text>
-              <Text style={styles.infoValue}>john.doe@example.com</Text>
+      <View className="p-6">
+        <View className="bg-white rounded-3xl p-6 shadow-sm shadow-slate-100 border border-slate-100 mb-6">
+          <Text className="text-[10px] font-bold text-slate-400  tracking-[2px] mb-6">Personal Details</Text>
+
+          <View className="flex-row items-center mb-6">
+            <View className="w-10 h-10 rounded-xl bg-slate-50 justify-center items-center">
+              <Mail size={20} color="#64748b" />
+            </View>
+            <View className="ml-4">
+              <Text className="text-[10px] font-bold text-slate-400  tracking-widest">Email Address</Text>
+              <Text className="text-base font-bold text-slate-800 mt-0.5">{user?.email || 'N/A'}</Text>
             </View>
           </View>
-          <View style={styles.infoItem}>
-            <Phone size={20} color={theme.colors.textMuted} />
-            <View style={styles.infoTextContainer}>
-              <Text style={styles.infoLabel}>Mobile</Text>
-              <Text style={styles.infoValue}>+91 9876543210</Text>
+
+          <View className="flex-row items-center mb-6">
+            <View className="w-10 h-10 rounded-xl bg-slate-50 justify-center items-center">
+              <Phone size={20} color="#64748b" />
+            </View>
+            <View className="ml-4">
+              <Text className="text-[10px] font-bold text-slate-400  tracking-widest">Mobile Number</Text>
+              <Text className="text-base font-bold text-slate-800 mt-0.5">{user?.mobile || 'N/A'}</Text>
             </View>
           </View>
-          <View style={styles.infoItem}>
-            <Briefcase size={20} color={theme.colors.textMuted} />
-            <View style={styles.infoTextContainer}>
-              <Text style={styles.infoLabel}>Shift</Text>
-              <Text style={styles.infoValue}>General Shift (09:00 - 18:00)</Text>
+
+          <View className="flex-row items-center">
+            <View className="w-10 h-10 rounded-xl bg-slate-50 justify-center items-center">
+              <Shield size={20} color="#64748b" />
+            </View>
+            <View className="ml-4">
+              <Text className="text-[10px] font-bold text-slate-400  tracking-widest">System Role</Text>
+              <Text className="text-base font-bold text-slate-800 mt-0.5  tracking-wider">{user?.role || 'Employee'}</Text>
             </View>
           </View>
         </View>
 
-        <TouchableOpacity style={styles.menuItem}>
-          <View style={styles.menuIconContainer}>
-            <User size={20} color={theme.colors.primary} />
+        <TouchableOpacity className="bg-white flex-row items-center p-5 rounded-2xl shadow-sm shadow-slate-100 border border-slate-100 active:bg-slate-50">
+          <View className="w-10 h-10 rounded-xl bg-indigo-50 justify-center items-center">
+            <User size={20} color="#4f46e5" />
           </View>
-          <Text style={styles.menuText}>Edit Profile</Text>
-          <ChevronRight size={20} color={theme.colors.textMuted} />
+          <Text className="flex-1 ml-4 text-slate-800 font-bold text-base">Edit Profile Info</Text>
+          <ChevronRight size={20} color="#94a3b8" />
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.menuItem, { marginTop: 20 }]}
-          onPress={() => navigation.navigate('Login')}
+        <TouchableOpacity
+          className="bg-rose-50 flex-row items-center p-5 rounded-2xl border border-rose-100 mt-8 active:bg-rose-100"
+          onPress={handleLogout}
         >
-          <View style={[styles.menuIconContainer, { backgroundColor: '#fee2e2' }]}>
-            <LogOut size={20} color={theme.colors.danger} />
+          <View className="w-10 h-10 rounded-xl bg-rose-500 justify-center items-center shadow-lg shadow-rose-200">
+            <LogOut size={20} color="white" />
           </View>
-          <Text style={[styles.menuText, { color: theme.colors.danger }]}>Logout</Text>
+          <Text className="flex-1 ml-4 text-rose-600 font-bold  tracking-widest">Sign Out</Text>
+          <ChevronRight size={20} color="#fb7185" />
         </TouchableOpacity>
+
+        <Text className="text-center text-slate-300 text-[10px] mt-10 font-bold tracking-widest ">
+          Version 2.4.0 • GeoHR Systems
+        </Text>
       </View>
-    </View>
+    </ScrollView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  header: {
-    paddingTop: 80,
-    paddingBottom: 40,
-    backgroundColor: 'white',
-    alignItems: 'center',
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    ...theme.shadows.light,
-  },
-  avatarContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  avatarText: {
-    color: 'white',
-    fontSize: 32,
-    fontWeight: '800',
-  },
-  name: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: theme.colors.text,
-  },
-  role: {
-    fontSize: 14,
-    color: theme.colors.textMuted,
-    marginTop: 5,
-    fontWeight: '600',
-  },
-  content: {
-    padding: 20,
-  },
-  infoCard: {
-    backgroundColor: 'white',
-    borderRadius: 25,
-    padding: 20,
-    marginBottom: 30,
-    ...theme.shadows.light,
-  },
-  infoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  infoTextContainer: {
-    marginLeft: 15,
-  },
-  infoLabel: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-    fontWeight: '600',
-  },
-  infoValue: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginTop: 2,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    padding: 15,
-    borderRadius: 20,
-    ...theme.shadows.light,
-  },
-  menuIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#eff6ff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
-  },
-  menuText: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
-});
 
 export default ProfileScreen;

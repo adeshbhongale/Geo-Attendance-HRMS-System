@@ -20,6 +20,17 @@ connectDB();
 
 const app = express();
 
+// Disable ETag to prevent 304 Not Modified statuses
+app.disable('etag');
+
+// Global middleware to prevent caching and resolve 304 issues
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+});
+
 // Body parser
 app.use(express.json());
 
@@ -32,13 +43,13 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Sanitize data
-app.use(mongoSanitize());
+// app.use(mongoSanitize());
 
 // Set security headers
 app.use(helmet());
 
 // Prevent XSS attacks
-app.use(xss());
+// app.use(xss());
 
 // Rate limiting
 const limiter = rateLimit({

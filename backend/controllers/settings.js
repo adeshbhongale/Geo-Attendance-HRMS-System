@@ -5,13 +5,22 @@ const Location = require('../models/Location');
 // @access  Private
 exports.getOfficeSettings = async (req, res, next) => {
   try {
+    // Force fresh data by disabling cache (avoids 304)
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     let office = await Location.findOne({ name: 'Office Main' });
     if (!office) {
-      // Create default if not exists
+      // Try to find any location if 'Office Main' doesn't exist
+      office = await Location.findOne();
+    }
+    if (!office) {
+      // Create default if still not exists
       office = await Location.create({
         name: 'Office Main',
-        latitude: 0,
-        longitude: 0,
+        latitude: 16.7050,
+        longitude: 74.2433,
         radius: 200,
       });
     }
@@ -20,6 +29,7 @@ exports.getOfficeSettings = async (req, res, next) => {
       data: office,
     });
   } catch (err) {
+    console.error('Get settings error:', err);
     res.status(400).json({ success: false, message: err.message });
   }
 };
@@ -29,10 +39,11 @@ exports.getOfficeSettings = async (req, res, next) => {
 // @access  Private/Admin
 exports.updateOfficeSettings = async (req, res, next) => {
   try {
+    console.log('Updating settings with data:', req.body);
     let office = await Location.findOneAndUpdate(
       { name: 'Office Main' },
       req.body,
-      { new: true, runValidators: true, upsert: true }
+      { returnDocument: 'after', runValidators: true, upsert: true }
     );
     res.status(200).json({
       success: true,

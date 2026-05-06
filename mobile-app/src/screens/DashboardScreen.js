@@ -1,40 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  Dimensions,
-  SafeAreaView,
-  Platform,
-  StatusBar,
-  ActivityIndicator
-} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import { theme } from '../theme';
-import { 
-  MapPin, 
-  Clock, 
-  Calendar, 
-  User as UserIcon, 
-  Bell, 
-  Search,
-  Zap,
-  Map as MapIcon,
+import {
   Activity,
-  History
+  Bell,
+  Calendar,
+  Clock,
+  History,
+  Map as MapIcon,
+  Search,
+  User as UserIcon,
+  Zap
 } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Dimensions,
+  Platform,
+  ScrollView,
+  StatusBar,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
 
-// Only import MapView on native platforms
-let MapView, Marker, Circle;
-if (Platform.OS !== 'web') {
-  const Maps = require('react-native-maps');
-  MapView = Maps.default;
-  Marker = Maps.Marker;
-  Circle = Maps.Circle;
-}
+import AttendanceMap from '../components/AttendanceMap';
 
 const { width, height } = Dimensions.get('window');
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -65,134 +54,125 @@ const DashboardScreen = ({ navigation }) => {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+      <View className="flex-1 justify-center items-center bg-white">
+        <ActivityIndicator size="large" color="#4f46e5" />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View className="flex-1 bg-slate-50">
       <StatusBar barStyle="dark-content" />
-      
-      {/* Map Section */}
-      <View style={styles.mapContainer}>
-        {Platform.OS === 'web' ? (
-          <View style={[styles.map, styles.webMapPlaceholder]}>
-            <MapIcon size={40} color={theme.colors.primary} />
-            <Text style={styles.webMapText}>Map View (Mobile Only)</Text>
-          </View>
-        ) : (
-          <MapView
-            style={styles.map}
-            initialRegion={{
-              latitude: 18.5204,
-              longitude: 73.8567,
-              latitudeDelta: 0.01,
-              longitudeDelta: 0.01,
-            }}
-          >
-            <Marker
-              coordinate={{ latitude: 18.5204, longitude: 73.8567 }}
-              title="Office Location"
-            >
-              <View style={styles.markerContainer}>
-                <View style={styles.markerCircle} />
-              </View>
-            </Marker>
-            <Circle
-              center={{ latitude: 18.5204, longitude: 73.8567 }}
-              radius={200}
-              fillColor="rgba(37, 99, 235, 0.1)"
-              strokeColor="rgba(37, 99, 235, 0.3)"
-            />
-          </MapView>
-        )}
 
-        <View style={styles.topBar}>
-          <TouchableOpacity style={styles.iconButton}>
-            <Search size={22} color={theme.colors.text} />
+      {/* Map Section */}
+      <View className="h-[45%] w-full">
+        <AttendanceMap 
+          latitude={18.5204} 
+          longitude={73.8567} 
+          radius={200} 
+        />
+
+        <View className="absolute top-14 left-5 right-5 flex-row justify-between">
+          <TouchableOpacity className="w-11 h-11 rounded-2xl bg-white/90 justify-center items-center shadow-md shadow-slate-200 backdrop-blur-md">
+            <Search size={22} color="#1e293b" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton}>
-            <Bell size={22} color={theme.colors.text} />
+          <TouchableOpacity className="w-11 h-11 rounded-2xl bg-white/90 justify-center items-center shadow-md shadow-slate-200 backdrop-blur-md">
+            <Bell size={22} color="#1e293b" />
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Sliding Panel Content */}
-      <View style={styles.contentPanel}>
-        <View style={styles.panelHeader}>
-          <View style={styles.dragHandle} />
+      <View className="flex-1 bg-white -mt-8 rounded-t-[32px] px-6 shadow-2xl shadow-slate-900/10 border-t border-slate-100">
+        <View className="items-center py-4">
+          <View className="w-10 h-1 bg-slate-200 rounded-full" />
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
           {/* Status Header */}
-          <View style={styles.statusHeader}>
-            <View>
-              <Text style={styles.nameText}>{userData?.name || 'Employee'}</Text>
-              <Text style={styles.idText}>{userData?.designation || 'Staff'}</Text>
-              <View style={styles.statusBadge}>
-                <View style={[styles.statusDot, { backgroundColor: attendance ? theme.colors.success : theme.colors.textMuted }]} />
-                <Text style={styles.statusText}>{attendance ? 'On Duty' : 'Off Duty'}</Text>
+          <View className="flex-row justify-between items-center mb-6 mt-2">
+            <View className="flex-row items-center gap-4">
+              <View className="w-14 h-14 rounded-2xl bg-indigo-100 justify-center items-center">
+                <Text className="text-indigo-600 font-bold text-xl">{userData?.name?.charAt(0) || 'E'}</Text>
+              </View>
+              <View>
+                <Text className="text-xl font-extrabold text-slate-900 tracking-tight">{userData?.name || 'Employee'}</Text>
+                <View className="flex-row items-center mt-1">
+                  <View className={`w-2.5 h-2.5 rounded-full mr-2 ${attendance ? 'bg-green-500' : 'bg-slate-300'}`} />
+                  <Text className="text-sm font-bold text-slate-500  tracking-widest">{attendance ? 'On Duty' : 'Off Duty'}</Text>
+                </View>
               </View>
             </View>
-            <View style={styles.batteryContainer}>
-              <Text style={styles.batteryText}>95%</Text>
-              <View style={styles.batteryIcon} />
+            <View className="flex-row items-center bg-slate-50 px-3 py-2 rounded-xl">
+              <Activity size={14} color="#64748b" className="mr-2" />
+              <Text className="text-xs font-bold text-slate-500 ">95%</Text>
             </View>
           </View>
 
           {/* Stats Row */}
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <Zap size={20} color={theme.colors.primary} />
-              <Text style={styles.statLabel}>Status</Text>
-              <Text style={styles.statValue}>{attendance?.status || 'Absent'}</Text>
+          <View className="flex-row gap-3 mb-8">
+            <View className="flex-1 bg-slate-50 rounded-2xl p-4 border border-slate-100 items-center">
+              <Zap size={20} color="#4f46e5" />
+              <Text className="text-[10px] font-bold text-slate-400  tracking-widest mt-2">Status</Text>
+              <Text className="text-sm font-bold text-slate-800 mt-0.5">{attendance?.status || 'Absent'}</Text>
             </View>
-            <View style={styles.statCard}>
+            <View className="flex-1 bg-slate-50 rounded-2xl p-4 border border-slate-100 items-center">
               <Clock size={20} color="#10b981" />
-              <Text style={styles.statLabel}>In Time</Text>
-              <Text style={styles.statValue}>
+              <Text className="text-[10px] font-bold text-slate-400  tracking-widest mt-2">In Time</Text>
+              <Text className="text-sm font-bold text-slate-800 mt-0.5">
                 {attendance?.punchIn?.time ? new Date(attendance.punchIn.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
               </Text>
             </View>
-            <View style={styles.statCard}>
+            <View className="flex-1 bg-slate-50 rounded-2xl p-4 border border-slate-100 items-center">
               <History size={20} color="#f59e0b" />
-              <Text style={styles.statLabel}>Working</Text>
-              <Text style={styles.statValue}>{attendance?.workingHours ? `${attendance.workingHours}h` : '0h'}</Text>
+              <Text className="text-[10px] font-bold text-slate-400  tracking-widest mt-2">Working</Text>
+              <Text className="text-sm font-bold text-slate-800 mt-0.5">{attendance?.workingHours ? `${attendance.workingHours}h` : '0h'}</Text>
             </View>
           </View>
 
           {/* Action Button */}
-          <TouchableOpacity 
-            style={styles.punchButton} 
+          <TouchableOpacity
+            className="bg-slate-50 rounded-3xl p-5 border border-slate-100 mb-8 active:scale-95 transition-transform"
             onPress={() => navigation.navigate('Attendance')}
           >
-            <View style={styles.punchButtonInner}>
-              <View style={[styles.punchCircle, { backgroundColor: attendance ? theme.colors.danger : theme.colors.success }]}>
-                <Clock size={24} color="white" />
+            <View className="flex-row items-center">
+              <View className={`w-14 h-14 rounded-2xl justify-center items-center shadow-md ${attendance ? 'bg-rose-500 shadow-rose-200' : 'bg-emerald-500 shadow-emerald-200'}`}>
+                <Clock size={28} color="white" />
               </View>
-              <View style={{ flex: 1, marginLeft: 15 }}>
-                <Text style={styles.punchTitle}>{attendance ? 'Punch Out' : 'Punch In'}</Text>
-                <Text style={styles.punchSubtitle}>
-                  {attendance ? 'You are currently on duty' : 'Start your work day'}
+              <View className="flex-1 ml-5">
+                <Text className="text-lg font-extrabold text-slate-900 tracking-tight">{attendance ? 'Punch Out' : 'Punch In'}</Text>
+                <Text className="text-sm font-medium text-slate-500 mt-0.5">
+                  {attendance ? 'End your shift for today' : 'Start your attendance mark'}
                 </Text>
               </View>
-              <ChevronRight size={20} color={theme.colors.textMuted} />
+              <View className="w-8 h-8 rounded-full bg-white justify-center items-center border border-slate-100">
+                <ChevronRight size={18} color="#64748b" />
+              </View>
             </View>
           </TouchableOpacity>
 
-          {/* Recent History Section placeholder */}
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Shift Information</Text>
-          </View>
-
-          <View style={styles.historyCard}>
-            <View style={styles.historyItem}>
-              <Calendar size={18} color={theme.colors.primary} />
-              <View style={styles.historyContent}>
-                <Text style={styles.historyTitle}>Assigned Shift</Text>
-                <Text style={styles.historyTime}>{userData?.shift?.name || 'General'} ({userData?.shift?.startTime} - {userData?.shift?.endTime})</Text>
+          {/* Shift Info */}
+          <View className="mb-4">
+            <Text className="text-xs font-bold text-slate-400  tracking-[2px] mb-4">Work Schedule</Text>
+            <View className="bg-indigo-600 rounded-3xl p-6 shadow-xl shadow-indigo-200">
+              <View className="flex-row items-center">
+                <View className="w-10 h-10 rounded-xl bg-white/20 justify-center items-center">
+                  <Calendar size={20} color="white" />
+                </View>
+                <View className="ml-4">
+                  <Text className="text-indigo-100 text-xs font-bold  tracking-widest">Active Shift</Text>
+                  <Text className="text-white text-lg font-bold mt-0.5">{userData?.shift?.name || 'General Shift'}</Text>
+                </View>
+              </View>
+              <View className="mt-6 pt-6 border-t border-white/10 flex-row justify-between">
+                <View>
+                  <Text className="text-indigo-200 text-[10px] font-bold  tracking-wider">Starts At</Text>
+                  <Text className="text-white font-bold text-lg">{userData?.shift?.startTime || '09:00 AM'}</Text>
+                </View>
+                <View className="items-end">
+                  <Text className="text-indigo-200 text-[10px] font-bold  tracking-wider">Ends At</Text>
+                  <Text className="text-white font-bold text-lg">{userData?.shift?.endTime || '06:00 PM'}</Text>
+                </View>
               </View>
             </View>
           </View>
@@ -200,67 +180,23 @@ const DashboardScreen = ({ navigation }) => {
       </View>
 
       {/* Bottom Nav */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem}>
-          <Activity size={24} color={theme.colors.primary} />
-          <Text style={[styles.navText, { color: theme.colors.primary }]}>Home</Text>
+      <View className="absolute bottom-0 left-0 right-0 h-24 bg-white/95 backdrop-blur-xl flex-row justify-around pt-3 border-t border-slate-100 px-6">
+        <TouchableOpacity className="items-center">
+          <Activity size={24} color="#4f46e5" />
+          <Text className="text-[10px] mt-1 font-bold text-indigo-600  tracking-widest">Home</Text>
+          <View className="w-1.5 h-1.5 rounded-full bg-indigo-600 mt-1" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Leave')}>
-          <Calendar size={24} color={theme.colors.textMuted} />
-          <Text style={styles.navText}>Leave</Text>
+        <TouchableOpacity className="items-center opacity-40" onPress={() => navigation.navigate('Leave')}>
+          <Calendar size={24} color="#64748b" />
+          <Text className="text-[10px] mt-1 font-bold text-slate-500  tracking-widest">Leave</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
-          <UserIcon size={24} color={theme.colors.textMuted} />
-          <Text style={styles.navText}>Profile</Text>
+        <TouchableOpacity className="items-center opacity-40" onPress={() => navigation.navigate('Profile')}>
+          <UserIcon size={24} color="#64748b" />
+          <Text className="text-[10px] mt-1 font-bold text-slate-500  tracking-widest">Profile</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  mapContainer: { height: height * 0.45, width: '100%' },
-  map: { ...StyleSheet.absoluteFillObject },
-  topBar: { position: 'absolute', top: 50, left: 20, right: 20, flexDirection: 'row', justifyContent: 'space-between' },
-  iconButton: { width: 45, height: 45, borderRadius: 22.5, backgroundColor: 'white', justifyContent: 'center', alignItems: 'center', ...theme.shadows.medium },
-  contentPanel: { flex: 1, backgroundColor: 'white', marginTop: -30, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 20, ...theme.shadows.medium },
-  panelHeader: { alignItems: 'center', paddingVertical: 15 },
-  dragHandle: { width: 40, height: 5, backgroundColor: '#e2e8f0', borderRadius: 2.5 },
-  scrollContent: { paddingBottom: 100 },
-  statusHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  nameText: { fontSize: 20, fontWeight: '800', color: theme.colors.text },
-  idText: { fontSize: 14, color: theme.colors.textMuted, fontWeight: '600' },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
-  statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
-  statusText: { fontSize: 14, color: theme.colors.textMuted, fontWeight: '600' },
-  batteryContainer: { flexDirection: 'row', alignItems: 'center' },
-  batteryText: { fontSize: 14, color: theme.colors.textMuted, marginRight: 5 },
-  batteryIcon: { width: 24, height: 12, borderWidth: 1, borderColor: theme.colors.textMuted, borderRadius: 2 },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginBottom: 20 },
-  statCard: { flex: 1, backgroundColor: '#f8fafc', borderRadius: 15, padding: 15, alignItems: 'center', borderWidth: 1, borderColor: '#f1f5f9' },
-  statLabel: { fontSize: 12, color: theme.colors.textMuted, marginTop: 8 },
-  statValue: { fontSize: 14, fontWeight: '700', color: theme.colors.text, marginTop: 2 },
-  punchButton: { backgroundColor: '#f8fafc', borderRadius: 20, padding: 15, borderWidth: 1, borderColor: '#f1f5f9', marginBottom: 20 },
-  punchButtonInner: { flexDirection: 'row', alignItems: 'center' },
-  punchCircle: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
-  punchTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
-  punchSubtitle: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
-  sectionHeader: { marginBottom: 15 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
-  historyCard: { backgroundColor: '#f8fafc', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#f1f5f9' },
-  historyItem: { flexDirection: 'row', alignItems: 'center' },
-  historyContent: { marginLeft: 15 },
-  historyTitle: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
-  historyTime: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
-  bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: 'white', flexDirection: 'row', justifyContent: 'space-around', paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingHorizontal: 20 },
-  navItem: { alignItems: 'center' },
-  navText: { fontSize: 11, marginTop: 4, fontWeight: '600', color: theme.colors.textMuted },
-  webMapPlaceholder: { backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  webMapText: { marginTop: 10, fontSize: 16, fontWeight: '700', color: theme.colors.text, textAlign: 'center' },
-  markerContainer: { alignItems: 'center', justifyContent: 'center' },
-  markerCircle: { width: 20, height: 20, borderRadius: 10, backgroundColor: theme.colors.primary, borderWidth: 3, borderColor: 'white' },
-});
 
 export default DashboardScreen;

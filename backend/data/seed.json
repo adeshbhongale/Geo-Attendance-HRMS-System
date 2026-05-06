@@ -104,9 +104,225 @@
     }
   ],
   "location": {
-    "name": "Office Main",
-    "latitude": 18.5204,
-    "longitude": 73.8567,
+    "name": "Office Kolhapur",
+    "latitude": 16.7050,
+    "longitude": 74.2433,
     "radius": 200
-  }
+  },
+  "attendance": [
+    {
+      "userEmail": "adesh@example.com",
+      "date": "2026-05-01",
+      "status": "Present",
+      "punchIn": {
+        "time": "2026-05-01T03:45:00Z",
+        "location": {
+          "latitude": 16.7051,
+          "longitude": 74.2434,
+          "address": "Office Main Gate"
+        }
+      },
+      "punchOut": {
+        "time": "2026-05-01T12:00:00Z",
+        "location": {
+          "latitude": 16.7051,
+          "longitude": 74.2434,
+          "address": "Office Main Gate"
+        }
+      },
+      "workingHours": 8.25
+    },
+    {
+      "userEmail": "adesh@example.com",
+      "date": "2026-05-05",
+      "status": "Present",
+      "punchIn": {
+        "time": "2026-05-05T03:35:00Z",
+        "location": {
+          "latitude": 16.7051,
+          "longitude": 74.2434,
+          "address": "Office Main Gate"
+        }
+      },
+      "punchOut": {
+        "time": "2026-05-05T11:45:00Z",
+        "location": {
+          "latitude": 16.7051,
+          "longitude": 74.2434,
+          "address": "Office Main Gate"
+        }
+      },
+      "workingHours": 8.16
+    },
+    {
+      "userEmail": "john@example.com",
+      "date": "2026-05-05",
+      "status": "Present",
+      "punchIn": {
+        "time": "2026-05-05T03:50:00Z",
+        "location": {
+          "latitude": 16.7052,
+          "longitude": 74.2432,
+          "address": "Office Reception"
+        }
+      },
+      "punchOut": {
+        "time": "2026-05-05T12:05:00Z",
+        "location": {
+          "latitude": 16.7052,
+          "longitude": 74.2432,
+          "address": "Office Reception"
+        }
+      },
+      "workingHours": 8.25
+    },
+    {
+      "userEmail": "jane@example.com",
+      "date": "2026-05-05",
+      "status": "Present",
+      "punchIn": {
+        "time": "2026-05-05T03:40:00Z",
+        "location": {
+          "latitude": 16.7050,
+          "longitude": 74.2433,
+          "address": "HR Desk"
+        }
+      },
+      "punchOut": {
+        "time": "2026-05-05T11:50:00Z",
+        "location": {
+          "latitude": 16.7050,
+          "longitude": 74.2433,
+          "address": "HR Desk"
+        }
+      },
+      "workingHours": 8.16
+    },
+    {
+      "userEmail": "alice@example.com",
+      "date": "2026-05-06",
+      "status": "Outside Location",
+      "punchIn": {
+        "time": "2026-05-06T04:05:00Z",
+        "location": {
+          "latitude": 16.7095,
+          "longitude": 74.2465,
+          "address": "Nearby Client Meeting (Kolhapur)"
+        }
+      },
+      "isOutside": true,
+      "workingHours": 0
+    },
+    {
+      "userEmail": "charlie@example.com",
+      "date": "2026-05-06",
+      "status": "Present",
+      "punchIn": {
+        "time": "2026-05-06T03:50:00Z",
+        "location": {
+          "latitude": 16.7049,
+          "longitude": 74.2430,
+          "address": "Office Parking"
+        }
+      },
+      "workingHours": 0
+    },
+    {
+      "userEmail": "ethan@example.com",
+      "date": "2026-05-06",
+      "status": "Late",
+      "punchIn": {
+        "time": "2026-05-06T04:10:00Z",
+        "location": {
+          "latitude": 16.7053,
+          "longitude": 74.2436,
+          "address": "Office Cafeteria"
+        }
+      },
+      "isLate": true,
+      "workingHours": 0
+    }
+  ],
+  "leaves": [
+    {
+      "userEmail": "jane@example.com",
+      "leaveType": "Sick Leave",
+      "startDate": "2026-05-02",
+      "endDate": "2026-05-03",
+      "reason": "Feeling unwell",
+      "status": "Approved"
+    },
+    {
+      "userEmail": "bob@example.com",
+      "leaveType": "Paid Leave",
+      "startDate": "2026-05-10",
+      "endDate": "2026-05-12",
+      "reason": "Family function",
+      "status": "Pending"
+    },
+    {
+      "userEmail": "fiona@example.com",
+      "leaveType": "Casual Leave",
+      "startDate": "2026-05-05",
+      "endDate": "2026-05-06",
+      "reason": "Personal work",
+      "status": "Pending"
+    },
+    {
+      "userEmail": "diana@example.com",
+      "leaveType": "Paid Leave",
+      "startDate": "2026-05-07",
+      "endDate": "2026-05-08",
+      "reason": "Vacation",
+      "status": "Rejected"
+    },
+    {
+      "userEmail": "charlie@example.com",
+      "leaveType": "Sick Leave",
+      "startDate": "2026-05-01",
+      "endDate": "2026-05-01",
+      "reason": "Sudden fever",
+      "status": "Approved"
+    },
+    {
+      "userEmail": "ethan@example.com",
+      "leaveType": "Paid Leave",
+      "startDate": "2026-05-15",
+      "endDate": "2026-05-20",
+      "reason": "Traveling to hometown",
+      "status": "Pending"
+    },
+    {
+      "userEmail": "adesh@example.com",
+      "leaveType": "Casual Leave",
+      "startDate": "2026-05-06",
+      "endDate": "2026-05-06",
+      "reason": "Bank work",
+      "status": "Rejected"
+    },
+    {
+      "userEmail": "john@example.com",
+      "leaveType": "Paid Leave",
+      "startDate": "2026-04-25",
+      "endDate": "2026-04-28",
+      "reason": "Personal family emergency",
+      "status": "Approved"
+    },
+    {
+      "userEmail": "alice@example.com",
+      "leaveType": "Sick Leave",
+      "startDate": "2026-05-04",
+      "endDate": "2026-05-05",
+      "reason": "Routine checkup",
+      "status": "Approved"
+    },
+    {
+      "userEmail": "bob@example.com",
+      "leaveType": "Casual Leave",
+      "startDate": "2026-05-25",
+      "endDate": "2026-05-26",
+      "reason": "Religious festival",
+      "status": "Pending"
+    }
+  ]
 }

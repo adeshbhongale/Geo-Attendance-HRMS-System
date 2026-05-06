@@ -53,14 +53,16 @@ exports.getStats = async (req, res, next) => {
   try {
     const totalEmployees = await User.countDocuments({ role: 'employee' });
     
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const presentToday = await Attendance.countDocuments({ date: today });
+    // Get target date from query or default to today
+    const targetDate = req.query.date ? new Date(req.query.date) : new Date();
+    targetDate.setHours(0, 0, 0, 0);
     
-    // For demo/simplicity, late today count
-    const lateToday = await Attendance.countDocuments({ date: today, status: 'Late' });
+    const presentToday = await Attendance.countDocuments({ date: targetDate });
     
-    // Pending leaves (placeholder if Leave model exists)
+    // Late count for the target date
+    const lateToday = await Attendance.countDocuments({ date: targetDate, status: 'Late' });
+    
+    // Pending leaves (Total pending, not necessarily date-bound, but we could filter if needed)
     let pendingLeaves = 0;
     try {
       const Leave = require('../models/Leave');

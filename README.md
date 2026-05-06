@@ -15,24 +15,32 @@ A comprehensive HRMS solution with real-time GPS tracking, geo-fencing, and shif
 - `admin-panel/`: React, Vite, Recharts, Framer Motion
 - `mobile-app/`: React Native, Expo, Google Maps
 
-## Setup Instructions
+## Running the Application Locally
 
-### Backend
-1. `cd backend`
-2. `npm install`
-3. Create `.env` from `.env.example`
-4. `node scripts/seedData.js` (Seed initial data)
-5. `npm run dev`
+You will need three separate terminal windows to run the full stack simultaneously.
 
-### Admin Panel
-1. `cd admin-panel`
-2. `npm install`
-3. `npm run dev`
+### 1. Backend (API Server)
+```bash
+cd backend
+npm install
+# Create .env from .env.example
+node scripts/seedData.js # Run once to seed initial data
+npm run dev # Starts the server on port 5000
+```
 
-### Mobile App
-1. `cd mobile-app`
-2. `npm install`
-3. `npx expo start`
+### 2. Admin Panel (Web Dashboard)
+```bash
+cd admin-panel
+npm install
+npm run dev # Starts Vite server on port 5173
+```
+
+### 3. Mobile App (Employee Portal)
+```bash
+cd mobile-app
+npm install
+npx expo start -c # The -c flag clears the cache to prevent Babel/Metro styling issues
+```
 
 ## Admin Credentials
 Admin credentials can be configured in the `backend/.env` file using `ADMIN_EMAIL` and `ADMIN_PASSWORD` keys.

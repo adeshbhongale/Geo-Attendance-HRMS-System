@@ -11,8 +11,8 @@ exports.punchIn = async (req, res, next) => {
   try {
     const { latitude, longitude, address, selfie } = req.body;
     const userId = req.user.id;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const now = new Date();
+    const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0));
 
     // Check if already punched in today
     let attendance = await Attendance.findOne({ user: userId, date: today });
@@ -81,8 +81,8 @@ exports.punchOut = async (req, res, next) => {
   try {
     const { latitude, longitude, address } = req.body;
     const userId = req.user.id;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const now = new Date();
+    const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0));
 
     let attendance = await Attendance.findOne({ user: userId, date: today });
     if (!attendance) {
@@ -142,7 +142,19 @@ exports.getHistory = async (req, res, next) => {
 // @access  Private/Admin
 exports.getAllAttendance = async (req, res, next) => {
   try {
-    const attendance = await Attendance.find().populate('user', 'name email department').sort('-date');
+    const { date } = req.query;
+    let query = {};
+    
+    if (date) {
+      // Create a range for the entire day in UTC to match seeded and local data correctly
+      const start = new Date(date);
+      start.setUTCHours(0, 0, 0, 0);
+      const end = new Date(date);
+      end.setUTCHours(23, 59, 59, 999);
+      query.date = { $gte: start, $lte: end };
+    }
+
+    const attendance = await Attendance.find(query).populate('user', 'name email department').sort('-date');
     res.status(200).json({
       success: true,
       count: attendance.length,

@@ -1,7 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { theme } from '../theme';
 import { Calendar, Plus } from 'lucide-react-native';
+import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 const LeaveScreen = () => {
   const history = [
@@ -10,143 +8,58 @@ const LeaveScreen = () => {
   ];
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Leave Management</Text>
-        <TouchableOpacity style={styles.addBtn}>
+    <View className="flex-1 bg-slate-50">
+      <View className="pt-20 px-6 pb-6 bg-white flex-row justify-between items-center rounded-b-[32px] shadow-sm shadow-slate-200">
+        <View>
+          <Text className="text-2xl font-bold text-slate-900 tracking-tight">Leave Manager</Text>
+          <Text className="text-slate-400 font-bold text-[10px]  tracking-widest mt-0.5">Track your time off</Text>
+        </View>
+        <TouchableOpacity className="w-12 h-12 rounded-2xl bg-indigo-600 justify-center items-center shadow-lg shadow-indigo-200 active:scale-95 transition-transform">
           <Plus size={24} color="white" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.balanceContainer}>
-          <View style={styles.balanceCard}>
-            <Text style={styles.balanceVal}>12</Text>
-            <Text style={styles.balanceLabel}>Sick</Text>
+      <ScrollView contentContainerStyle={{ padding: 24 }}>
+        <View className="flex-row gap-4 mb-10">
+          <View className="flex-1 bg-white p-5 rounded-3xl items-center border border-slate-100 shadow-sm shadow-slate-100">
+            <Text className="text-2xl font-bold text-indigo-600">12</Text>
+            <Text className="text-[10px] font-bold text-slate-400  tracking-widest mt-1">Sick</Text>
           </View>
-          <View style={styles.balanceCard}>
-            <Text style={styles.balanceVal}>08</Text>
-            <Text style={styles.balanceLabel}>Casual</Text>
+          <View className="flex-1 bg-white p-5 rounded-3xl items-center border border-slate-100 shadow-sm shadow-slate-100">
+            <Text className="text-2xl font-bold text-emerald-600">08</Text>
+            <Text className="text-[10px] font-bold text-slate-400  tracking-widest mt-1">Casual</Text>
           </View>
-          <View style={styles.balanceCard}>
-            <Text style={styles.balanceVal}>15</Text>
-            <Text style={styles.balanceLabel}>Paid</Text>
+          <View className="flex-1 bg-white p-5 rounded-3xl items-center border border-slate-100 shadow-sm shadow-slate-100">
+            <Text className="text-2xl font-bold text-amber-600">15</Text>
+            <Text className="text-[10px] font-bold text-slate-400  tracking-widest mt-1">Paid</Text>
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>Leave History</Text>
-        
+        <View className="flex-row items-center mb-6 px-1">
+          <Calendar size={18} color="#64748b" />
+          <Text className="text-xs font-bold text-slate-400  tracking-[2px] ml-3">Request History</Text>
+        </View>
+
         {history.map(item => (
-          <View key={item.id} style={styles.historyCard}>
-            <View style={styles.historyInfo}>
-              <Text style={styles.historyType}>{item.type}</Text>
-              <Text style={styles.historyDate}>{item.date} • {item.days}</Text>
+          <View key={item.id} className="bg-white p-6 rounded-3xl flex-row justify-between items-center mb-4 border border-slate-100 shadow-sm shadow-slate-100">
+            <View className="flex-1">
+              <Text className="text-lg font-extrabold text-slate-800 tracking-tight">{item.type}</Text>
+              <Text className="text-xs font-medium text-slate-400 mt-1">{item.date} • <Text className="text-slate-600 font-bold">{item.days}</Text></Text>
             </View>
-            <View style={[
-              styles.statusBadge, 
-              { backgroundColor: item.status === 'Approved' ? '#dcfce7' : '#fef3c7' }
-            ]}>
-              <Text style={[
-                styles.statusText,
-                { color: item.status === 'Approved' ? '#166534' : '#92400e' }
-              ]}>{item.status}</Text>
+            <View className={`px-4 py-2 rounded-xl ${item.status === 'Approved' ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+              <Text className={`text-[10px] font-bold  tracking-widest ${item.status === 'Approved' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                {item.status}
+              </Text>
             </View>
           </View>
         ))}
+
+        <TouchableOpacity className="mt-6 py-6 items-center">
+          <Text className="text-indigo-600 font-bold  text-[11px] tracking-[3px]">View Full History</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  header: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: 'white',
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: theme.colors.text,
-  },
-  addBtn: {
-    width: 45,
-    height: 45,
-    borderRadius: 15,
-    backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  content: {
-    padding: 20,
-  },
-  balanceContainer: {
-    flexDirection: 'row',
-    gap: 15,
-    marginBottom: 30,
-  },
-  balanceCard: {
-    flex: 1,
-    backgroundColor: 'white',
-    padding: 15,
-    borderRadius: 20,
-    alignItems: 'center',
-    ...theme.shadows.light,
-  },
-  balanceVal: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: theme.colors.primary,
-  },
-  balanceLabel: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-    marginTop: 5,
-    fontWeight: '600',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginBottom: 15,
-  },
-  historyCard: {
-    backgroundColor: 'white',
-    padding: 20,
-    borderRadius: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
-    ...theme.shadows.light,
-  },
-  historyType: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
-  historyDate: {
-    fontSize: 13,
-    color: theme.colors.textMuted,
-    marginTop: 4,
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-});
 
 export default LeaveScreen;

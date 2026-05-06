@@ -1,16 +1,11 @@
-import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  Image,
-  Alert
+import { Camera, CheckCircle, MapPin } from 'lucide-react-native';
+import { useState } from 'react';
+import {
+  Alert,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { theme } from '../theme';
-import { Camera, MapPin, CheckCircle } from 'lucide-react-native';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -28,140 +23,70 @@ const AttendanceScreen = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Punch In</Text>
+    <View className="flex-1 bg-white">
+      <View className="pt-20 px-6 pb-6">
+        <Text className="text-3xl font-extrabold text-slate-900 tracking-tight">Mark Attendance</Text>
+        <Text className="text-slate-500 font-medium mt-1">Verify your location and identity</Text>
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.locationCard}>
-          <MapPin size={24} color={theme.colors.primary} />
-          <View style={{ marginLeft: 15 }}>
-            <Text style={styles.locationTitle}>Current Location</Text>
-            <Text style={styles.locationText}>Central Tech Park, Sector 5, Pune</Text>
-            <Text style={styles.geoStatus}>Within Office Radius</Text>
+      <View className="p-6 gap-8">
+        <View className="flex-row items-center bg-slate-50 p-6 rounded-3xl border border-slate-100 shadow-sm shadow-slate-100">
+          <View className="w-12 h-12 rounded-2xl bg-indigo-100 justify-center items-center">
+            <MapPin size={24} color="#4f46e5" />
+          </View>
+          <View className="ml-4 flex-1">
+            <Text className="text-[10px] font-bold text-slate-400  tracking-widest">Office Location</Text>
+            <Text className="text-base font-bold text-slate-800 mt-0.5">Central Tech Park, Pune</Text>
+            <View className="flex-row items-center mt-1">
+              <CheckCircle size={12} color="#10b981" />
+              <Text className="text-xs font-bold text-emerald-600 ml-1">Within Allowed Radius</Text>
+            </View>
           </View>
         </View>
 
-        <View style={styles.selfieContainer}>
-          <Text style={styles.sectionLabel}>Capture Selfie</Text>
-          <TouchableOpacity 
-            style={styles.selfieBox} 
+        <View className="gap-4">
+          <Text className="text-xs font-bold text-slate-400  tracking-[2px] ml-1">Identity Verification</Text>
+          <TouchableOpacity
+            className="h-80 bg-slate-50 rounded-[40px] border-2 border-slate-200 border-dashed justify-center items-center active:scale-[0.98] transition-transform overflow-hidden"
             onPress={() => setHasSelfie(true)}
           >
             {hasSelfie ? (
-              <View style={styles.selfiePreview}>
-                <CheckCircle size={50} color={theme.colors.success} />
-                <Text style={{ marginTop: 10, color: theme.colors.success, fontWeight: '700' }}>Selfie Captured</Text>
+              <View className="items-center">
+                <View className="w-24 h-24 rounded-full bg-emerald-100 justify-center items-center mb-4">
+                  <CheckCircle size={48} color="#10b981" />
+                </View>
+                <Text className="text-emerald-600 text-lg font-bold  tracking-widest">Selfie Captured</Text>
+                <Text className="text-slate-400 font-medium mt-2">Tap to recapture if needed</Text>
               </View>
             ) : (
-              <View style={styles.selfiePlaceholder}>
-                <Camera size={40} color={theme.colors.textMuted} />
-                <Text style={styles.placeholderText}>Tap to Capture</Text>
+              <View className="items-center">
+                <View className="w-20 h-20 rounded-full bg-slate-100 justify-center items-center mb-4">
+                  <Camera size={32} color="#94a3b8" />
+                </View>
+                <Text className="text-slate-500 font-bold text-lg">Capture Live Selfie</Text>
+                <Text className="text-slate-400 text-sm mt-2 font-medium">Verification required for punch in</Text>
               </View>
             )}
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity 
-          style={[styles.punchBtn, { backgroundColor: hasSelfie ? theme.colors.primary : '#e2e8f0' }]} 
+        <TouchableOpacity
+          className={`h-16 rounded-2xl justify-center items-center mt-4 shadow-xl ${hasSelfie ? 'bg-indigo-600 shadow-indigo-200' : 'bg-slate-200 shadow-none opacity-60'}`}
           onPress={handlePunch}
           disabled={!hasSelfie}
         >
-          <Text style={styles.punchBtnText}>Submit Punch In</Text>
+          <Text className="text-white text-lg font-bold  tracking-widest">Confirm & Punch In</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          className="items-center"
+        >
+          <Text className="text-slate-400 font-bold  text-[10px] tracking-widest">Cancel Request</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'white',
-  },
-  header: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: theme.colors.text,
-  },
-  content: {
-    padding: 20,
-    gap: 30,
-  },
-  locationCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    padding: 20,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  locationTitle: {
-    fontSize: 14,
-    color: theme.colors.textMuted,
-    fontWeight: '600',
-  },
-  locationText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginTop: 2,
-  },
-  geoStatus: {
-    fontSize: 12,
-    color: theme.colors.success,
-    fontWeight: '700',
-    marginTop: 5,
-  },
-  selfieContainer: {
-    gap: 15,
-  },
-  sectionLabel: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
-  selfieBox: {
-    height: 300,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  selfiePlaceholder: {
-    alignItems: 'center',
-  },
-  placeholderText: {
-    marginTop: 10,
-    color: theme.colors.textMuted,
-    fontWeight: '600',
-  },
-  selfiePreview: {
-    alignItems: 'center',
-  },
-  punchBtn: {
-    height: 60,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 20,
-    ...theme.shadows.medium,
-  },
-  punchBtnText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-});
 
 export default AttendanceScreen;
