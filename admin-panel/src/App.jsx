@@ -9,6 +9,11 @@ import Leaves from './pages/Leaves';
 import Shifts from './pages/Shifts';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
+import TrackingDashboard from './pages/TrackingDashboard';
+import Reports from './pages/Reports';
+import EmployeeDetails from './pages/EmployeeDetails';
+import EmployeeTrackRoute from './pages/EmployeeTrackRoute';
+import EmployeeTrackData from './pages/EmployeeTrackData';
 import Layout from './components/Layout';
 import { Provider } from 'react-redux';
 import { store } from './store';
@@ -28,10 +33,15 @@ function App() {
               <Route index element={<Dashboard />} />
               <Route path="employees" element={<Employees />} />
               <Route path="attendance" element={<Attendance />} />
+              <Route path="reports" element={<Reports />} />
               <Route path="leaves" element={<Leaves />} />
               <Route path="shifts" element={<Shifts />} />
               <Route path="settings" element={<Settings />} />
               <Route path="profile" element={<Profile />} />
+              <Route path="tracking-dashboard" element={<TrackingDashboard />} />
+              <Route path="employee/:userId" element={<EmployeeDetails />} />
+              <Route path="track-route/:userId" element={<EmployeeTrackRoute />} />
+              <Route path="track-data/:userId" element={<EmployeeTrackData />} />
             </Route>
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

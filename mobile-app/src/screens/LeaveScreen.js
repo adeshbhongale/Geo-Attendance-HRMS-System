@@ -1,5 +1,4 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useNavigation } from '@react-navigation/native';
 import { ArrowLeft, Calendar, ChevronDown, Filter, Info, Plus, RotateCcw, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
@@ -178,7 +177,7 @@ const LeaveScreen = ({ navigation }) => {
       {/* Filters Row */}
       <View className="bg-white px-6 py-4 border-b border-slate-100 flex-row gap-3">
         {/* Status Dropdown */}
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={() => setShowStatusModal(true)}
           className="flex-1 bg-slate-50 h-12 rounded-2xl border border-slate-100 flex-row items-center px-4"
         >
@@ -190,7 +189,7 @@ const LeaveScreen = ({ navigation }) => {
         </TouchableOpacity>
 
         {/* Date Picker */}
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={() => setShowHistoryDatePicker(true)}
           className="flex-1 bg-slate-50 h-12 rounded-2xl border border-slate-100 flex-row items-center px-4"
         >
@@ -208,14 +207,14 @@ const LeaveScreen = ({ navigation }) => {
 
       {/* Status Selection Modal */}
       <Modal visible={showStatusModal} transparent animationType="fade">
-        <TouchableOpacity 
-          activeOpacity={1} 
+        <TouchableOpacity
+          activeOpacity={1}
           onPress={() => setShowStatusModal(false)}
           className="flex-1 bg-black/40 justify-end"
         >
           <View className="bg-white rounded-t-[32px] p-6 pb-12">
             <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-xl font-black text-slate-900">Filter Status</Text>
+              <Text className="text-xl font-bold text-slate-900">Filter Status</Text>
               <TouchableOpacity onPress={() => setShowStatusModal(false)} className="bg-slate-100 p-2 rounded-full">
                 <X size={20} color="#94a3b8" />
               </TouchableOpacity>
@@ -276,7 +275,7 @@ const LeaveScreen = ({ navigation }) => {
               const style = getStatusStyle(item.status);
               const date = new Date(item.startDate);
               const currentMonth = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-              
+
               // Check if this is a new month compared to the previous item
               let showHeader = false;
               if (index === 0) {
@@ -294,7 +293,7 @@ const LeaveScreen = ({ navigation }) => {
                   {showHeader && (
                     <View className="flex-row items-center mt-6 mb-4">
                       <View className="h-[1px] flex-1 bg-slate-200" />
-                      <Text className="mx-4 text-[10px] font-black text-slate-400 uppercase tracking-[2px]">
+                      <Text className="mx-4 text-[10px] font-bold text-slate-400  tracking-[2px]">
                         {currentMonth}
                       </Text>
                       <View className="h-[1px] flex-1 bg-slate-200" />

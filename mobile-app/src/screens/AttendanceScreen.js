@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import api from '../api/axios';
 import AttendanceMap from '../components/AttendanceMap';
+import { formatWorkingHours } from '../utils/timeFormat';
 
 const AttendanceScreen = ({ navigation }) => {
   const [selfie, setSelfie] = useState(null);
@@ -183,7 +184,7 @@ const AttendanceScreen = ({ navigation }) => {
               address: location.address,
             });
             setTodayAttendance(res.data.data);
-            Alert.alert('Punched Out', `Working hours: ${res.data.data?.workingHours || 0}h`, [
+            Alert.alert('Punched Out', res.data.message || 'Shift ended successfully!', [
               { text: 'OK', onPress: () => navigation.goBack() },
             ]);
           } catch (err) {
@@ -256,7 +257,7 @@ const AttendanceScreen = ({ navigation }) => {
               </View>
               <View className="items-center">
                 <Text className="text-[10px] font-bold text-slate-400">Hours</Text>
-                <Text className="text-lg font-bold text-slate-800 mt-0.5">{todayAttendance.workingHours || '—'}h</Text>
+                <Text className="text-lg font-bold text-slate-800 mt-0.5">{formatWorkingHours(todayAttendance.workingHours || 0)}</Text>
               </View>
               <View className="items-end">
                 <Text className="text-[10px] font-bold text-slate-400">Punch Out</Text>

@@ -67,12 +67,46 @@ const seedData = async () => {
 
       // Seed Attendance
       if (data.attendance && data.attendance.length > 0) {
+        const today = new Date();
+        const yesterday = new Date();
+        yesterday.setDate(today.getDate() - 1);
+
+        const todayStr = today.toISOString().split('T')[0];
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        // Get unique dates from attendance data and sort them descending
+        const uniqueDates = [...new Set(data.attendance.map(a => a.date))].sort((a, b) => b.localeCompare(a));
+        const latestSeedDate = uniqueDates[0];
+
         const attendanceData = data.attendance.map(att => {
           const user = createdUsers.find(u => u.email === att.userEmail);
           if (!user) return null;
-          
+
           const { userEmail, ...attDetails } = att;
-          
+
+          // Dynamically set date to today or yesterday
+          // The latest date in seed.json becomes today, others become yesterday
+          const targetDate = attDetails.date === latestSeedDate ? todayStr : yesterdayStr;
+          attDetails.date = targetDate;
+
+          // Update timestamps in punchIn, punchOut, and trackingLogs
+          const updateTime = (timeStr) => {
+            if (!timeStr) return timeStr;
+            const time = new Date(timeStr);
+            const target = new Date(targetDate);
+            time.setFullYear(target.getFullYear(), target.getMonth(), target.getDate());
+            return time.toISOString();
+          };
+
+          if (attDetails.punchIn) attDetails.punchIn.time = updateTime(attDetails.punchIn.time);
+          if (attDetails.punchOut) attDetails.punchOut.time = updateTime(attDetails.punchOut.time);
+          if (attDetails.trackingLogs) {
+            attDetails.trackingLogs = attDetails.trackingLogs.map(log => ({
+              ...log,
+              time: updateTime(log.time)
+            }));
+          }
+
           // Calculate overtime
           let overtime = 0;
           if (user.shift && attDetails.workingHours) {
@@ -84,6 +118,35 @@ const seedData = async () => {
 
           return { ...attDetails, user: user._id, overtime };
         }).filter(Boolean);
+
+        // Add specific record for adesh employee on 1-5-2026
+        const adesh = createdUsers.find(u => u.email === 'adesh@example.com');
+        if (adesh) {
+          attendanceData.push({
+            user: adesh._id,
+            date: '2026-05-01',
+            status: 'Present',
+            punchIn: {
+              time: '2026-05-01T03:30:00Z',
+              location: {
+                latitude: 16.7041,
+                longitude: 74.4502,
+                address: 'Main Gate'
+              }
+            },
+            punchOut: {
+              time: '2026-05-01T12:00:00Z',
+              location: {
+                latitude: 16.7041,
+                longitude: 74.4502,
+                address: 'Main Gate'
+              }
+            },
+            workingHours: 8.5,
+            overtime: 0,
+            trackingLogs: []
+          });
+        }
 
         if (attendanceData.length > 0) {
           await Attendance.insertMany(attendanceData);

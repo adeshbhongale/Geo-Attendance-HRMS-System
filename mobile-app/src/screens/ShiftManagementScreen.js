@@ -1,19 +1,18 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
-import { ArrowLeft, Calendar, ChevronDown, Clock, Filter, Plus, RotateCcw, Save, Search, Trash2, X } from 'lucide-react-native';
+import { ArrowLeft, Calendar, ChevronDown, Clock, Filter, RotateCcw, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   ScrollView,
   StatusBar,
   Text,
-  TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import api from '../api/axios';
+import { formatWorkingHours } from '../utils/timeFormat';
 
 const ShiftManagementScreen = () => {
   const navigation = useNavigation();
@@ -23,7 +22,7 @@ const ShiftManagementScreen = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [userData, setUserData] = useState(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
-  
+
   // Filters
   const [statusFilter, setStatusFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState(null); // Date object
@@ -112,13 +111,13 @@ const ShiftManagementScreen = () => {
         </View>
       </View>
 
-      <ScrollView 
-        className="flex-1" 
+      <ScrollView
+        className="flex-1"
         contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
       >
         {/* Your Assigned Shift */}
-        <Text className="text-[10px] font-black text-slate-400 tracking-[2px] mb-4 uppercase">Current Assignment</Text>
+        <Text className="text-[10px] font-bold text-slate-400 tracking-[2px] mb-4 ">Current Assignment</Text>
         {userData?.shift ? (
           <View className="bg-indigo-600 rounded-3xl p-6 mb-8 shadow-xl shadow-indigo-200">
             <View className="flex-row justify-between items-start mb-4">
@@ -132,17 +131,17 @@ const ShiftManagementScreen = () => {
                 </View>
               </View>
               <View className="bg-white/20 px-3 py-1 rounded-full">
-                <Text className="text-white text-[10px] font-black uppercase">Active</Text>
+                <Text className="text-white text-[10px] font-bold ">Active</Text>
               </View>
             </View>
             <View className="flex-row justify-between pt-4 border-t border-white/10">
               <View>
-                <Text className="text-indigo-200 text-[10px] font-bold uppercase mb-1">Shift Hours</Text>
-                <Text className="text-white font-black">{to12Hour(userData.shift.startTime)} - {to12Hour(userData.shift.endTime)}</Text>
+                <Text className="text-indigo-200 text-[10px] font-bold  mb-1">Shift Hours</Text>
+                <Text className="text-white font-bold">{to12Hour(userData.shift.startTime)} - {to12Hour(userData.shift.endTime)}</Text>
               </View>
               <View className="items-end">
-                <Text className="text-indigo-200 text-[10px] font-bold uppercase mb-1">Target Hours</Text>
-                <Text className="text-white font-black">{userData.shift.workingHours}h / Day</Text>
+                <Text className="text-indigo-200 text-[10px] font-bold  mb-1">Target Hours</Text>
+                <Text className="text-white font-bold">{userData.shift.workingHours} Hrs</Text>
               </View>
             </View>
           </View>
@@ -155,9 +154,9 @@ const ShiftManagementScreen = () => {
 
         {/* History & Logs */}
         <View className="flex-row justify-between items-center mb-4">
-          <Text className="text-[10px] font-black text-slate-400 tracking-[2px] uppercase">Attendance Shift Logs</Text>
+          <Text className="text-[10px] font-bold text-slate-400 tracking-[2px] ">Attendance Shift Logs</Text>
           <View className="flex-row gap-2">
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => fetchHistory()}
               className="bg-white p-2 rounded-lg border border-slate-100"
             >
@@ -169,7 +168,7 @@ const ShiftManagementScreen = () => {
         {/* Filters Row */}
         <View className="mb-6 flex-row gap-3">
           {/* Status Dropdown */}
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => setShowStatusModal(true)}
             className="flex-1 bg-white h-12 rounded-2xl border border-slate-100 flex-row items-center px-4 shadow-sm"
           >
@@ -181,7 +180,7 @@ const ShiftManagementScreen = () => {
           </TouchableOpacity>
 
           {/* Date Picker */}
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => setShowDatePicker(true)}
             className="flex-1 bg-white h-12 rounded-2xl border border-slate-100 flex-row items-center px-4 shadow-sm"
           >
@@ -199,14 +198,14 @@ const ShiftManagementScreen = () => {
 
         {/* Status Selection Modal */}
         <Modal visible={showStatusModal} transparent animationType="fade">
-          <TouchableOpacity 
-            activeOpacity={1} 
+          <TouchableOpacity
+            activeOpacity={1}
             onPress={() => setShowStatusModal(false)}
             className="flex-1 bg-black/40 justify-end"
           >
             <View className="bg-white rounded-t-[32px] p-6 pb-12">
               <View className="flex-row justify-between items-center mb-6">
-                <Text className="text-xl font-black text-slate-900">Filter Status</Text>
+                <Text className="text-xl font-bold text-slate-900">Filter Status</Text>
                 <TouchableOpacity onPress={() => setShowStatusModal(false)} className="bg-slate-100 p-2 rounded-full">
                   <X size={20} color="#94a3b8" />
                 </TouchableOpacity>
@@ -256,43 +255,43 @@ const ShiftManagementScreen = () => {
                 <View key={log._id} className="bg-white rounded-3xl p-5 border border-slate-100 mb-4 shadow-sm">
                   <View className="flex-row justify-between items-center mb-4">
                     <View>
-                      <Text className="text-slate-400 text-[10px] font-black uppercase tracking-wider">{new Date(log.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</Text>
-                      <Text className="text-lg font-black text-slate-900 tracking-tight mt-0.5">Shift Summary</Text>
+                      <Text className="text-slate-400 text-[10px] font-bold  tracking-wider">{new Date(log.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</Text>
+                      <Text className="text-lg font-bold text-slate-900 tracking-tight mt-0.5">Shift Summary</Text>
                     </View>
                     <View className={`${style.bg} ${style.border} border px-3 py-1.5 rounded-xl`}>
-                      <Text className={`${style.text} text-[10px] font-black uppercase`}>{log.status}</Text>
+                      <Text className={`${style.text} text-[10px] font-bold `}>{log.status}</Text>
                     </View>
                   </View>
 
                   <View className="flex-row gap-4 mb-4">
                     <View className="flex-1 bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                      <Text className="text-[9px] font-bold text-slate-400 uppercase mb-1">Punch In</Text>
-                      <Text className="text-slate-800 font-black text-sm">{log.punchIn?.time ? new Date(log.punchIn.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</Text>
+                      <Text className="text-[9px] font-bold text-slate-400  mb-1">Punch In</Text>
+                      <Text className="text-slate-800 font-bold text-sm">{log.punchIn?.time ? new Date(log.punchIn.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</Text>
                     </View>
                     <View className="flex-1 bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                      <Text className="text-[9px] font-bold text-slate-400 uppercase mb-1">Punch Out</Text>
-                      <Text className="text-slate-800 font-black text-sm">{log.punchOut?.time ? new Date(log.punchOut.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</Text>
+                      <Text className="text-[9px] font-bold text-slate-400  mb-1">Punch Out</Text>
+                      <Text className="text-slate-800 font-bold text-sm">{log.punchOut?.time ? new Date(log.punchOut.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</Text>
                     </View>
                   </View>
 
                   <View className="flex-row justify-between items-center pt-4 border-t border-slate-50">
                     <View className="flex-row gap-5">
                       <View>
-                        <Text className="text-[9px] font-bold text-slate-400 uppercase">Working</Text>
-                        <Text className="text-xs font-black text-slate-700">{log.workingHours || 0}h</Text>
+                        <Text className="text-[9px] font-bold text-slate-400 ">Working</Text>
+                        <Text className="text-xs font-bold text-slate-700">{formatWorkingHours(log.workingHours || 0)}</Text>
                       </View>
                       <View>
-                        <Text className="text-[9px] font-bold text-slate-400 uppercase">OT</Text>
-                        <Text className="text-xs font-black text-emerald-600">+{log.overtime || 0}h</Text>
+                        <Text className="text-[9px] font-bold text-slate-400 ">OT</Text>
+                        <Text className="text-xs font-bold text-emerald-600">+{formatWorkingHours(log.overtime || 0)}</Text>
                       </View>
                       <View>
-                        <Text className="text-[9px] font-bold text-slate-400 uppercase">Late</Text>
-                        <Text className="text-xs font-black text-rose-500">{log.lateTime || 0}m</Text>
+                        <Text className="text-[9px] font-bold text-slate-400 ">Late</Text>
+                        <Text className="text-xs font-bold text-rose-500">{log.lateTime || 0}m</Text>
                       </View>
                     </View>
                     {log.isHalfDay && (
                       <View className="bg-orange-100 px-2 py-0.5 rounded">
-                        <Text className="text-orange-700 text-[8px] font-black uppercase">Half Day</Text>
+                        <Text className="text-orange-700 text-[8px] font-bold ">Half Day</Text>
                       </View>
                     )}
                   </View>

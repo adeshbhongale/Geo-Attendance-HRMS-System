@@ -1,10 +1,12 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { Calendar, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, FileText, Loader2, Search, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 
 const Leaves = () => {
+  const navigate = useNavigate();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -315,11 +317,21 @@ const Leaves = () => {
                 <div className="p-6 flex-1 flex flex-col">
                   <div className="flex items-start justify-between mb-6">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-sm group-hover:scale-110 transition-transform">
-                        {req.user?.name?.charAt(0) || 'U'}
+                      <div 
+                        onClick={() => navigate(`/employee/${req.user?._id}`)}
+                        className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-sm group-hover:scale-110 transition-transform cursor-pointer overflow-hidden"
+                      >
+                        {req.user?.profileImage ? (
+                          <img src={req.user.profileImage} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          req.user?.name?.charAt(0) || 'U'
+                        )}
                       </div>
-                      <div>
-                        <h4 className="font-bold text-slate-900 text-base tracking-tight truncate max-w-[140px]">{req.user?.name || 'Staff Member'}</h4>
+                      <div 
+                        onClick={() => navigate(`/employee/${req.user?._id}`)}
+                        className="cursor-pointer group/name"
+                      >
+                        <h4 className="font-bold text-slate-900 text-base tracking-tight truncate max-w-[140px] group-hover/name:text-indigo-600 transition-colors">{req.user?.name || 'Staff Member'}</h4>
                         <p className="text-[10px] text-indigo-600 font-bold tracking-tight ">{req.user?.department || 'Department'}</p>
                       </div>
                     </div>

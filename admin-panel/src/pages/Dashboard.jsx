@@ -19,6 +19,7 @@ import {
 } from 'recharts';
 import api from '../api/axios';
 import { AnimatePresence, motion } from 'framer-motion';
+import CalendarPicker from '../components/CalendarPicker';
 
 const StatCard = ({ title, value, icon, color, trend, loading }) => (
   <div className="bg-white border border-slate-200 p-4 md:p-6 rounded-2xl flex-1 hover:shadow-xl hover:shadow-slate-200 transition-all duration-500 group">
@@ -59,7 +60,6 @@ const Dashboard = () => {
   const [selectedDate, setSelectedDate] = useState(formatDateString(new Date()));
   const [showCalendar, setShowCalendar] = useState(false);
   const calendarRef = useRef(null);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
 
   useEffect(() => {
     fetchStats();
@@ -87,13 +87,6 @@ const Dashboard = () => {
     }
   };
 
-  const daysInMonth = (date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  const startDayOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-  const calendarDays = [];
-  const totalDays = daysInMonth(currentMonth);
-  const startDay = startDayOfMonth(currentMonth);
-  for (let i = 0; i < startDay; i++) calendarDays.push(null);
-  for (let i = 1; i <= totalDays; i++) calendarDays.push(i);
 
   const attendanceTrend = stats?.attendanceTrend || [
     { name: 'Mon', attendance: 0 },
@@ -134,49 +127,13 @@ const Dashboard = () => {
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                   animate={{ opacity: 1, y: 10, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute top-full right-0 mt-2 z-[110] bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 w-80"
+                  className="absolute top-full right-0 mt-2 z-[110] bg-white border border-slate-200 rounded-3xl shadow-2xl p-6"
                 >
-                  <div className="flex justify-between items-center mb-6">
-                    <h4 className="text-sm font-bold text-slate-900">
-                      {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                    </h4>
-                    <div className="flex gap-1">
-                      <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth() - 1)))} className="p-2 hover:bg-slate-50 text-slate-400 rounded-lg"><ChevronLeft size={16} /></button>
-                      <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth() + 1)))} className="p-2 hover:bg-slate-50 text-slate-400 rounded-lg"><ChevronRight size={16} /></button>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-7 gap-1 mb-2">
-                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => (
-                      <div key={d} className="text-[10px] font-bold text-slate-400 text-center py-2">{d}</div>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-7 gap-1">
-                    {calendarDays.map((day, idx) => {
-                      if (!day) return <div key={idx} className="h-9" />;
-                      const dateObj = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-                      const isFuture = dateObj > new Date();
-                      const isSelected = selectedDate === formatDateString(dateObj);
-                      const isToday = formatDateString(dateObj) === formatDateString(new Date());
-
-                      return (
-                        <button
-                          key={idx}
-                          disabled={isFuture}
-                          onClick={() => {
-                            setSelectedDate(formatDateString(dateObj));
-                            setShowCalendar(false);
-                          }}
-                          className={`h-9 flex flex-col items-center justify-center rounded-xl text-[11px] font-bold transition-all relative ${
-                            isFuture ? 'text-slate-200 cursor-not-allowed' : 
-                            isSelected ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-700 hover:bg-indigo-50 hover:text-indigo-600'
-                          }`}
-                        >
-                          {day}
-                          {isToday && !isSelected && <div className="absolute bottom-1 w-1 h-1 rounded-full bg-indigo-600" />}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <CalendarPicker
+                    selectedDate={selectedDate}
+                    onSelect={setSelectedDate}
+                    onClose={() => setShowCalendar(false)}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -277,8 +234,8 @@ const Dashboard = () => {
 
         <div className="bg-white border border-slate-200 p-6 md:p-8 rounded-2xl shadow-lg shadow-slate-200/40">
           <div className="mb-8">
-            <h3 className="text-sm font-bold text-slate-800 tracking-tight">Department data</h3>
-            <p className="text-[11px] font-bold text-slate-500 mt-1">Staff count by department</p>
+            <h3 className="text-sm font-bold text-slate-800 tracking-tight">Department Activity</h3>
+            <p className="text-[11px] font-bold text-slate-500 mt-1">Staff present on {new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
           </div>
           <div className="h-[320px] w-full min-h-[320px]">
             <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>

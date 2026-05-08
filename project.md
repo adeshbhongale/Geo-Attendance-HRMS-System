@@ -656,6 +656,30 @@ Geo-Attendance-HRMS-System/
 - **Full Support**: Re-enabled **Sick, Casual, and Paid Leave** types across the Backend (`Leave.js` model) and Mobile Frontend.
 - **Strict Logic**: Enforced a 3-leave-per-month limit with real-time balance tracking.
 
+### 6. Admin Panel UI & Navigation Finalization (May 9, 2026)
+
+**Changed**: Standardized Admin UI, fixed Google Maps integration, and optimized employee navigation.
+
+- **Files**: `admin-panel/src/pages/Employees.jsx`, `admin-panel/src/pages/TrackingDashboard.jsx`, `admin-panel/src/pages/Settings.jsx`, `admin-panel/src/pages/Attendance.jsx`
+
+#### Admin Panel UI Cleanup:
+- **Staff Directory Modernization**: 
+  - Removed legacy "Admin Users" statistic cards from `Employees.jsx`.
+  - Updated the Employee Edit form to use dynamic, data-driven dropdowns for Role and Shift management.
+  - Standardized status tracking to use real-time `isOnline` indicators.
+- **Attendance Dashboard**: Removed the unused "Headquarter Wise" tab and search box from `Attendance.jsx` for a cleaner interface.
+
+#### Google Maps Stability:
+- **Loader Resolution**: Fixed the "Loader must not be called again with different options" error by standardizing the `libraries` configuration (`['places']`) across `Settings.jsx` and `EmployeeTrackRoute.jsx`.
+- **Geofencing UI**: Refined the office location picker with a consistent library set.
+
+#### Navigation & Data Integrity:
+- **Telemetry-Focused Navigation**: Updated the `TrackingDashboard.jsx` to navigate directly to detailed **Track Logs** (Activity Table) when clicking on an employee's name or profile image, facilitating immediate movement auditing.
+- **Legacy Field Removal**: Completely stripped "Internal" employee types and "Battery" metrics across the reporting and tracking modules.
+
+#### Mobile App Patch:
+- **Syntax Correction**: Resolved critical syntax errors in `AttendanceScreen.js` and `ShiftManagementScreen.js` caused by metadata injection, restoring full mobile app functionality.
+
 ---
 
 ## Setup & Deployment
@@ -815,6 +839,6 @@ eas submit --platform android --latest
 
 ---
 
-**Last Updated**: May 8, 2026
-**Version**: 1.0.0
-**Status**: Production Ready
+**Last Updated**: May 9, 2026
+**Version**: 1.1.0
+**Status**: Production Stable (Navigation & UI Finalized)

@@ -3,23 +3,30 @@ import {
   AlertCircle,
   Calendar,
   CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Edit2,
   Info,
   Loader2,
   Plus,
   Save,
+  Search,
   Timer,
   Trash2,
   User,
   Users,
   X
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import CalendarPicker from '../components/CalendarPicker';
 
 const Shifts = () => {
+  const navigate = useNavigate();
   const [shifts, setShifts] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState([]);
@@ -45,6 +52,24 @@ const Shifts = () => {
   const [assignSearch, setAssignSearch] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterStatus, setFilterStatus] = useState('All');
+  const [overviewSearch, setOverviewSearch] = useState('');
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const calendarRef = useRef(null);
+  const statusDropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (calendarRef.current && !calendarRef.current.contains(event.target)) {
+        setShowCalendar(false);
+      }
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target)) {
+        setShowStatusDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -286,7 +311,11 @@ const Shifts = () => {
                 <div className="flex flex-wrap gap-2">
                   {getEmployeesByShift(shift._id).length > 0 ? (
                     getEmployeesByShift(shift._id).map((emp) => (
-                      <span key={emp._id} className="text-[9px] font-bold bg-indigo-50 text-indigo-700 px-2 py-1 rounded-lg border border-indigo-100 truncate max-w-full hover:bg-indigo-100 transition-colors">
+                      <span
+                        key={emp._id}
+                        onClick={() => navigate(`/employee/${emp._id}`)}
+                        className="text-[9px] font-bold bg-indigo-50 text-indigo-700 px-2 py-1 rounded-lg border border-indigo-100 truncate max-w-full hover:bg-indigo-600 hover:text-white transition-all cursor-pointer"
+                      >
                         {emp.name}
                       </span>
                     ))
@@ -302,49 +331,114 @@ const Shifts = () => {
 
       {/* Employee Shift Overview Section */}
       <div className="mt-12 space-y-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 mb-8 bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
           <div>
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">Employee Assignment Overview</h2>
             <p className="text-slate-400 text-xs font-medium mt-1">Quick view of all employees and their assigned shifts</p>
           </div>
-          <div className="flex flex-wrap items-center gap-4 bg-slate-50 p-2 rounded-[24px] border border-slate-100 overflow-x-auto max-w-full">
-            <div className="flex items-center gap-2 px-3 border-r border-slate-200">
-              <Calendar size={14} className="text-slate-400" />
-              <input 
-                type="date" 
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-transparent text-[11px] font-bold text-slate-600 outline-none cursor-pointer"
-              />
+
+          <div className="flex flex-col sm:flex-row items-center gap-4 w-full lg:w-auto">
+            {/* Date Filter */}
+            <div className="relative" ref={calendarRef}>
+              <div
+                className="flex items-center gap-3 bg-slate-50 border border-slate-100 px-4 py-2.5 rounded-2xl hover:bg-white hover:border-indigo-100 transition-all cursor-pointer shadow-sm"
+                onClick={() => setShowCalendar(!showCalendar)}
+              >
+                <Calendar size={14} className="text-indigo-600" />
+                <span className="text-[11px] font-bold text-slate-600">
+                  {new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
+                <ChevronDown size={12} className={`text-slate-400 transition-transform ${showCalendar ? 'rotate-180' : ''}`} />
+              </div>
+
+              <AnimatePresence>
+                {showCalendar && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 10, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute top-full left-0 mt-2 z-[110] bg-white border border-slate-200 rounded-2xl shadow-2xl p-4"
+                  >
+                    <CalendarPicker
+                      selectedDate={selectedDate}
+                      onSelect={(date) => {
+                        setSelectedDate(date);
+                        setShowCalendar(false);
+                      }}
+                      onClose={() => setShowCalendar(false)}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-            <div className="flex items-center gap-2">
-              {['All', 'Present', 'Late', 'Half Day'].map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setFilterStatus(s)}
-                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                    filterStatus === s 
-                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100' 
-                      : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
+
+            {/* Status Dropdown */}
+            <div className="relative w-full sm:w-auto" ref={statusDropdownRef}>
+              <div
+                className="flex items-center justify-between gap-3 bg-slate-50 border border-slate-100 px-4 py-2.5 rounded-2xl hover:bg-white hover:border-indigo-100 transition-all cursor-pointer shadow-sm min-w-[140px]"
+                onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+              >
+                <span className="text-[11px] font-bold text-slate-600">
+                  {filterStatus} Status
+                </span>
+                <ChevronDown size={12} className={`text-slate-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
+              </div>
+
+              <AnimatePresence>
+                {showStatusDropdown && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 10, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute top-full left-0 mt-2 z-[110] bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden min-w-[160px]"
+                  >
+                    {['All', 'Present', 'Late', 'Half Day', 'Absent'].map(s => (
+                      <div
+                        key={s}
+                        onClick={() => {
+                          setFilterStatus(s);
+                          setShowStatusDropdown(false);
+                        }}
+                        className={`px-4 py-3 text-[11px] font-bold transition-colors cursor-pointer ${filterStatus === s ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-indigo-50'
+                          }`}
+                      >
+                        {s} Status
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Search Bar */}
+            <div className="relative w-full sm:w-80">
+              <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by name..."
+                value={overviewSearch}
+                onChange={(e) => setOverviewSearch(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-100 pl-10 pr-4 py-2.5 rounded-2xl text-[11px] font-bold text-slate-700 outline-none focus:bg-white focus:border-indigo-100 transition-all shadow-sm"
+              />
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {attendance
-            .filter(att => att.punchIn?.time) // Only show employees who have punched in
+            .filter(att => att.punchIn?.time || att.status === 'Absent')
             .filter(att => filterStatus === 'All' || att.status === filterStatus)
-            .sort((a, b) => new Date(b.punchIn.time) - new Date(a.punchIn.time)) // Newest first
+            .filter(att => !overviewSearch || att.user?.name?.toLowerCase().includes(overviewSearch.toLowerCase()))
+            .sort((a, b) => {
+              if (a.status === 'Absent' && b.status !== 'Absent') return 1;
+              if (a.status !== 'Absent' && b.status === 'Absent') return -1;
+              return new Date(b.punchIn?.time || 0) - new Date(a.punchIn?.time || 0);
+            })
             .map((att) => {
               const emp = att.user;
               if (!emp) return null;
               const status = att.status;
-              
+
               // Calculate Late Time if late
               let lateTimeText = '';
               if (att.isLate && att.punchIn?.time && emp.shift?.startTime) {
@@ -352,7 +446,7 @@ const Shifts = () => {
                 const [sHour, sMin] = emp.shift.startTime.split(':').map(Number);
                 const shiftStart = new Date(punchDate);
                 shiftStart.setHours(sHour, sMin, 0, 0);
-                
+
                 const diffMs = punchDate - shiftStart;
                 if (diffMs > 0) {
                   const diffMins = Math.floor(diffMs / 60000);
@@ -367,42 +461,53 @@ const Shifts = () => {
               return (
                 <div key={att._id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all group animate-in fade-in slide-in-from-bottom-2 duration-500">
                   <div className="flex items-start justify-between mb-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
-                      <User size={20} />
+                    <div
+                      onClick={() => navigate(`/employee/${emp._id}`)}
+                      className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors cursor-pointer overflow-hidden"
+                    >
+                      {emp.profileImage ? (
+                        <img src={emp.profileImage} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <User size={20} />
+                      )}
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <div className={`px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-tighter ${
-                        status === 'Present' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                      <div className={`px-2 py-1 rounded-md text-[8px] font-bold tracking-wider ${status === 'Present' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
                         status === 'Late' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
-                        status === 'Half Day' ? 'bg-orange-50 text-orange-600 border border-orange-100' :
-                        'bg-slate-50 text-slate-400 border border-slate-100'
-                      }`}>
+                          status === 'Half Day' ? 'bg-orange-50 text-orange-600 border border-orange-100' :
+                            'bg-slate-50 text-slate-400 border border-slate-100'
+                        }`}>
                         {status}
                       </div>
                       {lateTimeText && (
-                        <span className="text-[7px] font-black text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 uppercase tracking-tighter">
+                        <span className="text-[7px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 tracking-wider">
                           {lateTimeText}
                         </span>
                       )}
                     </div>
                   </div>
-                  <h4 className="font-bold text-slate-900 text-sm truncate">{emp.name}</h4>
+                  <h4
+                    onClick={() => navigate(`/employee/${emp._id}`)}
+                    className="font-bold text-slate-900 text-sm truncate cursor-pointer hover:text-indigo-600 transition-colors"
+                  >
+                    {emp.name}
+                  </h4>
                   <p className="text-[10px] text-slate-400 font-bold tracking-widest mt-0.5 truncate">{emp.department}</p>
-                  
+
                   <div className="mt-4 pt-4 border-t border-slate-50 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-[9px] font-bold text-slate-400">Punch In</span>
                       <span className="text-[10px] font-bold text-slate-800">
-                        {to12Hour(new Date(att.punchIn.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }))}
+                        {att.punchIn?.time ? to12Hour(new Date(att.punchIn.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })) : 'N/A'}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-[9px] font-bold text-slate-400">Punch Out</span>
                       <span className="text-[10px] font-bold text-slate-800">
-                        {att.punchOut?.time ? to12Hour(new Date(att.punchOut.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })) : 'Working...'}
+                        {att.status === 'Absent' ? 'N/A' : (att.punchOut?.time ? to12Hour(new Date(att.punchOut.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })) : 'Working...')}
                       </span>
                     </div>
-                    
+
                     <div className="flex items-center justify-between pt-1">
                       <span className="text-[9px] font-bold text-slate-400">Working Hrs</span>
                       <span className="text-[10px] font-bold text-slate-800">
@@ -412,8 +517,8 @@ const Shifts = () => {
 
                     {(att.overtime > 0) && (
                       <div className="flex items-center justify-between bg-indigo-50/50 p-1.5 rounded-lg border border-indigo-50">
-                        <span className="text-[9px] font-black text-indigo-600 uppercase tracking-tighter">Overtime</span>
-                        <span className="text-[10px] font-black text-indigo-700">+{att.overtime.toFixed(1)}h</span>
+                        <span className="text-[9px] font-bold text-indigo-600  tracking-tighter">Overtime</span>
+                        <span className="text-[10px] font-bold text-indigo-700">+{att.overtime.toFixed(1)}h</span>
                       </div>
                     )}
                   </div>

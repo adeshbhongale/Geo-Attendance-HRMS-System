@@ -337,7 +337,7 @@ const ProfileScreen = () => {
             <ScrollView showsVerticalScrollIndicator={false}>
               <View className="gap-6">
                 <View className="items-center">
-                  <Text className="text-[10px] font-bold text-slate-400 tracking-widest mb-3 uppercase self-start ml-1">Profile Picture</Text>
+                  <Text className="text-[10px] font-bold text-slate-400 tracking-widest mb-3  self-start ml-1">Profile Picture</Text>
                   <TouchableOpacity
                     className="w-32 h-32 rounded-full border-2 border-dashed border-slate-200 justify-center items-center overflow-hidden bg-slate-50"
                     onPress={pickProfileImage}

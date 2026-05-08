@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Shift = require('../models/Shift');
 const { calculateDistance } = require('../utils/geofence');
 const { uploadToCloudinary } = require('../utils/cloudinary');
+const { getGoogleRoadDistance } = require('../utils/googleMaps');
 
 // @desc    Punch In
 // @route   POST /api/attendance/punch-in
@@ -290,12 +291,27 @@ exports.trackLocation = async (req, res, next) => {
 
     // Calculate distance from last point
     let incrementalDistance = 0;
+    let lastLat, lastLng;
+
     if (attendance.trackingLogs.length > 0) {
       const lastPoint = attendance.trackingLogs[attendance.trackingLogs.length - 1];
-      incrementalDistance = calculateDistance(latitude, longitude, lastPoint.latitude, lastPoint.longitude);
+      lastLat = lastPoint.latitude;
+      lastLng = lastPoint.longitude;
     } else {
       // First log, calculate distance from punch-in
-      incrementalDistance = calculateDistance(latitude, longitude, attendance.punchIn.location.latitude, attendance.punchIn.location.longitude);
+      lastLat = attendance.punchIn.location.latitude;
+      lastLng = attendance.punchIn.location.longitude;
+    }
+
+    // Try Google Road Distance first, fallback to mathematical straight-line
+    const googleDistance = await getGoogleRoadDistance(lastLat, lastLng, latitude, longitude);
+    
+    if (googleDistance !== null) {
+      incrementalDistance = googleDistance;
+      console.log(`Google Road Distance: ${googleDistance}km`);
+    } else {
+      incrementalDistance = calculateDistance(latitude, longitude, lastLat, lastLng);
+      console.log(`Mathematical Distance (Fallback): ${incrementalDistance}km`);
     }
 
     attendance.totalDistance = (attendance.totalDistance || 0) + incrementalDistance;

@@ -7,10 +7,31 @@ const xlsx = require('xlsx');
 exports.getEmployees = async (req, res, next) => {
   try {
     const employees = await User.find({ role: 'employee' }).populate('shift');
+    
+    // Check online status based on today's attendance
+    const now = new Date();
+    const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const todayEnd = new Date(todayStart);
+    todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
+
+    const Attendance = require('../models/Attendance');
+    const todayAttendance = await Attendance.find({
+      date: { $gte: todayStart, $lt: todayEnd },
+      "punchIn.time": { $exists: true },
+      "punchOut.time": { $exists: false }
+    });
+
+    const onlineUserIds = todayAttendance.map(a => a.user.toString());
+
+    const employeesWithStatus = employees.map(emp => ({
+      ...emp._doc,
+      isOnline: onlineUserIds.includes(emp._id.toString())
+    }));
+
     res.status(200).json({
       success: true,
       count: employees.length,
-      data: employees,
+      data: employeesWithStatus,
     });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });

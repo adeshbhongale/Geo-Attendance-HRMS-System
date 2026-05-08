@@ -3,7 +3,12 @@ const {
   getDailyReport,
   getMonthlyReport,
   getStats,
-  getEmployeeStats
+  getEmployeeStats,
+  getTrackingStats,
+  getAttendanceDashboard,
+  getEmployeeReports,
+  getEmployeePersonalDetails,
+  getEmployeeTrackDetails
 } = require('../controllers/reports');
 
 const router = express.Router();
@@ -18,5 +23,10 @@ router.get('/my-stats', getEmployeeStats);
 router.get('/daily', authorize('admin'), getDailyReport);
 router.get('/monthly', authorize('admin'), getMonthlyReport);
 router.get('/stats', authorize('admin'), getStats);
+router.get('/tracking', authorize('admin'), getTrackingStats);
+router.get('/attendance-dashboard', authorize('admin'), getAttendanceDashboard);
+router.get('/employee-reports', authorize('admin'), getEmployeeReports);
+router.get('/employee-details/:userId', authorize('admin'), getEmployeePersonalDetails);
+router.get('/track-details/:userId', authorize('admin'), getEmployeeTrackDetails);
 
 module.exports = router;

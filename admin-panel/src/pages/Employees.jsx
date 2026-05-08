@@ -11,14 +11,17 @@ import {
   Shield,
   Trash2,
   UserPlus,
-  X, Calendar, ChevronLeft, ChevronRight, RotateCcw
+  X, Calendar, ChevronLeft, ChevronRight, RotateCcw, ChevronDown
 } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
+import { useNavigate } from 'react-router-dom';
+import CalendarPicker from '../components/CalendarPicker';
 import { AnimatePresence, motion } from 'framer-motion';
 
 const Employees = () => {
+  const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +30,19 @@ const Employees = () => {
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [saving, setSaving] = useState(false);
   const [confirmData, setConfirmData] = useState({ show: false, type: '', action: null, message: '' });
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const filteredEmployees = employees.filter(emp =>
+    emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    emp.mobile.includes(searchTerm) ||
+    emp.department.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage);
 
   const formatDateString = (date) => {
     const d = new Date(date);
@@ -164,16 +180,9 @@ const Employees = () => {
     );
   };
 
-  const filteredEmployees = employees.filter(emp =>
-    emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.department?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   const stats = {
     total: filteredEmployees.length,
-    active: filteredEmployees.filter(e => e.status === 'active').length,
-    admins: filteredEmployees.filter(e => e.role === 'admin').length
+    active: filteredEmployees.filter(e => e.isOnline).length
   };
 
   const daysInMonth = (date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -210,73 +219,36 @@ const Employees = () => {
 
       <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
         <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto">
-          {/* Calendar Picker (Today/Yesterday/Custom buttons REMOVED per request) */}
-          <div className="relative" ref={calendarRef}>
-            <div 
-              className={`flex items-center gap-3 border px-5 py-3 rounded-2xl shadow-sm hover:bg-slate-50 transition-all min-w-[180px] cursor-pointer ${
-                selectedDate ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-200 text-slate-700'
-              }`}
-              onClick={() => setShowCalendar(!showCalendar)}
-            >
-              <Calendar size={16} />
-              <span className="text-sm font-bold">
-                {new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-              </span>
+            <div className="relative" ref={calendarRef}>
+              <div
+                className="flex items-center gap-3 bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm cursor-pointer hover:bg-slate-50 transition-all"
+                onClick={() => setShowCalendar(!showCalendar)}
+              >
+                <Calendar size={14} className="text-indigo-600" />
+                <span className="text-xs font-bold text-slate-700">{selectedDate}</span>
+                <ChevronDown size={12} className="text-slate-400" />
+              </div>
+
+              <AnimatePresence>
+                {showCalendar && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 10 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute top-full left-0 mt-2 z-[110] bg-white border border-slate-200 rounded-2xl shadow-2xl p-4"
+                  >
+                    <CalendarPicker
+                      selectedDate={selectedDate}
+                      onSelect={(date) => {
+                        setSelectedDate(date);
+                        setShowCalendar(false);
+                      }}
+                      onClose={() => setShowCalendar(false)}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-
-            <AnimatePresence>
-              {showCalendar && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 10, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute top-full left-0 mt-2 z-[110] bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 w-80"
-                >
-                  <div className="flex justify-between items-center mb-6">
-                    <h4 className="text-sm font-bold text-slate-900">
-                      {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                    </h4>
-                    <div className="flex gap-1">
-                      <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth() - 1)))} className="p-2 hover:bg-slate-50 text-slate-400 rounded-lg"><ChevronLeft size={16} /></button>
-                      <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth() + 1)))} className="p-2 hover:bg-slate-50 text-slate-400 rounded-lg"><ChevronRight size={16} /></button>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-7 gap-1 mb-2">
-                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => (
-                      <div key={d} className="text-[10px] font-bold text-slate-400 text-center py-2">{d}</div>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-7 gap-1">
-                    {calendarDays.map((day, idx) => {
-                      if (!day) return <div key={idx} className="h-9" />;
-                      const dateObj = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-                      const isFuture = dateObj > new Date();
-                      const isSelected = selectedDate === formatDateString(dateObj);
-                      const isToday = formatDateString(dateObj) === formatDateString(new Date());
-
-                      return (
-                        <button
-                          key={idx}
-                          disabled={isFuture}
-                          onClick={() => {
-                            setSelectedDate(formatDateString(dateObj));
-                            setShowCalendar(false);
-                          }}
-                          className={`h-9 flex flex-col items-center justify-center rounded-xl text-[11px] font-bold transition-all relative ${
-                            isFuture ? 'text-slate-200 cursor-not-allowed' : 
-                            isSelected ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-700 hover:bg-indigo-50 hover:text-indigo-600'
-                          }`}
-                        >
-                          {day}
-                          {isToday && !isSelected && <div className="absolute bottom-1 w-1 h-1 rounded-full bg-indigo-600" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
         </div>
 
         <div className="relative w-full sm:w-80">
@@ -291,7 +263,7 @@ const Employees = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <div className="glass-card p-6 border-l-4 border-indigo-600">
            <div className="text-3xl font-bold text-slate-900 tracking-tighter">{stats.total}</div>
            <div className="text-[10px] font-bold text-slate-400 tracking-wider">Total Staff</div>
@@ -299,10 +271,6 @@ const Employees = () => {
         <div className="glass-card p-6 border-l-4 border-emerald-500">
            <div className="text-3xl font-bold text-slate-900 tracking-tighter">{stats.active}</div>
            <div className="text-[10px] font-bold text-slate-400 tracking-wider">Active Staff</div>
-        </div>
-        <div className="glass-card p-6 border-l-4 border-amber-500">
-           <div className="text-3xl font-bold text-slate-900 tracking-tighter">{stats.admins}</div>
-           <div className="text-[10px] font-bold text-slate-400 tracking-wider">Admin Users</div>
         </div>
       </div>
 
@@ -324,67 +292,102 @@ const Employees = () => {
                   <td colSpan="5" className="px-8 py-12 text-center text-slate-400 font-bold text-sm">No results found</td>
                 </tr>
               ) : (
-                filteredEmployees.map((emp) => (
-                  <tr key={emp._id} className="hover:bg-slate-50/30 transition-colors">
-                    <td className="px-6 md:px-8 py-5">
-                      <div className="flex items-center gap-4">
-                        <div className="w-11 h-11 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
-                          {emp.name.charAt(0)}
+                filteredEmployees
+                  .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                  .map((emp) => (
+                    <tr key={emp._id} className="hover:bg-slate-50/30 transition-colors">
+                      <td className="px-6 md:px-8 py-5">
+                        <div className="flex items-center gap-4">
+                          <div
+                            onClick={() => navigate(`/employee/${emp._id}`)}
+                            className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm cursor-pointer hover:scale-110 transition-transform overflow-hidden"
+                          >
+                            {emp.profileImage ? (
+                              <img src={emp.profileImage} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              emp.name.charAt(0)
+                            )}
+                          </div>
+                          <div
+                            className="cursor-pointer group/name"
+                            onClick={() => navigate(`/employee/${emp._id}`)}
+                          >
+                            <div className="font-bold text-slate-900 text-sm tracking-tight group-hover/name:text-indigo-600 transition-colors">{emp.name}</div>
+                            <div className="text-[10px] text-slate-400 font-bold tracking-tight mt-0.5">Staff ID: {emp._id.slice(-6)}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="font-bold text-slate-900 text-sm tracking-tight">{emp.name}</div>
-                          <div className="text-[10px] text-slate-400 font-bold tracking-tight mt-0.5">Staff ID: {emp._id.slice(-6)}</div>
+                      </td>
+                      <td className="px-6 md:px-8 py-5">
+                        <div className="flex flex-col gap-1.5">
+                          <div className="text-xs text-slate-600 font-bold flex items-center gap-2 tracking-tight">
+                            <Mail size={12} className="text-slate-400" /> {emp.email}
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-bold flex items-center gap-2 tracking-tight">
+                            <Phone size={12} className="text-slate-400" /> {emp.mobile}
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 md:px-8 py-5">
-                      <div className="flex flex-col gap-1.5">
-                        <div className="text-xs text-slate-600 font-bold flex items-center gap-2 tracking-tight">
-                          <Mail size={12} className="text-slate-400" /> {emp.email}
+                      </td>
+                      <td className="px-6 md:px-8 py-5">
+                        <div className="font-bold text-slate-800 text-xs tracking-tight">{emp.designation || 'Staff'}</div>
+                        <div className="flex flex-col gap-1 mt-1">
+                          <div className="text-[10px] text-indigo-600 font-bold tracking-tight">{emp.department}</div>
+                          <div className="text-[10px] text-slate-400 font-bold tracking-tight bg-slate-50 px-2 py-0.5 rounded-md self-start border border-slate-100">
+                            {emp.shift?.name || 'General Shift'}
+                          </div>
                         </div>
-                        <div className="text-[11px] text-slate-500 font-bold flex items-center gap-2 tracking-tight">
-                          <Phone size={12} className="text-slate-400" /> {emp.mobile}
+                      </td>
+                      <td className="px-6 md:px-8 py-5">
+                        <span className={`px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-tight border ${emp.isOnline
+                          ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                          : 'bg-slate-100 text-slate-400 border-slate-200'
+                          }`}>
+                          {emp.isOnline ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="px-6 md:px-8 py-5 text-right">
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            className="p-2.5 rounded-xl bg-slate-50 text-slate-400 hover:bg-indigo-600 hover:text-white transition-all"
+                            onClick={() => handleOpenModal(emp)}
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            className="p-2.5 rounded-xl bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-all"
+                            onClick={() => handleDeleteConfirm(emp._id)}
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 md:px-8 py-5">
-                      <div className="font-bold text-slate-800 text-xs tracking-tight">{emp.designation || 'Staff'}</div>
-                      <div className="flex flex-col gap-1 mt-1">
-                        <div className="text-[10px] text-indigo-600 font-bold tracking-tight">{emp.department}</div>
-                        <div className="text-[10px] text-slate-400 font-bold tracking-tight bg-slate-50 px-2 py-0.5 rounded-md self-start border border-slate-100">
-                          {emp.shift?.name || 'General Shift'}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 md:px-8 py-5">
-                      <span className={`px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-tight border ${emp.status === 'active'
-                        ? 'bg-indigo-50 text-indigo-600 border-indigo-100'
-                        : 'bg-slate-100 text-slate-400 border-slate-200'
-                        }`}>
-                        {emp.status || 'active'}
-                      </span>
-                    </td>
-                    <td className="px-6 md:px-8 py-5 text-right">
-                      <div className="flex gap-2 justify-end">
-                        <button
-                          className="p-2.5 rounded-xl bg-slate-50 text-slate-400 hover:bg-indigo-600 hover:text-white transition-all"
-                          onClick={() => handleOpenModal(emp)}
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        <button
-                          className="p-2.5 rounded-xl bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-all"
-                          onClick={() => handleDeleteConfirm(emp._id)}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                    </tr>
+                  ))
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination Controls */}
+        <div className="px-6 md:px-8 py-6 border-t border-slate-50 flex items-center justify-between bg-slate-50/30">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            Page {currentPage} of {totalPages || 1}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="p-2.5 rounded-xl border border-slate-200 text-slate-400 hover:bg-white hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="p-2.5 rounded-xl border border-slate-200 text-slate-400 hover:bg-white hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -434,26 +437,35 @@ const Employees = () => {
                     <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Designation</label>
                     <input type="text" value={formData.designation} onChange={(e) => setFormData({ ...formData, designation: e.target.value })} className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800" placeholder="e.g., Senior Analyst" />
                   </div>
+                  
                   <div className="space-y-3">
                     <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Work Shift</label>
-                    <select value={formData.shift} onChange={(e) => setFormData({ ...formData, shift: e.target.value })} className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800">
-                      <option value="">General Shift</option>
-                      {shifts.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                    </select>
+                    <div className="relative group">
+                      <select 
+                        value={formData.shift} 
+                        onChange={(e) => setFormData({ ...formData, shift: e.target.value })} 
+                        className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800 appearance-none"
+                      >
+                        <option value="">General Shift</option>
+                        {shifts.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                      </select>
+                      <ChevronDown size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-focus-within:text-indigo-600 transition-colors" />
+                    </div>
                   </div>
+
                   <div className="space-y-3">
                     <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Role</label>
-                    <select value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })} className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800">
-                      <option value="employee">Staff Member</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </div>
-                  <div className="space-y-3">
-                    <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Account Status</label>
-                    <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })} className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800">
-                      <option value="active">Active</option>
-                      <option value="inactive">Disabled</option>
-                    </select>
+                    <div className="relative group">
+                      <select 
+                        value={formData.role} 
+                        onChange={(e) => setFormData({ ...formData, role: e.target.value })} 
+                        className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800 appearance-none"
+                      >
+                        <option value="employee">Staff Member</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                      <ChevronDown size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-focus-within:text-indigo-600 transition-colors" />
+                    </div>
                   </div>
                 </div>
 

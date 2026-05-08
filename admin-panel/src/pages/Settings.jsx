@@ -1,5 +1,7 @@
-import { Loader2, MapPin, Navigation, Save } from 'lucide-react';
+import { Loader2, MapPin, Navigation, Save, AlertTriangle, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useJsApiLoader } from '@react-google-maps/api';
+import { AnimatePresence, motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 
@@ -10,32 +12,26 @@ const Settings = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+    libraries: ['places']
+  });
+
   const mapRef = useRef(null);
   const googleMap = useRef(null);
   const marker = useRef(null);
   const circle = useRef(null);
-
-  const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
   useEffect(() => {
     fetchSettings();
   }, []);
 
   useEffect(() => {
-    if (lat !== 0 && lng !== 0 && !window.google) {
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}`;
-      script.async = true;
-      script.defer = true;
-      script.onload = initMap;
-      script.onerror = () => {
-        toast.error('Map loading blocked. Check your connection.');
-      };
-      document.head.appendChild(script);
-    } else if (window.google && lat !== 0 && lng !== 0) {
+    if (isLoaded && lat !== 0 && lng !== 0 && !googleMap.current) {
       initMap();
     }
-  }, [lat, lng]);
+  }, [isLoaded, lat, lng]);
 
   useEffect(() => {
     if (googleMap.current && marker.current && circle.current) {
@@ -73,6 +69,13 @@ const Settings = () => {
       strokeWeight: 2,
       center: pos,
     });
+    googleMap.current.addListener('click', (e) => {
+      const newPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+      setLat(newPos.lat.toString());
+      setLng(newPos.lng.toString());
+      updateAddress(newPos.lat, newPos.lng);
+    });
+
     marker.current.addListener('dragend', () => {
       const newPos = marker.current.getPosition();
       setLat(newPos.lat().toFixed(6));
@@ -99,6 +102,8 @@ const Settings = () => {
     }
   };
 
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
   const handleSave = async () => {
     if (!lat || !lng || lat === 0 || lng === 0) {
       toast.error('Invalid location.');
@@ -108,6 +113,11 @@ const Settings = () => {
       toast.error('Invalid radius. Minimum 10m required.');
       return;
     }
+    setShowConfirmModal(true);
+  };
+
+  const confirmSave = async () => {
+    setShowConfirmModal(false);
     try {
       setSaving(true);
       await api.put('/settings/office', {
@@ -245,6 +255,57 @@ const Settings = () => {
           </button>
         </div>
       </div>
+
+      <AnimatePresence>
+        {showConfirmModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-[2.5rem] p-10 max-w-lg w-full shadow-2xl relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 p-6">
+                <button 
+                  onClick={() => setShowConfirmModal(false)}
+                  className="p-3 hover:bg-slate-50 rounded-full text-slate-400 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex flex-col items-center text-center gap-6">
+                <div className="w-20 h-20 bg-rose-50 rounded-3xl flex items-center justify-center text-rose-500 shadow-inner">
+                  <AlertTriangle size={40} />
+                </div>
+                
+                <div className="space-y-3">
+                  <h3 className="text-2xl font-bold text-slate-900 tracking-tight">Confirm Office Relocation?</h3>
+                  <p className="text-slate-500 font-bold text-sm leading-relaxed px-4">
+                    Changing the office location will affect geofencing for all employees. 
+                    Are you sure you want to update the official headquarters location?
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 w-full pt-4">
+                  <button
+                    onClick={() => setShowConfirmModal(false)}
+                    className="py-4 rounded-2xl font-bold text-sm text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmSave}
+                    className="py-4 rounded-2xl font-bold text-sm text-white bg-indigo-600 shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
+                  >
+                    Yes, Change Location
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

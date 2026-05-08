@@ -20,9 +20,11 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     { name: 'Dashboard', icon: <LayoutDashboard size={18} />, path: '/' },
     { name: 'Employees', icon: <Users size={18} />, path: '/employees' },
     { name: 'Attendance', icon: <CalendarCheck size={18} />, path: '/attendance' },
+    { name: 'Reports', icon: <FileText size={18} />, path: '/reports' },
     { name: 'Leave Requests', icon: <FileText size={18} />, path: '/leaves' },
     { name: 'Shifts', icon: <Clock size={18} />, path: '/shifts' },
     { name: 'Office Setup', icon: <MapPin size={18} />, path: '/settings' },
+    { name: 'Tracking Dashboard', icon: <Activity size={18} />, path: '/tracking-dashboard' },
   ];
 
   return (
@@ -37,12 +39,12 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
 
       <div className={`
         fixed lg:sticky top-0 left-0 z-[101] h-screen lg:h-[calc(100vh-2rem)] 
-        w-[280px] m-0 lg:m-4 flex flex-col p-8
+        w-[280px] m-0 lg:m-4 flex flex-col p-6
         transition-transform duration-300 ease-in-out lg:translate-x-0
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         bg-white border border-slate-200 rounded-3xl shadow-xl
       `}>
-        <div className="mb-12 flex items-center justify-between">
+        <div className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-100">
               <Activity className="text-white" size={28} />

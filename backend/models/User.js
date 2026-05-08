@@ -35,6 +35,10 @@ const UserSchema = new mongoose.Schema({
   },
   department: String,
   designation: String,
+  headquarter: {
+    type: String,
+    default: 'Ichalkaranji HQ'
+  },
   shift: {
     type: mongoose.Schema.ObjectId,
     ref: 'Shift',

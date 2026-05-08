@@ -26,7 +26,13 @@ const AttendanceSchema = new mongoose.Schema({
       longitude: Number,
       address: String,
     },
+    selfie: String,
   },
+  breaks: [{
+    startTime: Date,
+    endTime: Date,
+    duration: Number // minutes
+  }],
   status: {
     type: String,
     enum: ['Present', 'Late', 'Half Day', 'Absent'],
@@ -62,6 +68,15 @@ const AttendanceSchema = new mongoose.Schema({
   overtime: {
     type: Number,
     default: 0
+  },
+  battery: {
+    type: Number,
+    default: 100
+  },
+  signalStatus: {
+    type: String,
+    enum: ['online', 'offline'],
+    default: 'online'
   }
 }, {
   timestamps: true,
