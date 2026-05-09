@@ -18,6 +18,7 @@ const AttendanceSchema = new mongoose.Schema({
       address: String,
     },
     selfie: String,
+    isOutside: { type: Boolean, default: false }
   },
   punchOut: {
     time: Date,
@@ -27,6 +28,7 @@ const AttendanceSchema = new mongoose.Schema({
       address: String,
     },
     selfie: String,
+    isOutside: { type: Boolean, default: false }
   },
   breaks: [{
     startTime: Date,
@@ -59,13 +61,10 @@ const AttendanceSchema = new mongoose.Schema({
     latitude: Number,
     longitude: Number,
     address: String,
-    isOutside: Boolean
+    isOutside: Boolean,
+    distanceFromPrevious: Number
   }],
   totalDistance: {
-    type: Number,
-    default: 0
-  },
-  overtime: {
     type: Number,
     default: 0
   },

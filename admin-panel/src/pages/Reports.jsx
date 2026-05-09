@@ -19,12 +19,20 @@ import CalendarPicker from '../components/CalendarPicker';
 
 const Reports = () => {
   const navigate = useNavigate();
-  const [reportType, setReportType] = useState('Employee Timesheet');
+  const [reportType, setReportType] = useState('Employee Overview Sheet');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [generatedOn, setGeneratedOn] = useState('');
+
+  const formatDuration = (decimalHours) => {
+    if (!decimalHours || decimalHours === 0) return '0h 0m';
+    const totalMinutes = Math.round(decimalHours * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${h}h ${m}m`;
+  };
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -99,7 +107,7 @@ const Reports = () => {
     let headers = [];
     let rows = [];
 
-    if (reportType === 'Employee Timesheet') {
+    if (reportType === 'Employee Overview Sheet') {
       headers = ["Name", "Mobile", "Shift", "Time In", "Time Out", "Logged Hours", "Breaks", "Total Worked"];
       rows = filteredData.map(row => [
         row.name, row.mobile, row.shift,
@@ -107,7 +115,7 @@ const Reports = () => {
         row.loggedHours.toFixed(2), row.breaksTaken,
         row.totalHoursWorked.toFixed(2)
       ]);
-    } else if (reportType === 'Present') {
+    } else if (reportType === 'Present Timing Sheet') {
       headers = ["Name", "Mobile", "Dept", "Shift", "Time In", "Time Out", "Distance"];
       rows = filteredData.map(row => [
         row.name, row.mobile, row.department, row.shift,
@@ -129,7 +137,7 @@ const Reports = () => {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `${reportType}_${selectedDate}.csv`);
+    link.setAttribute("download", `${reportType.replace(/\s+/g, '_')}_${selectedDate}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -261,8 +269,10 @@ const Reports = () => {
                   <th className="px-8 py-6 text-[10px] font-bold text-slate-400 tracking-widest  border-b border-slate-50">Staff Member</th>
                   <th className="px-6 py-6 text-[10px] font-bold text-slate-400 tracking-widest  border-b border-slate-50 text-center">Mobile</th>
 
-                  {reportType === 'Employee Timesheet' && (
+                  {reportType === 'Employee Overview Sheet' && (
                     <>
+                      <th className="px-6 py-6 text-[10px] font-bold text-slate-400 tracking-widest  border-b border-slate-50 text-center">Shift</th>
+                      <th className="px-6 py-6 text-[10px] font-bold text-slate-400 tracking-widest  border-b border-slate-50 text-center">Status</th>
                       <th className="px-6 py-6 text-[10px] font-bold text-slate-400 tracking-widest  border-b border-slate-50 text-center">Check-In</th>
                       <th className="px-6 py-6 text-[10px] font-bold text-slate-400 tracking-widest  border-b border-slate-50 text-center">Check-Out</th>
                       <th className="px-6 py-6 text-[10px] font-bold text-slate-400 tracking-widest  border-b border-slate-50 text-center">Breaks</th>
@@ -270,7 +280,7 @@ const Reports = () => {
                     </>
                   )}
 
-                  {reportType === 'Present' && (
+                  {reportType === 'Present Timing Sheet' && (
                     <>
                       <th className="px-6 py-6 text-[10px] font-bold text-slate-400 tracking-widest  border-b border-slate-50 text-center">Dept/Shift</th>
                       <th className="px-6 py-6 text-[10px] font-bold text-slate-400 tracking-widest  border-b border-slate-50 text-center">In Time</th>
@@ -285,7 +295,7 @@ const Reports = () => {
                       <th className="px-6 py-6 text-[10px] font-bold text-slate-400 tracking-widest  border-b border-slate-50 text-center">Shift</th>
                       <th className="px-6 py-6 text-[10px] font-bold text-slate-400 tracking-widest  border-b border-slate-50 text-center">Sessions</th>
                       <th className="px-6 py-6 text-[10px] font-bold text-slate-400 tracking-widest  border-b border-slate-50 text-center">Break Logs</th>
-                      <th className="px-6 py-6 text-[10px] font-bold text-indigo-600 tracking-widest  border-b border-slate-50 text-center">Total Idle</th>
+                      <th className="px-6 py-6 text-[10px] font-bold text-indigo-600 tracking-widest  border-b border-slate-50 text-center">Total Time</th>
                     </>
                   )}
                 </tr>
@@ -313,26 +323,54 @@ const Reports = () => {
                     </td>
                     <td className="px-6 py-5 text-center text-xs font-bold text-slate-500">{row.mobile}</td>
 
-                    {reportType === 'Employee Timesheet' && (
+                    {reportType === 'Employee Overview Sheet' && (
                       <>
-                        <td className="px-6 py-5 text-center text-[11px] font-bold text-slate-700">{formatDate(row.timeIn)}</td>
-                        <td className="px-6 py-5 text-center text-[11px] font-bold text-slate-700">{formatDate(row.timeOut)}</td>
+                        <td className="px-6 py-5 text-center">
+                          <span className="px-3 py-1 bg-slate-50 text-slate-600 rounded-full text-[10px] font-bold tracking-widest">{row.shift}</span>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-tight border ${row.status === 'Pending' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                              row.status === 'Approved' || row.status === 'Present' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                              row.status === 'Late' ? 'bg-orange-50 text-orange-600 border-orange-100' :
+                              row.status === 'Half Day' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
+                              'bg-rose-50 text-rose-600 border-rose-100'
+                            }`}>
+                            {row.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <p className="text-[11px] font-bold text-slate-700">{formatDate(row.timeIn)}</p>
+                          <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full mt-1 inline-block ${row.timeInOutside ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>
+                            {row.timeInOutside ? 'Outside' : 'Inside'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <p className="text-[11px] font-bold text-slate-700">{formatDate(row.timeOut)}</p>
+                          <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full mt-1 inline-block ${row.timeOutOutside ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>
+                            {row.timeOutOutside ? 'Outside' : 'Inside'}
+                          </span>
+                        </td>
                         <td className="px-6 py-5 text-center">
                           <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-bold tracking-widest">{row.breaksTaken} Sessions</span>
                         </td>
                         <td className="px-6 py-5 text-center">
-                          <span className="text-xs font-bold text-emerald-600">{row.totalHoursWorked.toFixed(2)} Hrs</span>
+                          <span className="text-xs font-bold text-emerald-600">{formatDuration(row.totalHoursWorked)}</span>
                         </td>
                       </>
                     )}
 
-                    {reportType === 'Present' && (
+                    {reportType === 'Present Timing Sheet' && (
                       <>
                         <td className="px-6 py-5 text-center">
                           <p className="text-xs font-bold text-slate-700">{row.department}</p>
                           <p className="text-[9px] font-bold text-slate-400 tracking-widest ">{row.shift}</p>
                         </td>
-                        <td className="px-6 py-5 text-center text-xs font-bold text-slate-700">{formatDate(row.timeIn)}</td>
+                        <td className="px-6 py-5 text-center">
+                          <p className="text-xs font-bold text-slate-700">{formatDate(row.timeIn)}</p>
+                          <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full mt-1 inline-block ${row.timeInOutside ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>
+                            {row.timeInOutside ? 'Outside' : 'Inside'}
+                          </span>
+                        </td>
                         <td className="px-6 py-5 text-center">
                           {row.timeInSelfie ? (
                             <div className="relative group/img inline-block">
@@ -375,7 +413,7 @@ const Reports = () => {
                           </div>
                         </td>
                         <td className="px-6 py-5 text-center">
-                          <span className="text-xs font-bold text-indigo-600">{(row.totalBreakTime / 60).toFixed(2)} Hours</span>
+                          <span className="text-xs font-bold text-indigo-600">{formatDuration(row.totalBreakTime / 60)}</span>
                         </td>
                       </>
                     )}

@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   Clock,
   Download,
+  Image as ImageIcon,
   Layers,
   Loader2,
   Phone,
@@ -19,6 +20,16 @@ const EmployeeDetails = () => {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const formatDuration = (decimalHours) => {
+    if (!decimalHours || decimalHours === 0) return '0h 0m';
+    const totalMinutes = Math.round(decimalHours * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${h}h ${m}m`;
+  };
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -97,9 +108,9 @@ const EmployeeDetails = () => {
       </div>
 
       {/* Profile & Summary */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
         {/* Profile Card */}
-        <div className="lg:col-span-1 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden group">
+        <div className="lg:col-span-1 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden group flex flex-col justify-between">
           <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50/50 rounded-bl-[5rem] -mr-8 -mt-8 transition-all group-hover:scale-110" />
 
           <div className="relative flex flex-col items-center text-center">
@@ -115,7 +126,24 @@ const EmployeeDetails = () => {
 
             <h2 className="text-xl font-bold text-slate-800">{employee.name}</h2>
             <div className="px-4 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-bold tracking-widest mt-2 border border-indigo-100">
-              {employee.role?.toUpperCase()}
+              {employee.designation || 'Staff'}
+            </div>
+
+            {/* Dynamic Status Indicator */}
+            <div className="mt-4 flex items-center gap-2">
+              {attendanceDetails.some(d =>
+                new Date(d.date).toDateString() === new Date().toDateString() && d.punchIn?.time && !d.punchOut?.time
+              ) ? (
+                <div className="flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[10px] font-bold tracking-tight">ACTIVE NOW</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-1 bg-slate-50 text-slate-400 rounded-full border border-slate-100">
+                  <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                  <span className="text-[10px] font-bold tracking-tight">OFFLINE</span>
+                </div>
+              )}
             </div>
 
             <div className="mt-8 w-full space-y-4">
@@ -153,7 +181,7 @@ const EmployeeDetails = () => {
         </div>
 
         {/* Stats Summary */}
-        <div className="lg:col-span-2 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative">
+        <div className="lg:col-span-2 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative flex flex-col">
           <div className="flex justify-between items-center mb-8">
             <h3 className="text-sm font-bold text-slate-800 tracking-widest flex items-center gap-3">
               <TrendingUp size={18} className="text-indigo-600" />
@@ -164,25 +192,29 @@ const EmployeeDetails = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-auto">
             <SummaryCard label="Work Days" value={`${summary.workDays} days`} />
             <SummaryCard label="Leaves Approved" value={summary.approvedLeaves} colorClass="text-indigo-600" />
-            <SummaryCard label="Days Present" value={`${summary.presentDays} days`} colorClass="text-emerald-600" />
-            <SummaryCard label="Not Marked" value={`${summary.notMarked} days`} colorClass="text-red-500" />
-            <SummaryCard label="Total Distance" value={`${(attendanceDetails.reduce((acc, curr) => acc + (curr.totalDistance || 0), 0)).toFixed(2)} KM`} colorClass="text-indigo-600" />
+            <SummaryCard label="Present Days" value={`${summary.presentDays} days`} colorClass="text-emerald-600" />
             <SummaryCard label="Late Count" value={summary.lateCount} colorClass="text-amber-500" />
+            <SummaryCard label="Total Distance (30D)" value={`${(attendanceDetails.reduce((acc, curr) => acc + (curr.totalDistance || 0), 0)).toFixed(2)} KM`} colorClass="text-indigo-600" />
+            <SummaryCard
+              label="Today's Distance"
+              value={`${(attendanceDetails.find(d => new Date(d.date).toDateString() === new Date().toDateString())?.totalDistance || 0).toFixed(2)} KM`}
+              colorClass="text-indigo-600"
+            />
             <SummaryCard label="Actual Worked" value={`${summary.actualWorkedHours.toFixed(1)}h`} colorClass="text-indigo-600" />
-            <SummaryCard label="Below Target" value={`${Math.max(0, summary.expectedWorkHours - summary.actualWorkedHours).toFixed(1)}h`} colorClass="text-red-400" />
+            <SummaryCard label="Break Time" value={`${(summary.totalBreakMinutes || 0)}m`} colorClass="text-rose-500" />
           </div>
 
-          <div className="mt-12 p-6 bg-indigo-50/30 rounded-3xl border border-indigo-100 flex items-center justify-between">
+          <div className="mt-8 p-6 bg-indigo-50/30 rounded-3xl border border-indigo-100 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm">
                 <Calendar size={24} />
               </div>
               <div>
                 <p className="text-[10px] font-bold text-indigo-400">Attendance Status</p>
-                <p className="text-sm font-bold text-slate-700">Perfectly tracked for the current cycle</p>
+                <p className="text-sm font-bold text-slate-700">Detailed cycle metrics available below</p>
               </div>
             </div>
             <button
@@ -218,6 +250,7 @@ const EmployeeDetails = () => {
                 <th colSpan={2} className="px-6 py-4 text-[10px] font-bold text-slate-400 tracking-wider text-center border-b border-r border-slate-100">Timein</th>
                 <th colSpan={2} className="px-6 py-4 text-[10px] font-bold text-slate-400 tracking-wider text-center border-b border-r border-slate-100">Timeout</th>
                 <th rowSpan={2} className="px-6 py-6 text-[10px] font-bold text-slate-400 tracking-wider text-center border-r border-slate-100">Break time</th>
+                <th rowSpan={2} className="px-6 py-6 text-[10px] font-bold text-slate-400 tracking-wider text-center border-r border-slate-100">Distance (KM)</th>
                 <th rowSpan={2} className="px-6 py-6 text-[10px] font-bold text-slate-400 tracking-wider text-center">Logged hours</th>
               </tr>
               <tr className="bg-slate-50/50">
@@ -228,69 +261,109 @@ const EmployeeDetails = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {attendanceDetails.map((log, idx) => (
-                <tr key={idx} className="hover:bg-slate-50/30 transition-colors">
-                  <td className="px-8 py-6 text-center font-bold text-[11px] text-slate-700 border-r border-slate-50">
-                    {new Date(log.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '/')}
-                  </td>
+              {attendanceDetails
+                .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                .map((log, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50/30 transition-colors">
+                    <td className="px-8 py-6 text-center font-bold text-[11px] text-slate-700 border-r border-slate-50">
+                      {new Date(log.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '/')}
+                    </td>
 
-                  {/* Punch In */}
-                  <td className="px-6 py-4 border-r border-slate-50 text-center">
-                    <div className="flex flex-col items-center gap-1">
-                      {log.punchIn?.selfie ? (
-                        <img src={log.punchIn.selfie} className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-sm" />
-                      ) : (
-                        <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center text-slate-200">
-                          <ImageIcon size={20} />
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 border-r border-slate-50">
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="text-[11px] font-bold text-slate-800">{log.punchIn?.time ? new Date(log.punchIn.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
-                      <div className="text-[9px] text-slate-400 text-center max-w-[150px] line-clamp-1">{log.punchIn?.location?.address || 'Location unknown'}</div>
-                      <div className={`px-2 py-0.5 rounded-full text-[8px] font-bold tracking-tighter ${log.isOutside ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-600'}`}>
-                        {log.isOutside ? 'Outside' : 'Inside fenced area'}
+                    {/* Punch In */}
+                    <td className="px-6 py-4 border-r border-slate-50 text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        {log.punchIn?.selfie ? (
+                          <img src={log.punchIn.selfie} className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-sm" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center text-slate-200">
+                            <ImageIcon size={20} />
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  </td>
-
-                  {/* Punch Out */}
-                  <td className="px-6 py-4 border-r border-slate-50 text-center">
-                    <div className="flex flex-col items-center gap-1">
-                      {log.punchOut?.selfie ? (
-                        <img src={log.punchOut.selfie} className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-sm" />
-                      ) : (
-                        <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center text-slate-200">
-                          <ImageIcon size={20} />
+                    </td>
+                    <td className="px-6 py-4 border-r border-slate-50">
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-[11px] font-bold text-slate-800">{log.punchIn?.time ? new Date(log.punchIn.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
+                        <div className="text-[9px] text-slate-400 text-center max-w-[150px] line-clamp-1">{log.punchIn?.location?.address || 'Location unknown'}</div>
+                        <div className={`px-2 py-0.5 rounded-full text-[8px] font-bold tracking-tighter ${log.punchIn?.isOutside ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-600'}`}>
+                          {log.punchIn?.isOutside ? 'Outside' : 'Inside fenced area'}
                         </div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 border-r border-slate-50">
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="text-[11px] font-bold text-slate-800">{log.punchOut?.time ? new Date(log.punchOut.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
-                      <div className="text-[9px] text-slate-400 text-center max-w-[150px] line-clamp-1">{log.punchOut?.location?.address || 'Location unknown'}</div>
-                      <div className="px-2 py-0.5 rounded-full text-[8px] font-bold tracking-tighter bg-green-50 text-green-600">
-                        Inside fenced area
                       </div>
-                    </div>
-                  </td>
+                    </td>
 
-                  <td className="px-6 py-4 text-center border-r border-slate-50">
-                    <span className="text-[11px] font-bold text-indigo-600">
-                      {log.breaks?.reduce((acc, b) => acc + (b.duration || 0), 0) || 0}m ({log.breaks?.length || 0})
-                    </span>
-                  </td>
+                    {/* Punch Out */}
+                    <td className="px-6 py-4 border-r border-slate-50 text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        {log.punchOut?.selfie ? (
+                          <img src={log.punchOut.selfie} className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-sm" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center text-slate-200">
+                            <ImageIcon size={20} />
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 border-r border-slate-50">
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-[11px] font-bold text-slate-800">{log.punchOut?.time ? new Date(log.punchOut.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
+                        <div className="text-[9px] text-slate-400 text-center max-w-[150px] line-clamp-1">{log.punchOut?.location?.address || 'Location unknown'}</div>
+                        <div className={`px-2 py-0.5 rounded-full text-[8px] font-bold tracking-tighter ${log.punchOut?.isOutside ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-600'}`}>
+                          {log.punchOut?.isOutside ? 'Outside' : 'Inside fenced area'}
+                        </div>
+                      </div>
+                    </td>
 
-                  <td className="px-6 py-4 text-center font-bold text-[11px] text-slate-800">
-                    {log.loggedHours?.toFixed(2) || '0.00'}
-                  </td>
-                </tr>
-              ))}
+                    <td className="px-6 py-4 text-center border-r border-slate-50">
+                      <span className="text-[11px] font-bold text-indigo-600">
+                        {log.breaks?.reduce((acc, b) => acc + (b.duration || 0), 0) || 0}m ({log.breaks?.length || 0})
+                      </span>
+                    </td>
+
+                    <td className="px-6 py-4 text-center border-r border-slate-50 font-bold text-[11px] text-indigo-600">
+                      {(log.totalDistance || 0).toFixed(2)}
+                    </td>
+
+                    <td className="px-6 py-4 text-center font-bold text-[11px] text-slate-800">
+                      {formatDuration(log.netWorkedHours)}
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination */}
+        <div className="px-8 py-6 border-t border-slate-50 flex items-center justify-between">
+          <p className="text-[10px] font-bold text-slate-400 tracking-widest">
+            Showing {Math.min(attendanceDetails.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(attendanceDetails.length, currentPage * itemsPerPage)} of {attendanceDetails.length} records
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-[10px] font-bold border border-slate-100 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 transition-all"
+            >
+              Previous
+            </button>
+            <div className="flex items-center gap-1">
+              {[...Array(Math.ceil(attendanceDetails.length / itemsPerPage))].map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={`w-8 h-8 rounded-lg text-[10px] font-bold transition-all ${currentPage === i + 1 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'bg-white text-slate-400 border border-slate-100 hover:border-slate-200'}`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(Math.ceil(attendanceDetails.length / itemsPerPage), prev + 1))}
+              disabled={currentPage === Math.ceil(attendanceDetails.length / itemsPerPage)}
+              className="px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-[10px] font-bold border border-slate-100 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 transition-all"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
     </div>

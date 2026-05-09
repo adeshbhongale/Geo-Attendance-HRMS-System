@@ -50,11 +50,14 @@ exports.sendOTP = async (req, res, next) => {
     user.otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
     await user.save();
 
-    console.log(`[AUTH] OTP generated for ${identifier}: ${otp}`);
-    console.log(`[AUTH] OTP Expires at: ${user.otpExpires}`);
-
     // Console log OTP for testing as requested
-    console.log(`[TESTING] OTP for ${identifier}: ${otp}`);
+    console.log(`
+______________
+
+otp :    ${otp}
+
+______________
+`);
 
     res.status(200).json({
       success: true,
@@ -122,7 +125,6 @@ exports.login = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Please provide password or OTP' });
     }
   } catch (err) {
-    console.error(`[LOGIN] Error: ${err.message}`);
     res.status(400).json({ success: false, message: err.message });
   }
 };
@@ -208,7 +210,7 @@ exports.updateDetails = async (req, res, next) => {
     const user = await User.findByIdAndUpdate(req.user.id, fieldsToUpdate, {
       new: true,
       runValidators: true,
-    }).populate('shift');
+    }).populate('shift').lean();
 
     res.status(200).json({
       success: true,
@@ -247,6 +249,9 @@ const sendTokenResponse = (user, statusCode, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
+        mobile: user.mobile,
+        department: user.department,
+        profileImage: user.profileImage,
         role: user.role,
       },
     });

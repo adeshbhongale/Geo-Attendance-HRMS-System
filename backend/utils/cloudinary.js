@@ -59,13 +59,14 @@ const uploadProfileImage = async (base64Image, userId) => {
 // Clear all images in a folder
 const clearCloudinaryStorage = async () => {
     try {
-        console.log('[CLOUDINARY] Clearing hrms/ storage...');
+        // Clear storage
+
         // Delete all resources with prefix 'hrms/'
         await cloudinary.api.delete_resources_by_prefix('hrms/');
-        console.log('[CLOUDINARY] Storage cleared successfully');
+        // Cleared
+
         return true;
     } catch (err) {
-        console.error('Cloudinary clear error:', err.message);
         return false;
     }
 };

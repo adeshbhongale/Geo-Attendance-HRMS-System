@@ -1,11 +1,12 @@
 const express = require('express');
 const multer = require('multer');
 const {
-  getEmployees,
-  addEmployee,
-  updateEmployee,
-  deleteEmployee,
-  bulkUpload,
+    getEmployees,
+    addEmployee,
+    updateEmployee,
+    deleteEmployee,
+    bulkUpload,
+    exportEmployees,
 } = require('../controllers/employees');
 
 const router = express.Router();
@@ -18,6 +19,7 @@ router.use(protect);
 router.use(authorize('admin'));
 
 router.get('/', getEmployees);
+router.get('/export', exportEmployees);
 router.post('/', addEmployee);
 router.put('/:id', updateEmployee);
 router.delete('/:id', deleteEmployee);

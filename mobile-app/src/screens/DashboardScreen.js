@@ -25,6 +25,8 @@ import api from '../api/axios';
 import AttendanceMap from '../components/AttendanceMap';
 import { formatWorkingHours } from '../utils/timeFormat';
 
+import { useNavigation } from '@react-navigation/native';
+
 const DashboardScreen = ({ navigation }) => {
   const [userData, setUserData] = useState(null);
   const [attendance, setAttendance] = useState(null);
@@ -284,8 +286,10 @@ const DashboardScreen = ({ navigation }) => {
             <View className="w-10 h-10 rounded-xl bg-emerald-50 justify-center items-center mb-4">
               <Clock size={20} color="#10b981" />
             </View>
-            <Text className="text-2xl font-bold text-slate-900">{formatWorkingHours(attendance?.overtime || 0)}</Text>
-            <Text className="text-[10px] font-bold text-slate-400  mt-1 tracking-widest">Overtime</Text>
+            <Text className="text-2xl font-bold text-slate-900">
+              {attendance?.breaks?.reduce((acc, b) => acc + (b.duration || 0), 0) || 0}m
+            </Text>
+            <Text className="text-[10px] font-bold text-slate-400  mt-1 tracking-widest">Break Time</Text>
           </View>
         </View>
 

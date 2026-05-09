@@ -5,23 +5,25 @@ import { Home, Calendar, Clock, User as UserIcon, CalendarCheck } from 'lucide-r
 import React from 'react';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import "./global.css";
+
 import AttendanceScreen from './src/screens/AttendanceScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
 import LeaveScreen from './src/screens/LeaveScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import ShiftManagementScreen from './src/screens/ShiftManagementScreen';
+import MonthlyViewScreen from './src/screens/MonthlyViewScreen';
 
-const Stack = createStackNavigator();
+const RootStack = createStackNavigator();
+const DashboardStackNav = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 // Dashboard Stack
 function DashboardStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="DashboardMain" component={DashboardScreen} />
-    </Stack.Navigator>
+    <DashboardStackNav.Navigator screenOptions={{ headerShown: false }}>
+      <DashboardStackNav.Screen name="DashboardMain" component={DashboardScreen} />
+    </DashboardStackNav.Navigator>
   );
 }
 
@@ -79,18 +81,17 @@ function MainTabs() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <NavigationContainer>
-        <Stack.Navigator 
+    <NavigationContainer>
+      <SafeAreaProvider>
+        <RootStack.Navigator 
           initialRouteName="Login"
           screenOptions={{ headerShown: false }}
         >
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Main" component={MainTabs} />
-          <Stack.Screen name="ShiftManagement" component={ShiftManagementScreen} />
-          <Stack.Screen name="Attendance" component={AttendanceScreen} />
-        </Stack.Navigator>
-      </NavigationContainer>
-    </SafeAreaProvider>
+          <RootStack.Screen name="Login" component={LoginScreen} />
+          <RootStack.Screen name="Main" component={MainTabs} />
+          <RootStack.Screen name="MonthlyView" component={MonthlyViewScreen} />
+        </RootStack.Navigator>
+      </SafeAreaProvider>
+    </NavigationContainer>
   );
 }

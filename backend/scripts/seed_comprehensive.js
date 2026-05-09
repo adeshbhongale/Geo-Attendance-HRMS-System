@@ -27,9 +27,9 @@ const seedData = async () => {
 
     // 2. Create Shifts
     const shifts = await Shift.insertMany([
-      { name: 'Morning Shift', startTime: '09:00', endTime: '18:00', gracePeriod: 15, halfDayAfter: '11:00', workingHours: 9 },
-      { name: 'Evening Shift', startTime: '14:00', endTime: '23:00', gracePeriod: 15, halfDayAfter: '16:00', workingHours: 9 },
-      { name: 'Night Shift', startTime: '22:00', endTime: '07:00', gracePeriod: 15, halfDayAfter: '00:00', workingHours: 9, isNightShift: true }
+      { name: 'Morning Shift', startTime: '08:00', endTime: '14:00', gracePeriod: 15, halfDayAfter: '10:00', workingHours: 8 },
+      { name: 'Evening Shift', startTime: '14:00', endTime: '22:00', gracePeriod: 15, halfDayAfter: '16:00', workingHours: 8 },
+      { name: 'Night Shift', startTime: '22:00', endTime: '04:00', gracePeriod: 15, halfDayAfter: '00:00', workingHours: 8, isNightShift: true }
     ]);
     console.log(`Created ${shifts.length} Shifts.`);
 
@@ -51,23 +51,21 @@ const seedData = async () => {
       name: 'Global Admin',
       email: 'admin@example.com',
       mobile: '9000000000',
-      password: 'admin123', // Model will hash it on save if middleware is active, but we can also pre-hash
+      password: adminPassword,
       role: 'admin',
       department: 'Management'
     });
     console.log('Created Admin User (admin@example.com / admin123).');
 
     // 5. Create Employees
-    const departments = ['IT', 'Sales', 'HR', 'Support'];
+    const departments = ['IT', 'Sales', 'HR', 'Support', 'Logistics'];
     const employeeData = [];
+    const empCount = 14; 
 
-    for (let i = 1; i <= 15; i++) {
+    for (let i = 1; i <= empCount; i++) {
       const dept = departments[i % departments.length];
       const shift = shifts[i % shifts.length];
-
-      // Pre-hash password for insertMany since it skips middleware
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash('password123', salt);
+      const hashedPassword = await bcrypt.hash('password123', 10);
 
       employeeData.push({
         name: `Employee ${i}`,
@@ -76,95 +74,153 @@ const seedData = async () => {
         password: hashedPassword,
         role: 'employee',
         department: dept,
-        designation: i % 2 === 0 ? 'Senior Executive' : 'Junior Associate',
+        designation: i % 2 === 0 ? 'Project Lead' : 'Systems Engineer',
         shift: shift._id,
         headquarter: i % 3 === 0 ? 'Ichalkaranji HQ' : 'Pune HQ',
         leaveBalance: 3,
         monthlyLeaveLimit: 3
       });
     }
-    const employees = await User.insertMany(employeeData);
-    console.log(`Created ${employees.length} Employees with hashed passwords.`);
 
-    // 6. Generate Attendance (Last 30 Days)
-    const today = new Date();
+    // Add Fresh Test User (Shreyas Kadam)
+    const shreyasPassword = await bcrypt.hash('password123', 10);
+    employeeData.push({
+      name: 'Shreyas Kadam',
+      email: 'shreyas@example.com',
+      mobile: '9876543210',
+      password: shreyasPassword,
+      role: 'employee',
+      department: 'Sales',
+      designation: 'Sr.Sales Engineer',
+      shift: shifts[0]._id, 
+      headquarter: 'Mumbai HQ',
+      leaveBalance: 3,
+      monthlyLeaveLimit: 3
+    });
+
+    const employees = await User.insertMany(employeeData);
+    console.log(`Created ${employees.length} Employees (including Shreyas Kadam).`);
+
+    // 6. Generate History (Last 30 Days)
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
     const attendanceRecords = [];
     const leaveRecords = [];
 
     for (let d = 0; d < 30; d++) {
-      const date = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+      const date = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
       date.setUTCDate(date.getUTCDate() - d);
-
-      const isWeekend = date.getUTCDay() === 0; // Sunday
+      const dateStr = date.toISOString().split('T')[0];
+      const isWeekend = date.getUTCDay() === 0; // Skip Sundays
 
       for (const emp of employees) {
-        if (isWeekend) continue; // Skip Sundays for attendance
-
-        // 10% chance of being on leave
-        if (Math.random() < 0.1) {
-          leaveRecords.push({
-            user: emp._id,
-            leaveType: 'Sick Leave',
-            startDate: date,
-            endDate: date,
-            reason: 'Not feeling well',
-            status: Math.random() > 0.3 ? 'Approved' : 'Pending'
-          });
+        // SPECIAL CASE: Shreyas Kadam is ALWAYS fresh for today (not punched in)
+        if (emp.name === 'Shreyas Kadam' && dateStr === todayStr) {
           continue;
         }
 
-        // 5% chance of being absent
-        if (Math.random() < 0.05) continue;
+        if (isWeekend) continue;
 
-        const isLate = Math.random() < 0.2;
-        const status = isLate ? 'Late' : 'Present';
+        const empIndex = employees.indexOf(emp);
+        
+        // Random Status Picker
+        const rand = Math.random();
+        
+        if (rand < 0.12) { // 12% Leave (increase diversity)
+          const leaveStatusRand = Math.random();
+          let leaveStatus = 'Approved';
+          if (leaveStatusRand < 0.3) leaveStatus = 'Pending';
+          else if (leaveStatusRand < 0.5) leaveStatus = 'Rejected';
 
+          leaveRecords.push({
+            user: emp._id,
+            leaveType: leaveStatusRand < 0.5 ? 'Sick Leave' : 'Casual Leave',
+            startDate: date,
+            endDate: date,
+            reason: leaveStatus === 'Sick Leave' ? 'Feeling unwell' : 'Personal work',
+            status: leaveStatus
+          });
+          if (leaveStatus === 'Approved') continue; // Only skip attendance if approved
+        }
+
+        if (rand < 0.15) { // 7% Absent (total 15% not present)
+          continue;
+        }
+
+        // Employee is Present/Late/Half-Day
+        let status = 'Present';
+        let isLate = false;
+        let isHalfDay = false;
+        
+        if (rand < 0.35) { // 20% Late
+          status = 'Late';
+          isLate = true;
+        } else if (rand < 0.45) { // 10% Half Day
+          status = 'Half Day';
+          isHalfDay = true;
+        }
+
+        // Realistic times
         const punchIn = new Date(date);
-        punchIn.setUTCHours(9, isLate ? 30 + Math.floor(Math.random() * 30) : Math.floor(Math.random() * 15), 0);
+        const inHour = isLate ? 10 : 8 + Math.floor(Math.random() * 2);
+        const inMin = Math.floor(Math.random() * 59);
+        punchIn.setUTCHours(inHour, inMin, 0);
 
         const punchOut = new Date(date);
-        punchOut.setUTCHours(18, Math.floor(Math.random() * 45), 0);
+        const outHour = isHalfDay ? 13 : 17 + Math.floor(Math.random() * 3);
+        const outMin = Math.floor(Math.random() * 59);
+        punchOut.setUTCHours(outHour, outMin, 0);
 
-        // Tracking logs for last 7 days - Circular road coverage (Closed loop: Start/End at Office)
+        // Tracking Logic
         const trackingLogs = [];
         let totalDistance = 0;
-
-        if (d < 7) {
-          const radius = 0.006 + Math.random() * 0.004;
-          const startAngle = Math.random() * Math.PI * 2;
-          const sweep = (Math.random() > 0.5 ? 1 : -1) * (Math.PI + Math.random() * Math.PI);
-
-          for (let k = 0; k < 20; k++) {
-            let lat, lng;
-            if (k === 0 || k === 19) {
-              // Forced closed loop: First and last points are the office HQ
-              lat = office.latitude;
-              lng = office.longitude;
-            } else {
-              const angle = startAngle + (k / 19) * sweep;
-              const jitter = (Math.random() - 0.5) * 0.0005;
-              lat = office.latitude + (radius + jitter) * Math.cos(angle);
-              lng = office.longitude + (radius + jitter) * Math.sin(angle);
-            }
-
-            if (k > 0) {
-              const prev = trackingLogs[k - 1];
-              // Simple distance calculation (km)
-              const dLat = (lat - prev.latitude) * 111;
-              const dLng = (lng - prev.longitude) * 111 * Math.cos(lat * Math.PI / 180);
-              totalDistance += Math.sqrt(dLat * dLat + dLng * dLng);
-            }
-
-            trackingLogs.push({
-              time: new Date(punchIn.getTime() + (k * 30 * 60000)),
-              latitude: lat,
-              longitude: lng,
-              address: k === 0 || k === 19 ? office.address : `Road ${Math.floor(k / 3) + 1}, Ichalkaranji Sector`,
-              battery: 98 - (k * 1),
-              isOutside: k !== 0 && k !== 19
-            });
+        for (let k = 0; k < 10; k++) {
+          if (k === 0 || k === 9) {
+            lat = office.latitude;
+            lng = office.longitude;
+          } else {
+            const offset = (empIndex * 0.005) + (d * 0.001) + (k * 0.002);
+            lat = office.latitude + (Math.sin(offset) * 0.01);
+            lng = office.longitude + (Math.cos(offset) * 0.01);
           }
+
+          let distFromPrev = 0;
+          if (k > 0) {
+            const prev = trackingLogs[k - 1];
+            const dLat = (lat - prev.latitude) * 111;
+            const dLng = (lng - prev.longitude) * 111;
+            distFromPrev = Math.sqrt(dLat * dLat + dLng * dLng);
+            totalDistance += distFromPrev;
+          }
+          trackingLogs.push({
+            time: new Date(punchIn.getTime() + (k * 60 * 60000)),
+            latitude: lat,
+            longitude: lng,
+            address: k === 0 || k === 9 ? office.address : `Route ${k} Near ${emp.department} Zone`,
+            isOutside: k !== 0 && k !== 9,
+            distanceFromPrevious: distFromPrev * 1000 
+          });
         }
+
+        const workingHours = parseFloat(((punchOut - punchIn) / (1000 * 60 * 60)).toFixed(2));
+
+        // Breaks Logic
+        const breaks = [];
+        const numBreaks = Math.floor(Math.random() * 2) + 1;
+        for (let b = 0; b < numBreaks; b++) {
+          const breakStart = new Date(punchIn.getTime() + (3 + b * 2) * 60 * 60000);
+          const breakDuration = 30 + Math.floor(Math.random() * 30);
+          const breakEnd = new Date(breakStart.getTime() + breakDuration * 60000);
+          breaks.push({
+            startTime: breakStart,
+            endTime: breakEnd,
+            duration: breakDuration,
+            type: b === 0 ? 'Lunch Break' : 'Tea Break'
+          });
+        }
+
+        // Geo-fencing status
+        const isOutsideToday = Math.random() < 0.4; 
 
         attendanceRecords.push({
           user: emp._id,
@@ -172,21 +228,28 @@ const seedData = async () => {
           status: status,
           punchIn: {
             time: punchIn,
-            location: { latitude: office.latitude, longitude: office.longitude, address: office.address },
-            selfie: `https://i.pravatar.cc/150?u=${emp._id}in`
+            location: { 
+              latitude: isOutsideToday && Math.random() > 0.5 ? office.latitude + 0.05 : office.latitude, 
+              longitude: office.longitude, 
+              address: isOutsideToday && Math.random() > 0.5 ? 'Outside Authorized Zone' : office.address 
+            },
+            selfie: `https://i.pravatar.cc/150?u=${emp._id}in${d}`,
+            isOutside: isOutsideToday
           },
           punchOut: {
             time: punchOut,
             location: { latitude: office.latitude, longitude: office.longitude, address: office.address },
-            selfie: `https://i.pravatar.cc/150?u=${emp._id}out`
+            selfie: `https://i.pravatar.cc/150?u=${emp._id}out${d}`,
+            isOutside: isOutsideToday
           },
-          workingHours: 8 + Math.random(),
-          totalDistance: totalDistance,
-          trackingLogs: trackingLogs,
-          battery: 80 + Math.random() * 20,
-          signalStatus: 'online',
+          workingHours: workingHours,
+          totalDistance: isOutsideToday ? totalDistance : 0,
+          trackingLogs: isOutsideToday ? trackingLogs : [],
+          breaks: breaks,
           isLate: isLate,
-          isOutside: trackingLogs.some(log => log.isOutside)
+          isHalfDay: isHalfDay,
+          isOutside: isOutsideToday,
+          signalStatus: 'online'
         });
       }
     }
@@ -194,12 +257,14 @@ const seedData = async () => {
     await Attendance.insertMany(attendanceRecords);
     await Leave.insertMany(leaveRecords);
 
-    console.log(`Seeded ${attendanceRecords.length} Attendance records.`);
-    console.log(`Seeded ${leaveRecords.length} Leave records.`);
-    console.log('Seeding completed successfully!');
+    console.log(`Successfully seeded:`);
+    console.log(`- ${employees.length} Employees`);
+    console.log(`- ${attendanceRecords.length} Attendance Records (30 Days)`);
+    console.log(`- ${leaveRecords.length} Leave Records`);
+    console.log('Seeding process finished.');
     process.exit();
   } catch (err) {
-    console.error('Seeding failed:', err);
+    console.error('Seeding error:', err);
     process.exit(1);
   }
 };

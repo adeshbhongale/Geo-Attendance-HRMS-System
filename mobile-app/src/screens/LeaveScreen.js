@@ -17,6 +17,8 @@ import api from '../api/axios';
 const LEAVE_TYPES = ['Sick Leave', 'Casual Leave', 'Paid Leave'];
 const STATUS_FILTERS = ['All', 'Pending', 'Approved', 'Rejected'];
 
+import { useNavigation } from '@react-navigation/native';
+
 const LeaveScreen = ({ navigation }) => {
   const [leaves, setLeaves] = useState([]);
   const [filteredLeaves, setFilteredLeaves] = useState([]);

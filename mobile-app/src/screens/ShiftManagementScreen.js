@@ -14,8 +14,7 @@ import {
 import api from '../api/axios';
 import { formatWorkingHours } from '../utils/timeFormat';
 
-const ShiftManagementScreen = () => {
-  const navigation = useNavigation();
+const ShiftManagementScreen = ({ navigation }) => {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);

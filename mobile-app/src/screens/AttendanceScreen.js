@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { ArrowLeft, Camera, CheckCircle, ChevronRight, MapPin, RotateCcw, X } from 'lucide-react-native';
+import { ArrowLeft, Calendar, Camera, CheckCircle, ChevronRight, MapPin, RotateCcw, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,6 +15,8 @@ import {
 import api from '../api/axios';
 import AttendanceMap from '../components/AttendanceMap';
 import { formatWorkingHours } from '../utils/timeFormat';
+
+import { useNavigation } from '@react-navigation/native';
 
 const AttendanceScreen = ({ navigation }) => {
   const [selfie, setSelfie] = useState(null);
@@ -363,6 +365,23 @@ const AttendanceScreen = ({ navigation }) => {
           </View>
         )}
 
+        {/* Monthly Record Button */}
+        <TouchableOpacity 
+          onPress={() => navigation.navigate('MonthlyView')}
+          className="bg-white rounded-2xl p-4 border border-slate-100 mb-8 flex-row justify-between items-center shadow-sm"
+        >
+          <View className="flex-row items-center">
+            <View className="w-10 h-10 rounded-xl bg-amber-50 justify-center items-center mr-4">
+              <Calendar size={20} color="#f59e0b" />
+            </View>
+            <View>
+              <Text className="text-slate-800 font-bold text-sm">Monthly Attendance Record</Text>
+              <Text className="text-slate-400 font-bold text-[10px]">View all monthly stats & history</Text>
+            </View>
+          </View>
+          <ChevronRight size={20} color="#94a3b8" />
+        </TouchableOpacity>
+
         {/* Action Button */}
         {alreadyPunchedOut ? (
           <View className="bg-slate-100 rounded-3xl p-8 items-center border border-slate-200">
@@ -400,33 +419,93 @@ const AttendanceScreen = ({ navigation }) => {
 
         {/* Attendance History */}
         {history.length > 0 && (
-          <View className="mt-8">
-            <View className="flex-row justify-between items-center mb-5">
-              <Text className="text-[10px] font-bold text-slate-400 tracking-widest ">Recent History</Text>
+          <View className="mt-10">
+            <View className="flex-row justify-between items-center mb-6">
+              <Text className="text-slate-900 font-black text-sm uppercase tracking-widest ">DETAILED LOGS</Text>
               <TouchableOpacity 
                 onPress={fetchHistory}
-                className="w-8 h-8 rounded-lg bg-indigo-50 justify-center items-center border border-indigo-100"
+                className="w-10 h-10 rounded-xl bg-white justify-center items-center border border-slate-100 shadow-sm"
               >
-                <RotateCcw size={14} color="#4f46e5" />
+                <RotateCcw size={16} color="#4f46e5" />
               </TouchableOpacity>
             </View>
+            
             {history.slice(0, 5).map((item, idx) => (
-              <View key={idx} className="bg-white rounded-2xl p-4 border border-slate-100 mb-3 flex-row justify-between items-center shadow-sm">
-                <View>
-                  <Text className="text-sm font-extrabold text-slate-800">
-                    {new Date(item.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                  </Text>
-                  <Text className="text-xs text-slate-400 font-bold mt-1">
-                    {formatTime(item.punchIn?.time)} — {formatTime(item.punchOut?.time)}
-                  </Text>
+              <View key={idx} className="bg-white rounded-[2rem] p-6 border border-slate-100 mb-6 shadow-sm overflow-hidden">
+                {/* Header: Date and Status */}
+                <View className="flex-row justify-between items-start mb-5">
+                  <View>
+                    <Text className="text-slate-900 font-black text-lg">
+                      {new Date(item.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                    </Text>
+                    <Text className="text-slate-400 font-bold text-xs mt-0.5">
+                      Shift Log • {item.status || 'Present'}
+                    </Text>
+                  </View>
+                  <View className={`px-4 py-1.5 rounded-full ${getStatusColor(item.status, !!item.punchIn).split(' ')[0]}`}>
+                    <Text className={`text-[10px] font-black uppercase tracking-wider ${getStatusColor(item.status, !!item.punchIn).split(' ')[1]}`}>
+                      {item.status || 'Present'}
+                    </Text>
+                  </View>
                 </View>
-                <View className={`px-3 py-1.5 rounded-xl ${getStatusColor(item.status, !!item.punchIn).split(' ')[0]}`}>
-                  <Text className={`text-[10px] font-bold ${getStatusColor(item.status, !!item.punchIn).split(' ')[1]}`}>
-                    {!item.punchIn ? 'Absent' :
-                      (item.status === 'Present' || item.status === 'Absent') ? 'Present' :
-                        item.status === 'Late' ? 'Late' :
-                          item.status}
-                  </Text>
+
+                {/* Details Grid */}
+                <View className="flex-row mb-6 border-y border-slate-50 py-4">
+                  <View className="flex-1 border-r border-slate-50">
+                    <Text className="text-[10px] font-bold text-slate-400 uppercase">In Time</Text>
+                    <Text className="text-slate-800 font-black text-sm mt-1">{formatTime(item.punchIn?.time)}</Text>
+                  </View>
+                  <View className="flex-1 px-4 border-r border-slate-50">
+                    <Text className="text-[10px] font-bold text-slate-400 uppercase">Out Time</Text>
+                    <Text className="text-slate-800 font-black text-sm mt-1">{formatTime(item.punchOut?.time)}</Text>
+                  </View>
+                  <View className="flex-1 items-end">
+                    <Text className="text-[10px] font-bold text-slate-400 uppercase">Worked</Text>
+                    <Text className="text-indigo-600 font-black text-sm mt-1">{formatWorkingHours(item.workingHours || 0)}</Text>
+                  </View>
+                </View>
+
+                {/* Proof Section (Selfie & Map) */}
+                <View className="flex-row gap-4">
+                  {/* Selfie Preview */}
+                  <View className="flex-1">
+                    <Text className="text-[10px] font-black text-slate-400 uppercase mb-2">Selfie Verification</Text>
+                    <View className="h-40 rounded-2xl bg-slate-50 overflow-hidden border border-slate-100">
+                      {item.punchIn?.selfie ? (
+                        <Image source={{ uri: item.punchIn.selfie }} className="w-full h-full" resizeMode="cover" />
+                      ) : (
+                        <View className="w-full h-full justify-center items-center">
+                          <Camera size={20} color="#cbd5e1" />
+                          <Text className="text-[10px] font-bold text-slate-300 mt-2">No Image</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Location Info */}
+                  <View className="flex-1">
+                    <Text className="text-[10px] font-black text-slate-400 uppercase mb-2">Punch-In Location</Text>
+                    <View className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex-1 justify-center">
+                      <View className="flex-row items-center mb-2">
+                        <MapPin size={12} color="#4f46e5" />
+                        <Text className="text-indigo-600 font-black text-[10px] ml-1">Verified Geo-Stamp</Text>
+                      </View>
+                      <Text className="text-slate-600 font-bold text-[11px] leading-4" numberOfLines={3}>
+                        {item.punchIn?.location?.address || 'No location address recorded'}
+                      </Text>
+                      {item.punchIn?.location?.latitude && (
+                        <TouchableOpacity 
+                          className="mt-3 py-2 bg-indigo-50 rounded-xl items-center border border-indigo-100"
+                          onPress={() => {
+                            const url = `https://www.google.com/maps/search/?api=1&query=${item.punchIn.location.latitude},${item.punchIn.location.longitude}`;
+                            // Link to map
+                          }}
+                        >
+                          <Text className="text-indigo-600 font-black text-[10px] uppercase tracking-tighter">View on Map</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
                 </View>
               </View>
             ))}

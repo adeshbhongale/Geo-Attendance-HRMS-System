@@ -680,6 +680,22 @@ Geo-Attendance-HRMS-System/
 #### Mobile App Patch:
 - **Syntax Correction**: Resolved critical syntax errors in `AttendanceScreen.js` and `ShiftManagementScreen.js` caused by metadata injection, restoring full mobile app functionality.
 
+### 7. Mobile Navigation & Attendance Stabilizations (May 9, 2026)
+
+**Changed**: Resolved critical "Navigation context" crashes on Android, standardized app entry points, and fixed monthly attendance summary logic.
+
+- **Files**: `mobile-app/index.js`, `mobile-app/App.js`, `mobile-app/src/screens/MonthlyViewScreen.js`, `backend/controllers/attendance.js`
+
+#### Navigation & Native Stability:
+- **Gesture Handler Root**: Moved `import 'react-native-gesture-handler';` to the absolute first line of `index.js`. This ensures the native navigation context is initialized before any components mount, resolving recurrent crashes on Android devices.
+- **Provider Hierarchy**: Restructured `App.js` to wrap `SafeAreaProvider` inside the `NavigationContainer`, providing a more stable context for React Navigation v7.
+- **Prop-Based Navigation**: Standardized all major screens to use the `navigation` prop instead of the `useNavigation` hook, eliminating "missing context" exceptions during module loading.
+
+#### Monthly View & Logic Fixes:
+- **Future Date Suppression**: Updated the `getMonthlyView` backend controller to identify future dates and return a `Future` status. The mobile frontend now renders these dates without any status dots, keeping the calendar clean.
+- **Accurate Absenteeism Stats**: Fixed the absenteeism count logic to only calculate missed days up to "today". Future days in the current month are no longer counted as "Absent," providing accurate real-time metrics.
+- **Multi-Month Synchronization**: Ensured that changing the month in the `MonthlyViewScreen` correctly triggers a data refresh and updates the summary counts (Present, Absent, Leave) dynamically.
+
 ---
 
 ## Setup & Deployment

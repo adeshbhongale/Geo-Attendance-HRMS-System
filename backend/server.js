@@ -79,6 +79,7 @@ app.use('/api/leaves', require('./routes/leaves'));
 app.use('/api/shifts', require('./routes/shifts'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/ai', require('./routes/ai'));
 
 const PORT = process.env.PORT || 5000;
 
@@ -91,25 +92,20 @@ const io = socketio(server, {
 
 // Socket.io integration
 io.on('connection', (socket) => {
-  console.log('New client connected: ' + socket.id);
-
   socket.on('updateLocation', (data) => {
     // data: { userId, latitude, longitude }
     io.emit('locationUpdated', data);
   });
 
   socket.on('disconnect', () => {
-    console.log('Client disconnected');
   });
 });
 
 server.listen(PORT, () => {
-  console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
 });
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err, promise) => {
-  console.log(`Error: ${err.message}`);
   // Close server & exit process
   server.close(() => process.exit(1));
 });

@@ -184,15 +184,15 @@ const AttendanceDashboard = () => {
 
         {/* Dynamic Wise Donut */}
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
-          <h3 className="text-[12px] font-bold text-green-600 tracking-widest text-center mb-6">{activeTab}</h3>
+          <h3 className="text-[12px] font-bold text-green-600 tracking-widest text-center mb-6 uppercase">{activeTab}</h3>
           <div className="h-64 w-full relative">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={activeStats.map((s, i) => ({ name: s.name, value: s.present, color: deptColors[i % deptColors.length] }))}
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
+                  innerRadius={70}
+                  outerRadius={95}
+                  paddingAngle={2}
                   dataKey="value"
                 >
                   {activeStats.map((entry, index) => (
@@ -202,6 +202,12 @@ const AttendanceDashboard = () => {
                 <RechartsTooltip />
               </PieChart>
             </ResponsiveContainer>
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span className="text-3xl font-black text-slate-700">
+                {activeStats.reduce((acc, curr) => acc + (curr.present || 0), 0)}
+              </span>
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Present</span>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-x-8 gap-y-3 mt-8 px-4 max-h-32 overflow-y-auto no-scrollbar">
             {activeStats.map((item, idx) => (

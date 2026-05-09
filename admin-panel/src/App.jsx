@@ -11,6 +11,7 @@ import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import TrackingDashboard from './pages/TrackingDashboard';
 import Reports from './pages/Reports';
+import AiAnalytics from './pages/AiAnalytics';
 import EmployeeDetails from './pages/EmployeeDetails';
 import EmployeeTrackRoute from './pages/EmployeeTrackRoute';
 import EmployeeTrackData from './pages/EmployeeTrackData';
@@ -38,6 +39,7 @@ function App() {
               <Route path="shifts" element={<Shifts />} />
               <Route path="settings" element={<Settings />} />
               <Route path="profile" element={<Profile />} />
+              <Route path="ai-analytics" element={<AiAnalytics />} />
               <Route path="tracking-dashboard" element={<TrackingDashboard />} />
               <Route path="employee/:userId" element={<EmployeeDetails />} />
               <Route path="track-route/:userId" element={<EmployeeTrackRoute />} />

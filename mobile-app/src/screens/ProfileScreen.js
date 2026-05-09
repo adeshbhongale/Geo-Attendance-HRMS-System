@@ -17,8 +17,7 @@ import {
 } from 'react-native';
 import api from '../api/axios';
 
-const ProfileScreen = () => {
-  const navigation = useNavigation();
+const ProfileScreen = ({ navigation }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -223,28 +222,7 @@ const ProfileScreen = () => {
         </View>
 
         <View className="p-6">
-          {/* Active Shift Card */}
-          <View className="bg-slate-900 rounded-[32px] p-6 mb-6 shadow-xl shadow-slate-200">
-            <View className="flex-row items-center mb-5">
-              <View className="w-12 h-12 rounded-2xl bg-white/10 justify-center items-center border border-white/10">
-                <Clock size={22} color="white" />
-              </View>
-              <View className="ml-4">
-                <Text className="text-slate-400 text-[10px] font-bold tracking-widest ">My Active Shift</Text>
-                <Text className="text-white text-xl font-bold mt-0.5">{user?.shift?.name || 'Not Set'}</Text>
-              </View>
-            </View>
-            <View className="flex-row justify-between pt-5 border-t border-white/10">
-              <View>
-                <Text className="text-slate-500 text-[10px] font-bold  mb-1">Starts</Text>
-                <Text className="text-white font-bold text-base">{convertTo12Hour(user?.shift?.startTime) || '—'}</Text>
-              </View>
-              <View className="items-end">
-                <Text className="text-slate-500 text-[10px] font-bold  mb-1">Ends</Text>
-                <Text className="text-white font-bold text-base">{convertTo12Hour(user?.shift?.endTime) || '—'}</Text>
-              </View>
-            </View>
-          </View>
+
 
           {/* Personal Details */}
           <View className="bg-white rounded-3xl p-6 border border-slate-100 mb-6 shadow-sm">
@@ -283,26 +261,7 @@ const ProfileScreen = () => {
             </View>
           </View>
 
-          {/* Admin Tools */}
-          {user?.role === 'admin' && (
-            <View className="mb-6">
-              <Text className="text-[10px] font-bold text-slate-400 tracking-widest mb-4 ">Administrative Tools</Text>
-              <TouchableOpacity
-                className="bg-white flex-row items-center p-5 rounded-[28px] border border-slate-100 shadow-sm"
-                onPress={() => navigation.navigate('ShiftManagement')}
-                activeOpacity={0.85}
-              >
-                <View className="w-12 h-12 rounded-2xl bg-indigo-50 justify-center items-center">
-                  <Clock size={20} color="#4f46e5" />
-                </View>
-                <View className="flex-1 ml-4">
-                  <Text className="text-slate-900 font-extrabold text-base tracking-tight">Shift Management</Text>
-                  <Text className="text-slate-400 text-[10px] font-bold  tracking-wider">Manage work schedules</Text>
-                </View>
-                <ChevronRight size={18} color="#cbd5e1" />
-              </TouchableOpacity>
-            </View>
-          )}
+
 
           {/* Sign Out */}
           <TouchableOpacity

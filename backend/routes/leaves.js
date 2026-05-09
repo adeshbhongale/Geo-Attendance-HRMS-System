@@ -11,7 +11,6 @@ const router = express.Router();
 const { protect, authorize } = require('../middleware/auth');
 
 router.use((req, res, next) => {
-  console.log(`[LEAVES ROUTE] ${req.method} ${req.url}`);
   next();
 });
 

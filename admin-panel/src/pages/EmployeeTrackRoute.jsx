@@ -1,4 +1,4 @@
-import { DirectionsRenderer, GoogleMap, Marker, Polyline, useJsApiLoader } from '@react-google-maps/api';
+import { DirectionsRenderer, DirectionsService, GoogleMap, MarkerF, Polyline, useJsApiLoader } from '@react-google-maps/api';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Calendar,
@@ -25,6 +25,7 @@ const EmployeeTrackRoute = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const date = searchParams.get('date') || new Date().toISOString().split('T')[0];
+  const lastOnly = searchParams.get('lastOnly') === 'true';
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -90,7 +91,6 @@ const EmployeeTrackRoute = () => {
         setDirections(response);
         setDirectionsError(false);
       } else {
-        console.error('Directions request failed:', response.status);
         setDirectionsError(true);
       }
     }
@@ -98,8 +98,9 @@ const EmployeeTrackRoute = () => {
 
   const handleDownload = () => {
     if (!data?.logs || data.logs.length === 0) return toast.error('No data to download');
-    const headers = ["Time", "Address", "Latitude", "Longitude", "Distance (m)"];
+    const headers = ["Date", "Time", "Address", "Latitude", "Longitude", "Distance (m)"];
     const rows = data.logs.map(log => [
+      new Date(log.time).toLocaleDateString('en-GB'),
       new Date(log.time).toLocaleTimeString(),
       log.address || 'NA',
       log.latitude,
@@ -148,14 +149,14 @@ const EmployeeTrackRoute = () => {
       <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate(`/tracking-dashboard?date=${date}`)}
             className="p-3 bg-white rounded-2xl border border-slate-100 shadow-sm text-slate-400 hover:text-indigo-600 transition-all hover:scale-105 active:scale-95"
           >
             <ChevronLeft size={20} />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-slate-800 tracking-tight">Route Tracking</h1>
-            <p className="text-[10px] font-bold text-slate-400 tracking-widest ">Live Movement Trail</p>
+            <h1 className="text-xl font-bold text-slate-800 tracking-tight">{lastOnly ? 'Live Location' : 'Route Tracking'}</h1>
+            <p className="text-[10px] font-bold text-slate-400 tracking-widest ">{lastOnly ? 'Current Position' : 'Live Movement Trail'}</p>
           </div>
         </div>
 
@@ -277,7 +278,7 @@ const EmployeeTrackRoute = () => {
             <div>
               <p className="text-[10px] font-bold text-slate-400 tracking-widest  mb-0.5">Last Sync</p>
               <p className="text-xs font-bold text-slate-700">
-                {data?.logs?.length > 0 ? new Date(data.logs[data.logs.length - 1].time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                {data?.logs?.length > 0 ? new Date(data.logs[data.logs.length - 1].time).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '--:--'}
               </p>
             </div>
           </div>
@@ -312,55 +313,77 @@ const EmployeeTrackRoute = () => {
             fullscreenControl: true
           }}
         >
-          {path.length >= 2 && !directions && !directionsError && (
-            <DirectionsRenderer
+          {/* Directions Service to fetch the road-snapped route */}
+          {path.length >= 2 && !directions && !directionsError && !lastOnly && (
+            <DirectionsService
               options={{
-                polylineOptions: {
-                  strokeColor: '#6366f1',
-                  strokeWeight: 6,
-                  strokeOpacity: 0.8
-                },
-                suppressMarkers: false,
-                markerOptions: {
-                  icon: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
-                }
+                origin: path[0],
+                destination: path[path.length - 1],
+                waypoints: sampledWaypoints,
+                travelMode: google.maps.TravelMode.DRIVING,
               }}
-              directions={directions}
               callback={directionsCallback}
-              routeIndex={0}
-              origin={path[0]}
-              destination={path[path.length - 1]}
-              waypoints={sampledWaypoints}
             />
           )}
 
-          {path.length > 0 && (directionsError || path.length < 2) && (
-            <Polyline
-              path={path}
+          {/* Directions Renderer to show the red road-snapped line */}
+          {directions && (
+            <DirectionsRenderer
+              directions={directions}
               options={{
-                strokeColor: '#6366f1',
-                strokeOpacity: 0.8,
-                strokeWeight: 6,
-                geodesic: true
+                polylineOptions: {
+                  strokeColor: '#ef4444',
+                  strokeWeight: 6,
+                  strokeOpacity: 0.9,
+                  zIndex: 10
+                },
+                suppressMarkers: true,
               }}
             />
           )}
 
           {path.length > 0 && (
             <>
-              <Marker
-                position={path[0]}
-                label="START"
-                icon="https://maps.google.com/mapfiles/ms/icons/green-dot.png"
-              />
-              <Marker
+              {!lastOnly && (
+                <MarkerF
+                  position={path[0]}
+                  icon={{
+                    url: "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
+                    anchor: new google.maps.Point(10, 10),
+                    labelOrigin: new google.maps.Point(10, -10)
+                  }}
+                  label={{
+                    text: "START",
+                    fontSize: "10px",
+                    fontWeight: "bold",
+                    color: "#059669"
+                  }}
+                />
+              )}
+              <MarkerF
                 position={path[path.length - 1]}
-                label="END"
-                icon="https://maps.google.com/mapfiles/ms/icons/red-dot.png"
+                icon={{
+                  url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
+                  anchor: new google.maps.Point(10, 10),
+                  labelOrigin: new google.maps.Point(10, -10)
+                }}
+                label={{
+                  text: "CURRENT",
+                  fontSize: "10px",
+                  fontWeight: "bold",
+                  color: "#dc2626"
+                }}
               />
             </>
           )}
         </GoogleMap>
+
+        {!directions && !directionsError && path.length >= 2 && (
+          <div className="absolute top-8 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur px-6 py-3 rounded-2xl shadow-2xl border border-indigo-100 flex items-center gap-3 z-[100]">
+            <Loader2 className="animate-spin text-indigo-600" size={16} />
+            <p className="text-[11px] font-bold text-slate-700 tracking-tight">Snapping trail to roads...</p>
+          </div>
+        )}
 
         {directionsError && (
           <div className="absolute top-8 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur px-6 py-3 rounded-2xl shadow-2xl border border-red-100 flex items-center gap-3">

@@ -3,9 +3,10 @@ import {
   CalendarCheck,
   Clock,
   Loader2,
-  Users, Calendar, ChevronLeft, ChevronRight, RotateCcw
+  Users, Calendar, ChevronLeft, ChevronRight, RotateCcw, BrainCircuit
 } from 'lucide-react';
 import React, { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Area,
   AreaChart,
@@ -46,6 +47,7 @@ const StatCard = ({ title, value, icon, color, trend, loading }) => (
 );
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -81,7 +83,7 @@ const Dashboard = () => {
       const res = await api.get(`/reports/stats?date=${selectedDate}`);
       setStats(res.data.data);
     } catch (err) {
-      console.error('Error fetching stats:', err);
+      // Error handled silently
     } finally {
       setLoading(false);
     }
@@ -107,6 +109,14 @@ const Dashboard = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto">
+          <button
+            onClick={() => navigate('/ai-analytics')}
+            className="flex items-center gap-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white px-6 py-3 rounded-2xl shadow-lg shadow-indigo-100 hover:shadow-indigo-200 transition-all hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <BrainCircuit size={18} />
+            <span className="text-sm font-bold tracking-tight">Business AI Insights</span>
+          </button>
+
           {/* Calendar Picker (Today/Yesterday/Custom buttons REMOVED per request) */}
           <div className="relative" ref={calendarRef}>
             <div 

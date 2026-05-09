@@ -1,130 +1,173 @@
 const User = require('../models/User');
+const Attendance = require('../models/Attendance');
+const Leave = require('../models/Leave');
 const xlsx = require('xlsx');
 
 // @desc    Get all employees
 // @route   GET /api/employees
 // @access  Private/Admin
 exports.getEmployees = async (req, res, next) => {
-  try {
-    const employees = await User.find({ role: 'employee' }).populate('shift');
-    
-    // Check online status based on today's attendance
-    const now = new Date();
-    const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const todayEnd = new Date(todayStart);
-    todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
+    try {
+        // Sort by createdAt descending so new employees show at the top
+        const employees = await User.find({ role: 'employee' }).populate('shift').sort('-createdAt');
 
-    const Attendance = require('../models/Attendance');
-    const todayAttendance = await Attendance.find({
-      date: { $gte: todayStart, $lt: todayEnd },
-      "punchIn.time": { $exists: true },
-      "punchOut.time": { $exists: false }
-    });
+        // Check online status based on today's active sessions (punched in but not out)
+        const now = new Date();
+        const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        const todayEnd = new Date(todayStart);
+        todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
 
-    const onlineUserIds = todayAttendance.map(a => a.user.toString());
+        const todayAttendance = await Attendance.find({
+            date: { $gte: todayStart, $lt: todayEnd },
+            "punchIn.time": { $exists: true },
+            "punchOut.time": { $exists: false }
+        });
 
-    const employeesWithStatus = employees.map(emp => ({
-      ...emp._doc,
-      isOnline: onlineUserIds.includes(emp._id.toString())
-    }));
+        const onlineUserIds = todayAttendance.map(a => a.user.toString());
 
-    res.status(200).json({
-      success: true,
-      count: employees.length,
-      data: employeesWithStatus,
-    });
-  } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
-  }
+        // Calculate approved leaves for each employee for consistent data reporting
+        const employeesWithStatus = await Promise.all(employees.map(async (emp) => {
+            const approvedLeaves = await Leave.countDocuments({
+                user: emp._id,
+                status: 'Approved'
+            });
+
+            return {
+                ...emp._doc,
+                isOnline: onlineUserIds.includes(emp._id.toString()),
+                approvedLeaves
+            };
+        }));
+
+        res.status(200).json({
+            success: true,
+            count: employees.length,
+            data: employeesWithStatus,
+        });
+    } catch (err) {
+        res.status(400).json({ success: false, message: err.message });
+    }
 };
 
 // @desc    Add employee
 // @route   POST /api/employees
 // @access  Private/Admin
 exports.addEmployee = async (req, res, next) => {
-  try {
-    const employee = await User.create({
-      ...req.body,
-      role: 'employee',
-    });
+    try {
+        const employee = await User.create({
+            ...req.body,
+            role: 'employee',
+        });
 
-    res.status(201).json({
-      success: true,
-      data: employee,
-    });
-  } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
-  }
+        res.status(201).json({
+            success: true,
+            data: employee,
+        });
+    } catch (err) {
+        res.status(400).json({ success: false, message: err.message });
+    }
 };
 
 // @desc    Update employee
 // @route   PUT /api/employees/:id
 // @access  Private/Admin
 exports.updateEmployee = async (req, res, next) => {
-  try {
-    const employee = await User.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    });
+    try {
+        const employee = await User.findByIdAndUpdate(req.params.id, req.body, {
+            new: true,
+            runValidators: true,
+        });
 
-    if (!employee) {
-      return res.status(404).json({ success: false, message: 'Employee not found' });
+        if (!employee) {
+            return res.status(404).json({ success: false, message: 'Employee not found' });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: employee,
+        });
+    } catch (err) {
+        res.status(400).json({ success: false, message: err.message });
     }
-
-    res.status(200).json({
-      success: true,
-      data: employee,
-    });
-  } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
-  }
 };
 
 // @desc    Delete employee
 // @route   DELETE /api/employees/:id
 // @access  Private/Admin
 exports.deleteEmployee = async (req, res, next) => {
-  try {
-    const employee = await User.findByIdAndDelete(req.params.id);
+    try {
+        const employee = await User.findByIdAndDelete(req.params.id);
 
-    if (!employee) {
-      return res.status(404).json({ success: false, message: 'Employee not found' });
+        if (!employee) {
+            return res.status(404).json({ success: false, message: 'Employee not found' });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: {},
+        });
+    } catch (err) {
+        res.status(400).json({ success: false, message: err.message });
     }
-
-    res.status(200).json({
-      success: true,
-      data: {},
-    });
-  } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
-  }
 };
 
 // @desc    Bulk upload employees via Excel
 // @route   POST /api/employees/bulk-upload
 // @access  Private/Admin
 exports.bulkUpload = async (req, res, next) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: 'Please upload an excel file' });
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: 'Please upload an excel file' });
+        }
+
+        const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+        const employees = await User.insertMany(data.map(emp => ({
+            ...emp,
+            role: 'employee',
+            password: emp.password || 'password123', // Default password
+        })));
+
+        res.status(201).json({
+            success: true,
+            count: employees.length,
+            data: employees,
+        });
+    } catch (err) {
+        res.status(400).json({ success: false, message: err.message });
     }
+};
 
-    const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+// @desc    Export all employees to Excel with credentials
+// @route   GET /api/employees/export
+// @access  Private/Admin
+exports.exportEmployees = async (req, res, next) => {
+    try {
+        const employees = await User.find({ role: 'employee' }).populate('shift').select('+password');
+        
+        const data = employees.map(emp => ({
+            'Name': emp.name,
+            'Email': emp.email,
+            'Mobile': emp.mobile,
+            'Password': emp.password || 'N/A',
+            'Department': emp.department || 'N/A',
+            'Designation': emp.designation || 'N/A',
+            'Shift': emp.shift?.name || 'General Shift',
+            'Joining Date': new Date(emp.createdAt).toLocaleDateString()
+        }));
 
-    const employees = await User.insertMany(data.map(emp => ({
-      ...emp,
-      role: 'employee',
-      password: emp.password || 'password123', // Default password
-    })));
-
-    res.status(201).json({
-      success: true,
-      count: employees.length,
-      data: employees,
-    });
-  } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
-  }
+        const workbook = xlsx.utils.book_new();
+        const worksheet = xlsx.utils.json_to_sheet(data);
+        xlsx.utils.book_append_sheet(workbook, worksheet, 'Employees');
+        
+        const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+        
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=Employees_Data.xlsx');
+        res.send(buffer);
+    } catch (err) {
+        res.status(400).json({ success: false, message: err.message });
+    }
 };

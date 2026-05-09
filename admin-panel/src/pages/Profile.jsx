@@ -1,145 +1,256 @@
-import { Building2, Mail, Phone, ShieldCheck, User, Activity, Users } from 'lucide-react';
-import { useSelector } from 'react-redux';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Briefcase, Camera, Info, Mail, Phone, Save, ShieldCheck, User, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
+import { useDispatch, useSelector } from 'react-redux';
+import api from '../api/axios';
+import { setCredentials } from '../store/authSlice';
 
 const Profile = () => {
   const { user } = useSelector((state) => state.auth);
+  const dispatch = useDispatch();
+  const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const [formData, setFormData] = useState({
+    name: user?.name || '',
+    email: user?.email || '',
+    mobile: user?.mobile || '',
+    profileImage: user?.profileImage || ''
+  });
+
+  // Sync form data with Redux state if it changes
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        name: user.name || '',
+        email: user.email || '',
+        mobile: user.mobile || '',
+        profileImage: user.profileImage || ''
+      });
+    }
+  }, [user]);
+
+  const handleImageChange = async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, profileImage: reader.result });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleMobileChange = (e) => {
+    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+    setFormData({ ...formData, mobile: val });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (formData.mobile.length !== 10) {
+      return toast.error('Mobile number must be exactly 10 digits');
+    }
+
+    try {
+      setLoading(true);
+      const res = await api.put('/auth/updatedetails', formData);
+      dispatch(setCredentials({ ...user, ...res.data.data }));
+      toast.success('Profile updated successfully');
+      setIsEditing(false);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="max-w-6xl animate-fade-up space-y-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-        <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight m-0">My Profile</h2>
-          <p className="text-slate-600 font-bold text-[13px] mt-1.5 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            Status: Active
-          </p>
+    <div className="max-w-4xl mx-auto animate-fade-up">
+      <div className="mb-6">
+        <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Admin Profile</h2>
+        <p className="text-slate-500 font-bold text-xs mt-2 tracking-widest ">System Control Center</p>
+      </div>
+
+      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl shadow-slate-200/50 overflow-hidden relative">
+        {/* Banner */}
+        <div className="h-40 bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 relative">
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-20" />
+
+          {!isEditing && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="absolute top-6 right-8 px-6 py-2.5 bg-white/10 backdrop-blur-md text-white border border-white/20 rounded-2xl text-[11px] font-bold hover:bg-white/20 transition-all shadow-xl active:scale-95 z-30"
+            >
+              Edit Profile
+            </button>
+          )}
         </div>
-        <div className="flex items-center gap-3">
-          <div className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-100 flex items-center gap-2">
-            <ShieldCheck size={14} />
-            Admin Account
+
+        <div className="px-10 pb-12">
+          {/* Profile Header */}
+          <div className="relative -mt-20 flex flex-col md:flex-row items-end gap-8 mb-12">
+            <div className="relative group">
+              <div className="w-40 h-40 rounded-[3rem] bg-white p-2 shadow-2xl relative z-10 overflow-hidden border border-slate-50">
+                {formData.profileImage ? (
+                  <img src={formData.profileImage} className="w-full h-full object-cover rounded-[2.8rem]" alt="Profile" />
+                ) : (
+                  <div className="w-full h-full rounded-[2.8rem] bg-indigo-600 text-white flex items-center justify-center text-5xl font-bold">
+                    {user?.name?.charAt(0)}
+                  </div>
+                )}
+                {isEditing && (
+                  <label className="absolute inset-2 bg-black/40 backdrop-blur-sm rounded-[2.8rem] flex flex-col items-center justify-center text-white cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                    <Camera size={24} className="mb-1" />
+                    <span className="text-[10px] font-bold">Change</span>
+                    <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
+                  </label>
+                )}
+              </div>
+              <div className="absolute -inset-1 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-[3.2rem] opacity-20 blur-xl group-hover:opacity-40 transition-opacity" />
+            </div>
+
+            <div className="flex-1 pb-4">
+              <div className="flex items-center gap-3 mb-2">
+                <h3 className="text-2xl font-bold text-slate-900 tracking-tight">{user?.name}</h3>
+                <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-bold border border-emerald-100 flex items-center gap-1">
+                  <div className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
+                  VERIFIED ADMIN
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-6 text-slate-400">
+                <div className="flex items-center gap-2">
+                  <Mail size={14} className="text-indigo-500" />
+                  <span className="text-xs font-bold">{user?.email}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={14} className="text-violet-500" />
+                  <span className="text-xs font-bold capitalize">{user?.role} Access</span>
+                </div>
+              </div>
+            </div>
           </div>
+
+          {/* Form / Details */}
+          <AnimatePresence mode="wait">
+            {isEditing ? (
+              <motion.form
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                onSubmit={handleSubmit}
+                className="grid grid-cols-1 md:grid-cols-2 gap-8"
+              >
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 tracking-widest  ml-1">Full Name</label>
+                  <div className="relative">
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white pl-12 pr-4 py-3.5 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800 shadow-inner"
+                      placeholder="Enter your name"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 tracking-widest  ml-1">Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white pl-12 pr-4 py-3.5 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800 shadow-inner"
+                      placeholder="Enter your email"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 tracking-widest  ml-1">Mobile Number (10 Digits)</label>
+                  <div className="relative">
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input
+                      type="text"
+                      value={formData.mobile}
+                      onChange={handleMobileChange}
+                      className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white pl-12 pr-4 py-3.5 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800 shadow-inner"
+                      placeholder="Enter 10-digit mobile number"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="md:col-span-2 flex justify-end gap-3 pt-6 border-t border-slate-50 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditing(false);
+                      setFormData({
+                        name: user?.name || '',
+                        email: user?.email || '',
+                        mobile: user?.mobile || '',
+                        profileImage: user?.profileImage || ''
+                      });
+                    }}
+                    className="flex items-center gap-2 px-6 py-3 text-slate-400 hover:text-slate-600 rounded-2xl text-[11px] font-bold transition-all"
+                  >
+                    <X size={16} /> Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex items-center gap-2 px-8 py-3 bg-indigo-600 text-white rounded-2xl text-[11px] font-bold hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 disabled:opacity-50 active:scale-95"
+                  >
+                    {loading ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                    Save Changes
+                  </button>
+                </div>
+              </motion.form>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="grid grid-cols-1 sm:grid-cols-2 gap-6"
+              >
+                {[
+                  { label: 'Full Name', value: user?.name, icon: <User size={18} />, color: 'bg-indigo-50 text-indigo-600' },
+                  { label: 'Email Address', value: user?.email, icon: <Mail size={18} />, color: 'bg-violet-50 text-violet-600' },
+                  { label: 'Mobile Number', value: user?.mobile, icon: <Phone size={18} />, color: 'bg-purple-50 text-purple-600' },
+                  {
+                    label: 'Role & Department',
+                    value: `${user?.role || 'Admin'} - ${user?.department || 'Administration'}`,
+                    icon: <Briefcase size={18} />,
+                    color: 'bg-emerald-50 text-emerald-600'
+                  }
+                ].map((item, idx) => (
+                  <div key={idx} className="p-6 rounded-3xl bg-slate-50/50 border border-slate-100 hover:border-indigo-100 hover:bg-white hover:shadow-xl hover:shadow-slate-100 transition-all group">
+                    <div className={`w-10 h-10 rounded-xl ${item.color} flex items-center justify-center mb-4 shadow-sm group-hover:scale-110 transition-transform`}>
+                      {item.icon}
+                    </div>
+                    <p className="text-[10px] font-bold text-slate-400 tracking-widest  mb-1">{item.label}</p>
+                    <p className="text-sm font-bold text-slate-800 break-words">{item.value || 'N/A'}</p>
+                  </div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
-        {/* Profile Card */}
-        <div className="lg:col-span-4 space-y-6">
-          <div className="bg-white border border-slate-200 p-8 rounded-3xl shadow-xl shadow-slate-200/40 text-center relative overflow-hidden group">
-            <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-r from-indigo-600 to-violet-600" />
-            <div className="relative mt-8">
-              <div className="w-28 h-28 rounded-[2.5rem] bg-white p-1 shadow-2xl mx-auto mb-6">
-                <div className="w-full h-full rounded-[2.2rem] bg-indigo-600 text-white flex items-center justify-center text-4xl font-bold transition-transform duration-500 shadow-inner">
-                  {user?.name?.charAt(0) || 'A'}
-                </div>
-              </div>
-              <h3 className="text-xl font-bold text-slate-900 tracking-tight mb-1">{user?.name || 'Admin User'}</h3>
-              <p className="text-[11px] font-bold text-indigo-600 tracking-tight bg-indigo-50 px-4 py-1.5 rounded-full border border-indigo-100 inline-block mb-6">
-                {user?.role || 'Admin'}
-              </p>
-
-              <div className="grid grid-cols-2 gap-4 pt-6 border-t border-slate-100">
-                <div className="text-center">
-                  <p className="text-[10px] font-bold text-slate-400 tracking-tight">Access</p>
-                  <p className="text-sm font-bold text-slate-800">Full</p>
-                </div>
-                <div className="text-center border-l border-slate-100">
-                  <p className="text-[10px] font-bold text-slate-400 tracking-tight">Area</p>
-                  <p className="text-sm font-bold text-slate-800">Global</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-slate-900 p-8 rounded-3xl text-white shadow-2xl shadow-slate-300 relative overflow-hidden">
-            <div className="absolute -right-4 -bottom-4 opacity-10">
-              <ShieldCheck size={120} />
-            </div>
-            <div className="relative">
-              <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30 mb-6">
-                <ShieldCheck className="text-indigo-400" size={24} />
-              </div>
-              <h4 className="font-bold text-base tracking-tight mb-4">Security</h4>
-              <p className="text-[13px] text-slate-400 leading-relaxed font-bold">
-                Your account is secure. Geographic tracking is active for security purposes.
-              </p>
-              <button className="mt-6 w-full py-3 bg-white/5 border border-white/10 rounded-xl text-xs font-bold hover:bg-white/10 transition-colors">
-                Change Password
-              </button>
-            </div>
-          </div>
+      <div className="mt-8 p-6 bg-amber-50 rounded-3xl border border-amber-100 flex items-start gap-4">
+        <div className="p-2 bg-white rounded-xl text-amber-600 shadow-sm">
+          <Info size={20} />
         </div>
-
-        {/* User Details */}
-        <div className="lg:col-span-8 space-y-6">
-          <div className="bg-white border border-slate-200 rounded-3xl shadow-xl shadow-slate-200/40 overflow-hidden">
-            <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/30">
-              <div>
-                <h3 className="text-base font-bold text-slate-800 tracking-tight">User Details</h3>
-                <p className="text-[11px] font-bold text-slate-500 mt-1">Verified account information</p>
-              </div>
-              <div className="px-4 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-bold border border-emerald-100 flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Verified
-              </div>
-            </div>
-
-            <div className="p-8 md:p-10 grid grid-cols-1 md:grid-cols-2 gap-6">
-              {[
-                { label: 'Name', value: user?.name || 'Admin User', icon: <User size={20} />, sub: 'Full account name' },
-                { label: 'Email', value: user?.email || 'admin@example.com', icon: <Mail size={20} />, sub: 'Primary contact email' },
-                { label: 'Phone', value: user?.mobile || '+91 9876543210', icon: <Phone size={20} />, sub: 'Registered phone' },
-                { label: 'Department', value: user?.department || 'Operations', icon: <Building2 size={20} />, sub: 'Primary department' }
-              ].map((item, idx) => (
-                <div key={idx} className="flex items-start gap-5 p-5 rounded-2xl bg-slate-50 hover:bg-white hover:shadow-xl hover:shadow-slate-100 border border-slate-100 hover:border-indigo-200 transition-all group">
-                  <div className="w-12 h-12 rounded-2xl bg-white text-slate-500 flex items-center justify-center border border-slate-200 shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300">
-                    {item.icon}
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-400 tracking-tight mb-1">{item.label}</p>
-                    <p className="text-sm font-bold text-slate-900 tracking-tight mb-1">{item.value}</p>
-                    <p className="text-[10px] font-bold text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity">{item.sub}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-indigo-600 p-8 rounded-3xl text-white shadow-xl shadow-indigo-100 flex flex-col justify-between group">
-              <div className="flex justify-between items-start">
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-sm border border-white/10">
-                  <Activity size={20} className="text-indigo-200" />
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-bold text-indigo-200 tracking-tight">System Health</p>
-                  <p className="text-2xl font-bold">99.9%</p>
-                </div>
-              </div>
-              <div className="mt-10">
-                <p className="text-xs font-bold text-indigo-100 mb-2">Network</p>
-                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                  <div className="w-[98%] h-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
-                </div>
-              </div>
-            </div>
-            <div className="bg-white border border-slate-200 p-8 rounded-3xl shadow-xl shadow-slate-200/40 flex flex-col justify-between">
-              <div className="flex justify-between items-start">
-                <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center border border-slate-100">
-                  <Users size={20} className="text-slate-400" />
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-bold text-slate-400 tracking-tight">Active Stats</p>
-                  <p className="text-2xl font-bold text-slate-900">Active</p>
-                </div>
-              </div>
-              <div className="mt-10">
-                <button className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors shadow-lg shadow-slate-200">
-                  View Logs
-                </button>
-              </div>
-            </div>
-          </div>
+        <div>
+          <p className="text-xs font-bold text-amber-900 mb-1">Administrative Note</p>
+          <p className="text-[11px] text-amber-700 leading-relaxed font-medium">
+            Changes to your email or mobile number will take effect immediately. You will need to use your updated credentials for future logins to the management portal.
+          </p>
         </div>
       </div>
     </div>
@@ -147,3 +258,9 @@ const Profile = () => {
 };
 
 export default Profile;
+
+const Loader2 = ({ size, className }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`animate-spin ${className}`}>
+    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+  </svg>
+);

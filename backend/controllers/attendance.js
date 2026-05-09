@@ -96,6 +96,7 @@ exports.punchIn = async (req, res, next) => {
         time: new Date(),
         location: { latitude, longitude, address },
         selfie: selfieData ? selfieData.url : null,
+        isOutside: isOutside
       },
       status,
       isLate,
@@ -127,9 +128,14 @@ exports.punchOut = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'No active punch-in session found' });
     }
 
+    const office = await Location.findOne({ name: 'Office Main' }) || await Location.findOne();
+    const outDistance = calculateDistance(latitude, longitude, office.latitude, office.longitude);
+    const outOutside = outDistance > office.radius;
+
     attendance.punchOut = {
       time: new Date(),
       location: { latitude, longitude, address },
+      isOutside: outOutside
     };
 
     const diff = attendance.punchOut.time - attendance.punchIn.time;
@@ -138,27 +144,10 @@ exports.punchOut = async (req, res, next) => {
 
     const user = await User.findById(userId).populate('shift');
     
-    // Overtime Calculation
-    if (user.shift) {
-      const [eHour, eMin] = user.shift.endTime.split(':').map(Number);
-      const shiftEnd = new Date(attendance.date);
-      shiftEnd.setHours(eHour, eMin, 0, 0);
-      
-      // If night shift, end time is next day
-      if (user.shift.isNightShift && eHour < 12) {
-        shiftEnd.setDate(shiftEnd.getDate() + 1);
-      }
-      
-      if (attendance.punchOut.time > shiftEnd) {
-        const otDiff = attendance.punchOut.time - shiftEnd;
-        attendance.overtime = parseFloat((otDiff / (1000 * 60 * 60)).toFixed(2));
-      }
-
-      // Half day check based on working hours if punch-in wasn't already half-day
-      if (!attendance.isHalfDay && hours < (user.shift.workingHours / 2)) {
-        attendance.isHalfDay = true;
-        attendance.status = 'Half Day';
-      }
+    // Half day check based on working hours if punch-in wasn't already half-day
+    if (user.shift && !attendance.isHalfDay && hours < (user.shift.workingHours / 2)) {
+      attendance.isHalfDay = true;
+      attendance.status = 'Half Day';
     }
 
     await attendance.save();
@@ -308,10 +297,12 @@ exports.trackLocation = async (req, res, next) => {
     
     if (googleDistance !== null) {
       incrementalDistance = googleDistance;
-      console.log(`Google Road Distance: ${googleDistance}km`);
+      // Distance calculated
+
     } else {
       incrementalDistance = calculateDistance(latitude, longitude, lastLat, lastLng);
-      console.log(`Mathematical Distance (Fallback): ${incrementalDistance}km`);
+      // Fallback distance
+
     }
 
     attendance.totalDistance = (attendance.totalDistance || 0) + incrementalDistance;
@@ -321,7 +312,8 @@ exports.trackLocation = async (req, res, next) => {
       latitude,
       longitude,
       address,
-      isOutside
+      isOutside,
+      distanceFromPrevious: incrementalDistance * 1000 // Store in meters for consistency
     });
 
     await attendance.save();
@@ -335,3 +327,130 @@ exports.trackLocation = async (req, res, next) => {
     res.status(400).json({ success: false, message: err.message });
   }
 };
+
+// @desc    Get monthly attendance summary and daily status
+// @route   GET /api/attendance/monthly-view
+// @access  Private
+exports.getMonthlyView = async (req, res, next) => {
+  try {
+    const { month, year } = req.query; // Expects numeric month (1-12) and year (e.g., 2026)
+    const userId = req.user.id;
+
+    if (!month || !year) {
+      return res.status(400).json({ success: false, message: 'Please provide month and year' });
+    }
+
+    const startDate = new Date(Date.UTC(year, month - 1, 1));
+    const endDate = new Date(Date.UTC(year, month, 1));
+
+    const attendance = await Attendance.find({
+      user: userId,
+      date: { $gte: startDate, $lt: endDate }
+    }).sort('date');
+
+    const summary = {
+      present: 0,
+      late: 0,
+      halfDay: 0,
+      absent: 0,
+      onLeave: 0 // We'll need to fetch leaves too
+    };
+
+    // Fetch leaves for this month
+    const Leave = require('../models/Leave');
+    const leaves = await Leave.find({
+      user: userId,
+      status: 'Approved',
+      $or: [
+        { startDate: { $gte: startDate, $lt: endDate } },
+        { endDate: { $gte: startDate, $lt: endDate } }
+      ]
+    });
+
+    // Create a map of days
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const dailyStatus = {};
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const today = now.getDate();
+
+    // Initialize all days
+    for (let i = 1; i <= daysInMonth; i++) {
+      const d = new Date(Date.UTC(year, month - 1, i));
+      const isSunday = d.getUTCDay() === 0;
+      
+      const isFuture = (parseInt(year) > currentYear) || 
+                      (parseInt(year) === currentYear && parseInt(month) > currentMonth) ||
+                      (parseInt(year) === currentYear && parseInt(month) === currentMonth && i > today);
+
+      dailyStatus[i] = { 
+        status: isFuture ? 'Future' : 'Absent', 
+        color: (isSunday || isFuture) ? 'transparent' : '#f43f5e', 
+        isSunday,
+        isFuture
+      };
+    }
+
+    // Mark Leaves
+    leaves.forEach(leave => {
+      let start = new Date(leave.startDate);
+      let end = new Date(leave.endDate);
+      
+      // Only process if it overlaps with our month
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        if (d.getMonth() + 1 === parseInt(month) && d.getFullYear() === parseInt(year)) {
+          const day = d.getDate();
+          dailyStatus[day] = { status: 'On Leave', color: '#f59e0b', isFuture: false }; 
+          summary.onLeave++;
+        }
+      }
+    });
+
+    // Mark Attendance
+    attendance.forEach(record => {
+      const day = new Date(record.date).getUTCDate();
+      let status = record.status || 'Present';
+      let color = '#10b981'; // Emerald for present
+
+      if (status === 'Late') color = '#f59e0b'; // Amber for late
+      if (status === 'Half Day') color = '#3b82f6'; // Blue for half day
+
+      dailyStatus[day] = { 
+        status, 
+        color,
+        isFuture: false,
+        punchIn: record.punchIn?.time,
+        punchOut: record.punchOut?.time
+      };
+
+      if (status === 'Present') summary.present++;
+      else if (status === 'Late') summary.late++;
+      else if (status === 'Half Day') summary.halfDay++;
+    });
+
+    // Calculate Absent (days not present and not on leave, only up to today if current month)
+    let relevantDaysCount = daysInMonth;
+    if (parseInt(year) === currentYear && parseInt(month) === currentMonth) {
+      relevantDaysCount = today;
+    } else if (parseInt(year) > currentYear || (parseInt(year) === currentYear && parseInt(month) > currentMonth)) {
+      relevantDaysCount = 0;
+    }
+
+    summary.absent = Math.max(0, relevantDaysCount - summary.present - summary.late - summary.halfDay - summary.onLeave);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        summary,
+        dailyStatus,
+        daysInMonth,
+        monthName: new Date(year, month - 1).toLocaleString('default', { month: 'long' })
+      }
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+};
+

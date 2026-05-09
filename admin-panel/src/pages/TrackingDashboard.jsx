@@ -2,12 +2,14 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   Calendar,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Loader2,
+  MapPin,
+  Navigation,
   Search,
   Wifi,
-  WifiOff,
-  ChevronLeft,
-  ChevronRight
+  WifiOff
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
@@ -16,8 +18,8 @@ import {
   Cell,
   Pie,
   PieChart,
-  ResponsiveContainer,
-  Tooltip as RechartsTooltip
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer
 } from 'recharts';
 import api from '../api/axios';
 import CalendarPicker from '../components/CalendarPicker';
@@ -86,7 +88,8 @@ const TrackingDashboard = () => {
 
   const presenceChartData = [
     { name: 'Present', value: data?.stats?.presence?.present || 0, color: '#10b981' },
-    { name: 'Absent', value: data?.stats?.presence?.absent || 0, color: '#f87171' }
+    { name: 'Absent', value: data?.stats?.presence?.absent || 0, color: '#f87171' },
+    { name: 'On Leave', value: data?.stats?.presence?.onLeave || 0, color: '#6366f1' }
   ];
 
   const permissionsChartData = [
@@ -116,7 +119,7 @@ const TrackingDashboard = () => {
         </ResponsiveContainer>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
           <p className="text-2xl font-bold text-slate-800">{total}</p>
-          <p className="text-[10px] font-bold text-slate-400 uppercase">TOTAL</p>
+          <p className="text-[10px] font-bold text-slate-400 ">TOTAL</p>
         </div>
       </div>
       <div className="mt-4 space-y-2">
@@ -184,17 +187,17 @@ const TrackingDashboard = () => {
         <DonutChart
           title="Live Tracking Status"
           chartData={trackingChartData}
-          total={data?.stats?.presence?.present || 0}
+          total={data?.stats?.total || 0}
         />
         <DonutChart
           title="Staff Presence"
           chartData={presenceChartData}
-          total={data?.stats?.totalEmployees || 0}
+          total={data?.stats?.total || 0}
         />
         <DonutChart
           title="App Permissions"
           chartData={permissionsChartData}
-          total={data?.stats?.presence?.present || 0}
+          total={data?.stats?.total || 0}
         />
       </div>
 
@@ -254,7 +257,7 @@ const TrackingDashboard = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">{emp.user?.department}</span>
+                    <span className="text-[10px] font-bold text-slate-500  tracking-tight">{emp.user?.department}</span>
                   </td>
                   <td className="px-6 py-4">
                     <span className="text-[10px] font-bold text-slate-500">{emp.user?.mobile}</span>
@@ -264,26 +267,34 @@ const TrackingDashboard = () => {
                       <p className="text-[11px] font-bold text-slate-700 line-clamp-1">{emp.lastKnownLocation?.address || 'Location unknown'}</p>
                       {emp.lastKnownLocation?.time && (
                         <span className="text-[9px] font-bold text-slate-400">
-                          {new Date(emp.lastKnownLocation.time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(emp.lastKnownLocation.time).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex flex-col gap-1">
+                   <td className="px-6 py-4">
+                    <div className="flex flex-col items-center gap-2">
                       <span className="text-[11px] font-bold text-slate-800">{emp.distance.toFixed(2)} km</span>
-                      <button
-                        onClick={() => navigate(`/track-route/${emp.user._id}?date=${selectedDate}`)}
-                        className="text-[9px] font-bold text-indigo-600 hover:underline tracking-tight text-left"
-                      >
-                        View Route
-                      </button>
+                      <div className="flex flex-col items-center gap-1">
+                        <button
+                          onClick={() => navigate(`/track-route/${emp.user?._id}?date=${selectedDate}`)}
+                          className="text-[9px] font-bold text-indigo-600 hover:underline tracking-tight"
+                        >
+                          View Route
+                        </button>
+                        <button
+                          onClick={() => navigate(`/track-route/${emp.user?._id}?date=${selectedDate}&lastOnly=true`)}
+                          className="text-[9px] font-bold text-emerald-600 hover:underline tracking-tight"
+                        >
+                          See on Map
+                        </button>
+                      </div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-col items-center gap-1">
                       {getStatusIcon(emp.status)}
-                      <span className={`text-[8px] font-bold tracking-tight uppercase ${emp.status === 'online' ? 'text-emerald-500' : 'text-slate-400'}`}>
+                      <span className={`text-[8px] font-bold tracking-tight  ${emp.status === 'online' ? 'text-emerald-500' : 'text-slate-400'}`}>
                         {emp.status}
                       </span>
                     </div>
@@ -303,7 +314,7 @@ const TrackingDashboard = () => {
 
         {/* Pagination */}
         <div className="p-6 border-t border-slate-50 flex items-center justify-between bg-slate-50/30">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+          <p className="text-[10px] font-bold text-slate-400  tracking-widest">
             Page {currentPage} of {totalPages || 1}
           </p>
           <div className="flex gap-2">

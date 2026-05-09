@@ -1,7 +1,18 @@
 import { createSlice } from '@reduxjs/toolkit';
 
+const getUserFromStorage = () => {
+  try {
+    const user = localStorage.getItem('user');
+    // Guard against 'undefined' or 'null' strings which cause JSON.parse to fail
+    if (!user || user === 'undefined' || user === 'null') return null;
+    return JSON.parse(user);
+  } catch (e) {
+    return null;
+  }
+};
+
 const initialState = {
-  user: JSON.parse(localStorage.getItem('user')) || null,
+  user: getUserFromStorage(),
   token: localStorage.getItem('token') || null,
   isAuthenticated: !!localStorage.getItem('token'),
 };
@@ -11,12 +22,36 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     setCredentials: (state, action) => {
-      const { user, token } = action.payload;
-      state.user = user;
-      state.token = token;
-      state.isAuthenticated = true;
-      localStorage.setItem('user', JSON.stringify(user));
-      localStorage.setItem('token', token);
+      const payload = action.payload;
+      if (!payload) return;
+
+      // Ensure we don't spread null/undefined
+      const currentUser = state.user || {};
+      
+      if (payload.user) {
+        // Payload structure: { user: {...}, token: "..." }
+        state.user = { ...currentUser, ...payload.user };
+        if (payload.token) {
+          state.token = payload.token;
+          state.isAuthenticated = true;
+        }
+      } else {
+        // Payload structure: just the user object {...}
+        state.user = { ...currentUser, ...payload };
+      }
+
+      // Final safety check: if we have a token, we are authenticated
+      if (state.token) {
+        state.isAuthenticated = true;
+      }
+
+      // Persist to storage
+      if (state.user) {
+        localStorage.setItem('user', JSON.stringify(state.user));
+      }
+      if (state.token) {
+        localStorage.setItem('token', state.token);
+      }
     },
     logout: (state) => {
       state.user = null;

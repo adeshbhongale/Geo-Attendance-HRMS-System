@@ -64,8 +64,9 @@ const EmployeeTrackData = () => {
 
   const handleDownload = () => {
     if (!filteredLogs.length) return toast.error('No data to download');
-    const headers = ["Time", "Address", "Latitude", "Longitude", "Distance (m)"];
+    const headers = ["Date", "Time", "Address", "Latitude", "Longitude", "Distance (m)"];
     const rows = filteredLogs.map(log => [
+      new Date(log.time).toLocaleDateString('en-GB'),
       new Date(log.time).toLocaleTimeString(),
       log.address || 'NA',
       log.latitude,
@@ -109,8 +110,8 @@ const EmployeeTrackData = () => {
       {/* Premium Header Filters */}
       <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate(-1)}
+           <button
+            onClick={() => navigate(`/tracking-dashboard?date=${date}`)}
             className="p-3 bg-white rounded-2xl border border-slate-100 shadow-sm text-slate-400 hover:text-indigo-600 transition-all hover:scale-105 active:scale-95"
           >
             <ChevronLeft size={20} />
@@ -206,6 +207,12 @@ const EmployeeTrackData = () => {
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
                 <span className="text-[11px] font-bold text-slate-500">{data?.employee?.headquarter}</span>
               </div>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 tracking-widest mb-1">Tracking Summary</p>
+              <p className="text-sm font-bold text-indigo-600">{(data?.summary?.totalDistance || 0).toFixed(2)} KM</p>
+              <p className="text-[10px] font-bold text-slate-400 mt-1">Total Distance Today</p>
             </div>
 
             <div className="flex items-center gap-3">
