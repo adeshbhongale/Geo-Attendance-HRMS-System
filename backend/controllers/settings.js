@@ -9,7 +9,7 @@ exports.getOfficeSettings = async (req, res, next) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
-    
+
     let office = await Location.findOne({ name: 'Office Main' });
     if (!office) {
       // Try to find any location if 'Office Main' doesn't exist
@@ -39,7 +39,6 @@ exports.getOfficeSettings = async (req, res, next) => {
 // @access  Private/Admin
 exports.updateOfficeSettings = async (req, res, next) => {
   try {
-    console.log('Updating settings with data:', req.body);
     let office = await Location.findOneAndUpdate(
       { name: 'Office Main' },
       req.body,

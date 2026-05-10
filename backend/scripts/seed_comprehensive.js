@@ -60,7 +60,7 @@ const seedData = async () => {
     // 5. Create Employees
     const departments = ['IT', 'Sales', 'HR', 'Support', 'Logistics'];
     const employeeData = [];
-    const empCount = 14; 
+    const empCount = 14;
 
     for (let i = 1; i <= empCount; i++) {
       const dept = departments[i % departments.length];
@@ -92,7 +92,7 @@ const seedData = async () => {
       role: 'employee',
       department: 'Sales',
       designation: 'Sr.Sales Engineer',
-      shift: shifts[0]._id, 
+      shift: shifts[0]._id,
       headquarter: 'Mumbai HQ',
       leaveBalance: 3,
       monthlyLeaveLimit: 3
@@ -114,18 +114,18 @@ const seedData = async () => {
       const isWeekend = date.getUTCDay() === 0; // Skip Sundays
 
       for (const emp of employees) {
-        // SPECIAL CASE: Shreyas Kadam is ALWAYS fresh for today (not punched in)
-        if (emp.name === 'Shreyas Kadam' && dateStr === todayStr) {
+        // SPECIAL CASE: Adesh Bhongale is ALWAYS fresh for today (not punched in)
+        if (emp.name === 'Adesh Bhongale' && dateStr === todayStr) {
           continue;
         }
 
         if (isWeekend) continue;
 
         const empIndex = employees.indexOf(emp);
-        
+
         // Random Status Picker
         const rand = Math.random();
-        
+
         if (rand < 0.12) { // 12% Leave (increase diversity)
           const leaveStatusRand = Math.random();
           let leaveStatus = 'Approved';
@@ -151,7 +151,7 @@ const seedData = async () => {
         let status = 'Present';
         let isLate = false;
         let isHalfDay = false;
-        
+
         if (rand < 0.35) { // 20% Late
           status = 'Late';
           isLate = true;
@@ -198,7 +198,7 @@ const seedData = async () => {
             longitude: lng,
             address: k === 0 || k === 9 ? office.address : `Route ${k} Near ${emp.department} Zone`,
             isOutside: k !== 0 && k !== 9,
-            distanceFromPrevious: distFromPrev * 1000 
+            distanceFromPrevious: distFromPrev * 1000
           });
         }
 
@@ -220,7 +220,7 @@ const seedData = async () => {
         }
 
         // Geo-fencing status
-        const isOutsideToday = Math.random() < 0.4; 
+        const isOutsideToday = Math.random() < 0.4;
 
         attendanceRecords.push({
           user: emp._id,
@@ -228,10 +228,10 @@ const seedData = async () => {
           status: status,
           punchIn: {
             time: punchIn,
-            location: { 
-              latitude: isOutsideToday && Math.random() > 0.5 ? office.latitude + 0.05 : office.latitude, 
-              longitude: office.longitude, 
-              address: isOutsideToday && Math.random() > 0.5 ? 'Outside Authorized Zone' : office.address 
+            location: {
+              latitude: isOutsideToday && Math.random() > 0.5 ? office.latitude + 0.05 : office.latitude,
+              longitude: office.longitude,
+              address: isOutsideToday && Math.random() > 0.5 ? 'Outside Authorized Zone' : office.address
             },
             selfie: `https://i.pravatar.cc/150?u=${emp._id}in${d}`,
             isOutside: isOutsideToday

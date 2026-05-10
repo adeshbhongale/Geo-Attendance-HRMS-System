@@ -696,6 +696,36 @@ Geo-Attendance-HRMS-System/
 - **Accurate Absenteeism Stats**: Fixed the absenteeism count logic to only calculate missed days up to "today". Future days in the current month are no longer counted as "Absent," providing accurate real-time metrics.
 - **Multi-Month Synchronization**: Ensured that changing the month in the `MonthlyViewScreen` correctly triggers a data refresh and updates the summary counts (Present, Absent, Leave) dynamically.
 
+### 8. HRMS Standardization & Legacy Cleanup (May 10, 2026)
+
+**Changed**: Finalized administrative UI standardization, integrated real-time online tracking, and removed legacy reporting modules.
+
+- **Files**: `admin-panel/src/pages/EmployeeDetails.jsx`, `admin-panel/src/pages/Attendance.jsx`, `backend/controllers/reports.js`, `mobile-app/src/screens/MonthlyViewScreen.js`, `backend/models/User.js`
+
+#### Administrative UI Standardization:
+- **Employee Personal Page**:
+  - Integrated a timezone-safe **Date Range Picker** (`startDate` to `endDate`) for individual attendance auditing.
+  - Standardized table layout and column widths to match the global admin design system.
+  - Implemented server-side date filtering for individual employee statistics.
+- **Attendance Reporting**:
+  - Completely decommissioned the **"Headquarter-Wise"** reporting module across the frontend, backend, and database.
+  - Standardized the Attendance Dashboard to focus on Department and Shift-wise metrics only.
+
+#### Data Integrity & Real-Time Tracking:
+- **Persistent Online Status**: Replaced ephemeral session checking with the persistent `isOnline` boolean from the `User` model. This ensures the Admin Dashboard and Employee tables reflect the absolute current connectivity status of mobile users.
+- **Schema Optimization**: Removed the obsolete `headquarter` field from the `User` model to simplify the database architecture and prevent data fragmentation.
+
+#### Mobile App Experience:
+- **Monthly View Enhancements**:
+  - Redesigned the **Monthly Attendance Calendar** to match the premium dark/light theme of the web dashboard.
+  - Fixed logic where attendance counts (Present/Absent/Leave) were not updating correctly when switching months.
+  - Suppressed status coloring for future dates to maintain a clean UI.
+- **Verification Logs**: Added location and selfie metadata to the mobile history view, allowing users to verify their own punch-in accuracy.
+
+#### Reliability & Testing:
+- **Comprehensive Seeding**: Updated `seed_comprehensive.js` to include advanced test points for multi-session attendance, diverse leave patterns, and varied geofencing scenarios.
+- **Navigation Hardening**: Verified that all new screens are correctly wrapped in the Navigation context to prevent "Couldn't find navigation context" errors on native Android builds.
+
 ---
 
 ## Setup & Deployment
@@ -855,6 +885,54 @@ eas submit --platform android --latest
 
 ---
 
-**Last Updated**: May 9, 2026
-**Version**: 1.1.0
-**Status**: Production Stable (Navigation & UI Finalized)
+### 9. Geo-Intelligence, Admin Location Display & Date Persistence (May 10, 2026)
+
+**Changed**: Full-address geocoding across all admin views, Punch location cards in Track Data, and date persistence fix in Tracking Dashboard.
+
+#### Mobile App — Google Geocoding for Background Tracking Logs
+
+- **File**: `mobile-app/src/screens/DashboardScreen.js`
+- **Before**: Background tracking pings (every 2 min) stored addresses as `"${street}, ${city}"` — short, truncated format.
+- **After**: Now calls **Google Geocoding API** (`formatted_address`) for each ping. Full addresses (building, ward, road, area, city, state, pincode) are stored in every `trackingLog` entry.
+- **Fallback**: If Google API fails → `expo-location reverseGeocodeAsync` with all available fields joined.
+
+#### Admin Panel — Reports: Full Address in Time Columns
+
+- **File**: `admin-panel/src/pages/Reports.jsx`
+- **Employee Overview Sheet**: Check-In and Check-Out columns now show the full `timeInLocation` / `timeOutLocation` address below the time value.
+- **Present Timing Sheet**: In Time and Out Time columns display the full address below the time (with `max-w-[160px]` wrap constraint for column width balance).
+- Backend already returned `timeInLocation` and `timeOutLocation` fields — only frontend rendering was added.
+
+#### Admin Panel — Tracking Dashboard: Full Address, No Truncation
+
+- **File**: `admin-panel/src/pages/TrackingDashboard.jsx`
+- **Before**: "Last Known Location" column used `line-clamp-1` — address cut off with `...`.
+- **After**: Removed `line-clamp-1`. Address wraps fully with an indigo `MapPin` icon prefix and timestamp indented below.
+
+#### Admin Panel — EmployeeTrackData: Punch Location Cards
+
+- **File**: `admin-panel/src/pages/EmployeeTrackData.jsx`
+- **New section** added between the employee summary card and the activity logs table:
+  - 🟢 **Punch In Location card**: Shows exact full address + punch-in time + lat/lng coordinates.
+  - 🔴 **Punch Out Location card**: Shows exact full address + punch-out time + lat/lng coordinates.
+  - Cards only render if attendance data exists for the selected date.
+- **Activity Logs table**: Removed `max-w-md` truncation from Location Address column. `MapPin` icon upgraded to indigo for better visibility. Addresses wrap freely.
+
+#### Admin Panel — TrackingDashboard: Date Persists Across Navigation
+
+- **File**: `admin-panel/src/pages/TrackingDashboard.jsx`
+- **Root Cause**: `selectedDate` used `useState` — reset to today on every component remount.
+- **Scenario that failed**: Select date → click employee → open EmployeeTrackData → press back → **date resets to today**.
+- **Fix**: Replaced `useState` with `useSearchParams`. Date stored in URL as `?date=YYYY-MM-DD`.
+- **Result**: Browser back button and in-app navigation now preserve the selected date correctly.
+
+#### Mobile App — Production Console.log Cleanup
+
+All debug `console.log` and `console.error` statements removed from 10 files for production build:
+`App.js`, `axios.js`, `ErrorBoundary.js`, `AttendanceScreen.js`, `DashboardScreen.js`, `LeaveScreen.js`, `LoginScreen.js`, `MonthlyViewScreen.js`, `ProfileScreen.js`, `navigation.js`
+
+---
+
+**Last Updated**: May 10, 2026
+**Version**: 1.2.0
+**Status**: Production Stable (Geo-Intelligence & Admin Location Display Complete)

@@ -385,24 +385,31 @@ exports.getMonthlyView = async (req, res, next) => {
                       (parseInt(year) === currentYear && parseInt(month) > currentMonth) ||
                       (parseInt(year) === currentYear && parseInt(month) === currentMonth && i > today);
 
+      const isToday = (parseInt(year) === currentYear && parseInt(month) === currentMonth && i === today);
+
       dailyStatus[i] = { 
         status: isFuture ? 'Future' : 'Absent', 
-        color: (isSunday || isFuture) ? 'transparent' : '#f43f5e', 
+        color: (isSunday || isFuture) ? 'transparent' : '#f43f5e', // Red for absent
         isSunday,
-        isFuture
+        isFuture,
+        isToday
       };
     }
 
-    // Mark Leaves
+    // Mark Leaves (Yellow)
     leaves.forEach(leave => {
       let start = new Date(leave.startDate);
       let end = new Date(leave.endDate);
       
-      // Only process if it overlaps with our month
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
         if (d.getMonth() + 1 === parseInt(month) && d.getFullYear() === parseInt(year)) {
           const day = d.getDate();
-          dailyStatus[day] = { status: 'On Leave', color: '#f59e0b', isFuture: false }; 
+          dailyStatus[day] = { 
+            ...dailyStatus[day],
+            status: 'On Leave', 
+            color: '#f59e0b', // Yellow/Amber for leave
+            isFuture: false 
+          }; 
           summary.onLeave++;
         }
       }
@@ -412,12 +419,14 @@ exports.getMonthlyView = async (req, res, next) => {
     attendance.forEach(record => {
       const day = new Date(record.date).getUTCDate();
       let status = record.status || 'Present';
-      let color = '#10b981'; // Emerald for present
+      let color = '#10b981'; // Green for present
 
-      if (status === 'Late') color = '#f59e0b'; // Amber for late
-      if (status === 'Half Day') color = '#3b82f6'; // Blue for half day
+      if (status === 'Late' || status === 'Half Day') {
+        color = '#f59e0b'; // Yellow for Late/Half Day
+      }
 
       dailyStatus[day] = { 
+        ...dailyStatus[day],
         status, 
         color,
         isFuture: false,
@@ -431,14 +440,21 @@ exports.getMonthlyView = async (req, res, next) => {
     });
 
     // Calculate Absent (days not present and not on leave, only up to today if current month)
-    let relevantDaysCount = daysInMonth;
-    if (parseInt(year) === currentYear && parseInt(month) === currentMonth) {
+    let relevantDaysCount = 0;
+    if (parseInt(year) < currentYear || (parseInt(year) === currentYear && parseInt(month) < currentMonth)) {
+      relevantDaysCount = daysInMonth;
+    } else if (parseInt(year) === currentYear && parseInt(month) === currentMonth) {
       relevantDaysCount = today;
-    } else if (parseInt(year) > currentYear || (parseInt(year) === currentYear && parseInt(month) > currentMonth)) {
-      relevantDaysCount = 0;
     }
 
-    summary.absent = Math.max(0, relevantDaysCount - summary.present - summary.late - summary.halfDay - summary.onLeave);
+    // Count non-working days (Sundays) to exclude from absenteeism if desired, 
+    // but here we just follow the "Absent" status assigned during initialization.
+    summary.absent = 0;
+    for (let i = 1; i <= relevantDaysCount; i++) {
+       if (dailyStatus[i].status === 'Absent' && !dailyStatus[i].isSunday) {
+         summary.absent++;
+       }
+    }
 
     res.status(200).json({
       success: true,

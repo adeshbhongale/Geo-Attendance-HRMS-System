@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { ArrowLeft, Calendar, Camera, CheckCircle, ChevronRight, MapPin, RotateCcw, X } from 'lucide-react-native';
+import { ArrowLeft, Camera, CheckCircle, ChevronRight, MapPin, RotateCcw, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,9 +16,14 @@ import api from '../api/axios';
 import AttendanceMap from '../components/AttendanceMap';
 import { formatWorkingHours } from '../utils/timeFormat';
 
-import { useNavigation } from '@react-navigation/native';
 
 const AttendanceScreen = ({ navigation }) => {
+  useEffect(() => {
+    getLocation();
+    fetchHistory();
+    fetchOfficeSettings();
+  }, []);
+
   const [selfie, setSelfie] = useState(null);
   const [location, setLocation] = useState(null);
   const [locationLoading, setLocationLoading] = useState(true);
@@ -29,11 +34,6 @@ const AttendanceScreen = ({ navigation }) => {
   const [office, setOffice] = useState(null);
   const [distance, setDistance] = useState(null);
 
-  useEffect(() => {
-    getLocation();
-    fetchHistory();
-    fetchOfficeSettings();
-  }, []);
 
   const fetchOfficeSettings = async () => {
     try {
@@ -77,15 +77,45 @@ const AttendanceScreen = ({ navigation }) => {
         return;
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      const geocode = await Location.reverseGeocodeAsync({
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-      });
-      const addr = geocode[0]
-        ? `${geocode[0].street || ''}, ${geocode[0].city || ''}`
-        : 'Current Location';
+      const { latitude, longitude } = loc.coords;
 
-      setLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude, address: addr });
+      // Use Google Geocoding API for a full, accurate address
+      let addr = 'Current Location';
+      try {
+        const MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+        const geoRes = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${MAPS_KEY}`
+        );
+        const geoData = await geoRes.json();
+        if (geoData.status === 'OK' && geoData.results.length > 0) {
+          // First result is always the most precise (street-level)
+          addr = geoData.results[0].formatted_address;
+        } else {
+          // Fallback: expo-location reverse geocode
+          const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
+          if (geocode[0]) {
+            const g = geocode[0];
+            const parts = [
+              g.streetNumber,
+              g.street,
+              g.district || g.subregion,
+              g.city,
+              g.region,
+              g.postalCode,
+              g.country,
+            ].filter(Boolean);
+            addr = parts.join(', ');
+          }
+        }
+      } catch (geoErr) {
+        const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
+        if (geocode[0]) {
+          const g = geocode[0];
+          addr = [g.streetNumber, g.street, g.city, g.region, g.postalCode].filter(Boolean).join(', ');
+        }
+      }
+
+      setLocation({ latitude, longitude, address: addr });
     } catch (err) {
       Alert.alert('Location Error', 'Could not fetch your location. Please try again.');
     } finally {
@@ -100,19 +130,19 @@ const AttendanceScreen = ({ navigation }) => {
       const res = await api.get('/attendance/history');
       const records = res.data.data || [];
       setHistory(records);
-      
+
       // 1. Look for active session (no punch out)
       let currentSession = records.find(r => !r.punchOut?.time);
-      
+
       // 2. If no active session, look for a record completed today OR with today's date
       if (!currentSession) {
         const today = new Date().toISOString().split('T')[0];
-        currentSession = records.find(r => 
-          r.date?.split('T')[0] === today || 
+        currentSession = records.find(r =>
+          r.date?.split('T')[0] === today ||
           r.punchOut?.time?.split('T')[0] === today
         );
       }
-      
+
       setTodayAttendance(currentSession || null);
     } catch (err) {
     } finally {
@@ -158,7 +188,7 @@ const AttendanceScreen = ({ navigation }) => {
       });
       setTodayAttendance(res.data.data);
       Alert.alert('Punched In', res.data.message || 'Attendance marked successfully!', [
-        { text: 'OK', onPress: () => navigation.goBack() },
+        { text: 'OK', onPress: () => navigation.navigate('Home') },
       ]);
     } catch (err) {
       Alert.alert('Error', err.response?.data?.message || 'Could not punch in. Please try again.');
@@ -187,7 +217,7 @@ const AttendanceScreen = ({ navigation }) => {
             });
             setTodayAttendance(res.data.data);
             Alert.alert('Punched Out', res.data.message || 'Shift ended successfully!', [
-              { text: 'OK', onPress: () => navigation.goBack() },
+              { text: 'OK', onPress: () => navigation.navigate('Home') },
             ]);
           } catch (err) {
             Alert.alert('Error', err.response?.data?.message || 'Could not punch out. Please try again.');
@@ -226,7 +256,7 @@ const AttendanceScreen = ({ navigation }) => {
         <View className="flex-row items-center">
           <TouchableOpacity
             className="w-10 h-10 rounded-xl bg-slate-50 justify-center items-center border border-slate-100 mr-4"
-            onPress={() => navigation.goBack()}
+            onPress={() => navigation.navigate('Home')}
           >
             <ArrowLeft size={20} color="#64748b" />
           </TouchableOpacity>
@@ -365,22 +395,6 @@ const AttendanceScreen = ({ navigation }) => {
           </View>
         )}
 
-        {/* Monthly Record Button */}
-        <TouchableOpacity 
-          onPress={() => navigation.navigate('MonthlyView')}
-          className="bg-white rounded-2xl p-4 border border-slate-100 mb-8 flex-row justify-between items-center shadow-sm"
-        >
-          <View className="flex-row items-center">
-            <View className="w-10 h-10 rounded-xl bg-amber-50 justify-center items-center mr-4">
-              <Calendar size={20} color="#f59e0b" />
-            </View>
-            <View>
-              <Text className="text-slate-800 font-bold text-sm">Monthly Attendance Record</Text>
-              <Text className="text-slate-400 font-bold text-[10px]">View all monthly stats & history</Text>
-            </View>
-          </View>
-          <ChevronRight size={20} color="#94a3b8" />
-        </TouchableOpacity>
 
         {/* Action Button */}
         {alreadyPunchedOut ? (
@@ -421,21 +435,21 @@ const AttendanceScreen = ({ navigation }) => {
         {history.length > 0 && (
           <View className="mt-10">
             <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-slate-900 font-black text-sm uppercase tracking-widest ">DETAILED LOGS</Text>
-              <TouchableOpacity 
+              <Text className="text-slate-900 font-bold text-sm  tracking-widest ">DETAILED LOGS</Text>
+              <TouchableOpacity
                 onPress={fetchHistory}
                 className="w-10 h-10 rounded-xl bg-white justify-center items-center border border-slate-100 shadow-sm"
               >
                 <RotateCcw size={16} color="#4f46e5" />
               </TouchableOpacity>
             </View>
-            
+
             {history.slice(0, 5).map((item, idx) => (
               <View key={idx} className="bg-white rounded-[2rem] p-6 border border-slate-100 mb-6 shadow-sm overflow-hidden">
                 {/* Header: Date and Status */}
                 <View className="flex-row justify-between items-start mb-5">
                   <View>
-                    <Text className="text-slate-900 font-black text-lg">
+                    <Text className="text-slate-900 font-bold text-lg">
                       {new Date(item.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                     </Text>
                     <Text className="text-slate-400 font-bold text-xs mt-0.5">
@@ -443,7 +457,7 @@ const AttendanceScreen = ({ navigation }) => {
                     </Text>
                   </View>
                   <View className={`px-4 py-1.5 rounded-full ${getStatusColor(item.status, !!item.punchIn).split(' ')[0]}`}>
-                    <Text className={`text-[10px] font-black uppercase tracking-wider ${getStatusColor(item.status, !!item.punchIn).split(' ')[1]}`}>
+                    <Text className={`text-[10px] font-bold  tracking-wider ${getStatusColor(item.status, !!item.punchIn).split(' ')[1]}`}>
                       {item.status || 'Present'}
                     </Text>
                   </View>
@@ -452,58 +466,58 @@ const AttendanceScreen = ({ navigation }) => {
                 {/* Details Grid */}
                 <View className="flex-row mb-6 border-y border-slate-50 py-4">
                   <View className="flex-1 border-r border-slate-50">
-                    <Text className="text-[10px] font-bold text-slate-400 uppercase">In Time</Text>
-                    <Text className="text-slate-800 font-black text-sm mt-1">{formatTime(item.punchIn?.time)}</Text>
+                    <Text className="text-[10px] font-bold text-slate-400 ">In Time</Text>
+                    <Text className="text-slate-800 font-bold text-sm mt-1">{formatTime(item.punchIn?.time)}</Text>
                   </View>
                   <View className="flex-1 px-4 border-r border-slate-50">
-                    <Text className="text-[10px] font-bold text-slate-400 uppercase">Out Time</Text>
-                    <Text className="text-slate-800 font-black text-sm mt-1">{formatTime(item.punchOut?.time)}</Text>
+                    <Text className="text-[10px] font-bold text-slate-400 ">Out Time</Text>
+                    <Text className="text-slate-800 font-bold text-sm mt-1">{formatTime(item.punchOut?.time)}</Text>
                   </View>
                   <View className="flex-1 items-end">
-                    <Text className="text-[10px] font-bold text-slate-400 uppercase">Worked</Text>
-                    <Text className="text-indigo-600 font-black text-sm mt-1">{formatWorkingHours(item.workingHours || 0)}</Text>
+                    <Text className="text-[10px] font-bold text-slate-400 ">Worked</Text>
+                    <Text className="text-indigo-600 font-bold text-sm mt-1">{formatWorkingHours(item.workingHours || 0)}</Text>
                   </View>
                 </View>
 
                 {/* Proof Section (Selfie & Map) */}
                 <View className="flex-row gap-4">
-                  {/* Selfie Preview */}
-                  <View className="flex-1">
-                    <Text className="text-[10px] font-black text-slate-400 uppercase mb-2">Selfie Verification</Text>
-                    <View className="h-40 rounded-2xl bg-slate-50 overflow-hidden border border-slate-100">
+                  {/* Punch In Details */}
+                  <View className="flex-1 bg-slate-50/50 rounded-2xl p-3 border border-slate-100">
+                    <Text className="text-[10px] font-bold text-indigo-600 mb-2">Punch In Details</Text>
+                    <View className="h-28 rounded-xl bg-white overflow-hidden border border-slate-100 mb-2">
                       {item.punchIn?.selfie ? (
                         <Image source={{ uri: item.punchIn.selfie }} className="w-full h-full" resizeMode="cover" />
                       ) : (
                         <View className="w-full h-full justify-center items-center">
-                          <Camera size={20} color="#cbd5e1" />
-                          <Text className="text-[10px] font-bold text-slate-300 mt-2">No Image</Text>
+                          <Camera size={16} color="#cbd5e1" />
                         </View>
                       )}
                     </View>
+                    <View className="flex-row items-start">
+                      <MapPin size={10} color="#64748b" style={{ marginTop: 1 }} />
+                      <Text className="text-[9px] font-bold text-slate-500 ml-1 leading-3 flex-1">
+                        {item.punchIn?.location?.address || 'No location'}
+                      </Text>
+                    </View>
                   </View>
 
-                  {/* Location Info */}
-                  <View className="flex-1">
-                    <Text className="text-[10px] font-black text-slate-400 uppercase mb-2">Punch-In Location</Text>
-                    <View className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex-1 justify-center">
-                      <View className="flex-row items-center mb-2">
-                        <MapPin size={12} color="#4f46e5" />
-                        <Text className="text-indigo-600 font-black text-[10px] ml-1">Verified Geo-Stamp</Text>
-                      </View>
-                      <Text className="text-slate-600 font-bold text-[11px] leading-4" numberOfLines={3}>
-                        {item.punchIn?.location?.address || 'No location address recorded'}
-                      </Text>
-                      {item.punchIn?.location?.latitude && (
-                        <TouchableOpacity 
-                          className="mt-3 py-2 bg-indigo-50 rounded-xl items-center border border-indigo-100"
-                          onPress={() => {
-                            const url = `https://www.google.com/maps/search/?api=1&query=${item.punchIn.location.latitude},${item.punchIn.location.longitude}`;
-                            // Link to map
-                          }}
-                        >
-                          <Text className="text-indigo-600 font-black text-[10px] uppercase tracking-tighter">View on Map</Text>
-                        </TouchableOpacity>
+                  {/* Punch Out Details */}
+                  <View className="flex-1 bg-slate-50/50 rounded-2xl p-3 border border-slate-100">
+                    <Text className="text-[10px] font-bold text-rose-500 mb-2">Punch Out Details</Text>
+                    <View className="h-28 rounded-xl bg-white overflow-hidden border border-slate-100 mb-2">
+                      {item.punchOut?.selfie ? (
+                        <Image source={{ uri: item.punchOut.selfie }} className="w-full h-full" resizeMode="cover" />
+                      ) : (
+                        <View className="w-full h-full justify-center items-center">
+                          <Camera size={16} color="#cbd5e1" />
+                        </View>
                       )}
+                    </View>
+                    <View className="flex-row items-start">
+                      <MapPin size={10} color="#64748b" style={{ marginTop: 1 }} />
+                      <Text className="text-[9px] font-bold text-slate-500 ml-1 leading-3 flex-1">
+                        {item.punchOut?.location?.address || 'No location'}
+                      </Text>
                     </View>
                   </View>
                 </View>

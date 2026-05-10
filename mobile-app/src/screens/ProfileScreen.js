@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, Briefcase, Camera, ChevronRight, Clock, Edit3, LogOut, Mail, Phone, Shield, X } from 'lucide-react-native';
+import { ArrowLeft, Briefcase, Calendar, Camera, ChevronRight, Edit3, LogOut, Mail, Phone, Shield, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import api from '../api/axios';
+import { navigateGlobal } from '../utils/navigation';
 
 const ProfileScreen = ({ navigation }) => {
   const [user, setUser] = useState(null);
@@ -262,6 +262,23 @@ const ProfileScreen = ({ navigation }) => {
           </View>
 
 
+
+          {/* Monthly Record Button */}
+          <TouchableOpacity
+            onPress={() => navigateGlobal('MonthlyViewScreen')}
+            className="bg-white rounded-3xl p-5 border border-slate-100 mb-6 flex-row justify-between items-center shadow-sm"
+          >
+            <View className="flex-row items-center">
+              <View className="w-12 h-12 rounded-2xl bg-amber-50 justify-center items-center mr-4">
+                <Calendar size={22} color="#f59e0b" />
+              </View>
+              <View>
+                <Text className="text-slate-800 font-bold text-base">Attendance History</Text>
+                <Text className="text-slate-400 font-bold text-xs mt-0.5">View your monthly summary</Text>
+              </View>
+            </View>
+            <ChevronRight size={20} color="#94a3b8" />
+          </TouchableOpacity>
 
           {/* Sign Out */}
           <TouchableOpacity

@@ -230,6 +230,61 @@ const EmployeeTrackData = () => {
         </div>
       </div>
 
+      {/* Punch In / Punch Out Location Cards */}
+      {(data?.punchIn || data?.punchOut) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Punch In Location */}
+          <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+                <MapPin size={16} className="text-emerald-500" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 tracking-widest">PUNCH IN LOCATION</p>
+                {data.punchIn?.time && (
+                  <p className="text-xs font-bold text-emerald-600">
+                    {new Date(data.punchIn.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                  </p>
+                )}
+              </div>
+            </div>
+            <p className="text-sm font-bold text-slate-800 leading-relaxed">
+              {data.punchIn?.location?.address || 'No location recorded'}
+            </p>
+            {data.punchIn?.location?.latitude && (
+              <p className="text-[10px] font-bold text-slate-400 mt-2">
+                {data.punchIn.location.latitude.toFixed(6)}, {data.punchIn.location.longitude.toFixed(6)}
+              </p>
+            )}
+          </div>
+
+          {/* Punch Out Location */}
+          <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-9 h-9 rounded-xl bg-rose-50 flex items-center justify-center">
+                <MapPin size={16} className="text-rose-500" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 tracking-widest">PUNCH OUT LOCATION</p>
+                {data.punchOut?.time && (
+                  <p className="text-xs font-bold text-rose-500">
+                    {new Date(data.punchOut.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                  </p>
+                )}
+              </div>
+            </div>
+            <p className="text-sm font-bold text-slate-800 leading-relaxed">
+              {data.punchOut?.location?.address || 'No location recorded'}
+            </p>
+            {data.punchOut?.location?.latitude && (
+              <p className="text-[10px] font-bold text-slate-400 mt-2">
+                {data.punchOut.location.latitude.toFixed(6)}, {data.punchOut.location.longitude.toFixed(6)}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Logs Table Section */}
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden">
         <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/30">
@@ -264,8 +319,8 @@ const EmployeeTrackData = () => {
                     </div>
                   </td>
                   <td className="px-8 py-5">
-                    <div className="flex items-center gap-3 max-w-md">
-                      <MapPin size={14} className="text-slate-300 shrink-0" />
+                    <div className="flex items-start gap-3">
+                      <MapPin size={14} className="text-indigo-400 mt-0.5 shrink-0" />
                       <span className="text-[11px] font-bold text-slate-600 leading-relaxed">{log.address || 'Address not resolved'}</span>
                     </div>
                   </td>

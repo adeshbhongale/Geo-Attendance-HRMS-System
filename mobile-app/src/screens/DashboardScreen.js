@@ -25,7 +25,6 @@ import api from '../api/axios';
 import AttendanceMap from '../components/AttendanceMap';
 import { formatWorkingHours } from '../utils/timeFormat';
 
-import { useNavigation } from '@react-navigation/native';
 
 const DashboardScreen = ({ navigation }) => {
   const [userData, setUserData] = useState(null);
@@ -36,6 +35,10 @@ const DashboardScreen = ({ navigation }) => {
   const [userLocation, setUserLocation] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [mapFull, setMapFull] = useState(false);
+
+  useEffect(() => {
+    fetchAll();
+  }, []);
 
   const getCountdown = (shift) => {
     if (!shift) return null;
@@ -122,19 +125,34 @@ const DashboardScreen = ({ navigation }) => {
         try {
           const loc = await getCurrentLocation();
           if (loc) {
-            const geocode = await Location.reverseGeocodeAsync({
-              latitude: loc.coords.latitude,
-              longitude: loc.coords.longitude,
-            });
-            const addr = geocode[0]
-              ? `${geocode[0].street || ''}, ${geocode[0].city || ''}`
-              : 'Auto Tracked';
+            const { latitude, longitude } = loc.coords;
+            let addr = 'Auto Tracked';
 
-            await api.post('/attendance/track', {
-              latitude: loc.coords.latitude,
-              longitude: loc.coords.longitude,
-              address: addr,
-            });
+            // Use Google Geocoding API for precise address
+            try {
+              const MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+              const geoRes = await fetch(
+                `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${MAPS_KEY}`
+              );
+              const geoData = await geoRes.json();
+              if (geoData.status === 'OK' && geoData.results.length > 0) {
+                addr = geoData.results[0].formatted_address;
+              } else {
+                const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
+                if (geocode[0]) {
+                  const g = geocode[0];
+                  addr = [g.streetNumber, g.street, g.district || g.subregion, g.city, g.region, g.postalCode].filter(Boolean).join(', ');
+                }
+              }
+            } catch {
+              const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
+              if (geocode[0]) {
+                const g = geocode[0];
+                addr = [g.streetNumber, g.street, g.city, g.region, g.postalCode].filter(Boolean).join(', ');
+              }
+            }
+
+            await api.post('/attendance/track', { latitude, longitude, address: addr });
           }
         } catch (err) {
         }
@@ -142,9 +160,7 @@ const DashboardScreen = ({ navigation }) => {
     }
 
     return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
+      if (interval) clearInterval(interval);
     };
   }, [isOnDuty]);
 

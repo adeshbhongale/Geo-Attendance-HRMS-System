@@ -35,10 +35,6 @@ const UserSchema = new mongoose.Schema({
   },
   department: String,
   designation: String,
-  headquarter: {
-    type: String,
-    default: 'Ichalkaranji HQ'
-  },
   shift: {
     type: mongoose.Schema.ObjectId,
     ref: 'Shift',
@@ -60,6 +56,10 @@ const UserSchema = new mongoose.Schema({
   resetPasswordToken: String,
   resetPasswordExpire: Date,
   refreshToken: String,
+  isOnline: {
+    type: Boolean,
+    default: false,
+  },
 }, {
   timestamps: true,
 });

@@ -1,5 +1,5 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, Home, Settings2 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -9,25 +9,41 @@ import {
   View
 } from 'react-native';
 import api from '../api/axios';
+import { navigateGlobal } from '../utils/navigation';
 
-import { useNavigation } from '@react-navigation/native';
 
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+// ============================================================
+// ALL HOOKS ARE AT THE TOP LEVEL — NO try-catch AROUND HOOKS
+// This is required by the Rules of Hooks. Violating this
+// destroys the navigation context on Android.
+// ============================================================
 const MonthlyViewScreen = ({ navigation }) => {
+
+  // --- ALL HOOKS MUST BE UNCONDITIONAL AND AT TOP LEVEL ---
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [user, setUser] = useState(null);
+  const [renderError, setRenderError] = useState(null);
 
   useEffect(() => {
     fetchUserData();
     fetchMonthlyData();
   }, [currentDate]);
+  // ---------------------------------------------------------
 
   const fetchUserData = async () => {
     try {
       const res = await api.get('/auth/me');
       setUser(res.data.data);
-    } catch (err) {}
+    } catch (err) {
+      // silently ignore
+    }
   };
 
   const fetchMonthlyData = async () => {
@@ -38,6 +54,7 @@ const MonthlyViewScreen = ({ navigation }) => {
       const res = await api.get(`/attendance/monthly-view?month=${month}&year=${year}`);
       setData(res.data.data);
     } catch (err) {
+      // silently ignore
     } finally {
       setLoading(false);
     }
@@ -52,7 +69,7 @@ const MonthlyViewScreen = ({ navigation }) => {
   const renderCalendar = () => {
     if (!data) return null;
 
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
     const daysInMonth = data.daysInMonth;
     const dailyStatus = data.dailyStatus;
@@ -60,47 +77,59 @@ const MonthlyViewScreen = ({ navigation }) => {
     const calendarRows = [];
     let cells = [];
 
-    // Empty cells for first week
     for (let i = 0; i < firstDayOfMonth; i++) {
-      cells.push(<View key={`empty-${i}`} className="flex-1 h-16" />);
+      cells.push(<View key={`empty-${i}`} style={{ flex: 1, height: 64 }} />);
     }
 
-    // Days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       const status = dailyStatus[day];
-      const showDot = status && status.color && status.color !== 'transparent' && !status.isFuture;
-      
+      const isToday = status?.isToday;
+      const isSunday = new Date(currentDate.getFullYear(), currentDate.getMonth(), day).getDay() === 0;
+
+      let dotBg = 'transparent';
+      if (!isSunday && status?.status) {
+        if (['Present', 'Late', 'Half Day'].includes(status.status)) dotBg = '#10b981';
+        else if (status.status === 'Absent') dotBg = '#f43f5e';
+        else if (['On Leave', 'Leave'].includes(status.status)) dotBg = '#facc15';
+      }
+
       cells.push(
-        <View key={day} className="flex-1 h-16 items-center justify-center">
-          <Text className="text-slate-700 font-bold text-base">{day}</Text>
-          {showDot && (
-            <View 
-              style={{ backgroundColor: status.color }} 
-              className="w-2.5 h-2.5 rounded-full mt-1.5" 
-            />
-          )}
+        <View
+          key={day}
+          style={{
+            flex: 1,
+            height: 64,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: isToday ? 'rgba(99,102,241,0.06)' : 'transparent',
+            borderRadius: isToday ? 16 : 0,
+            borderWidth: isToday ? 1 : 0,
+            borderColor: isToday ? '#e0e7ff' : 'transparent',
+          }}
+        >
+          <Text style={{ color: isToday ? '#38bdf8' : '#334155', fontWeight: 'bold', fontSize: 15 }}>{day}</Text>
+          <View style={{ width: 6, height: 6, borderRadius: 3, marginTop: 3, backgroundColor: dotBg }} />
         </View>
       );
 
       if (cells.length === 7) {
-        calendarRows.push(<View key={`row-${day}`} className="flex-row">{cells}</View>);
+        calendarRows.push(<View key={`row-${day}`} style={{ flexDirection: 'row' }}>{cells}</View>);
         cells = [];
       }
     }
 
-    // Remaining cells for last week
     if (cells.length > 0) {
       while (cells.length < 7) {
-        cells.push(<View key={`empty-last-${cells.length}`} className="flex-1 h-16" />);
+        cells.push(<View key={`empty-last-${cells.length}`} style={{ flex: 1, height: 64 }} />);
       }
-      calendarRows.push(<View key="row-last" className="flex-row">{cells}</View>);
+      calendarRows.push(<View key="row-last" style={{ flexDirection: 'row' }}>{cells}</View>);
     }
 
     return (
-      <View className="bg-white rounded-3xl p-4 border border-slate-100 shadow-sm">
-        <View className="flex-row mb-4">
-          {days.map(d => (
-            <Text key={d} className="flex-1 text-center text-slate-400 font-bold text-xs">{d}</Text>
+      <View style={{ backgroundColor: 'white', borderRadius: 24, padding: 16, borderWidth: 1, borderColor: '#f1f5f9' }}>
+        <View style={{ flexDirection: 'row', marginBottom: 16 }}>
+          {daysOfWeek.map(d => (
+            <Text key={d} style={{ flex: 1, textAlign: 'center', color: '#94a3b8', fontWeight: 'bold', fontSize: 11 }}>{d}</Text>
           ))}
         </View>
         {calendarRows}
@@ -108,89 +137,122 @@ const MonthlyViewScreen = ({ navigation }) => {
     );
   };
 
-  const monthName = currentDate.toLocaleString('default', { month: 'long' });
+  // If something in the render logic fails, show fallback
+  if (renderError) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40, backgroundColor: 'white' }}>
+        <Text style={{ color: '#ef4444', fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Screen Error</Text>
+        <Text style={{ color: '#64748b', textAlign: 'center', marginBottom: 24 }}>{String(renderError)}</Text>
+        <TouchableOpacity
+          onPress={() => navigateGlobal('Main')}
+          style={{ backgroundColor: '#4f46e5', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
+        >
+          <Text style={{ color: 'white', fontWeight: 'bold' }}>Return to Dashboard</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const monthName = MONTHS[currentDate.getMonth()];
   const year = currentDate.getFullYear();
 
   return (
-    <View className="flex-1 bg-slate-50">
+    <View style={{ flex: 1, backgroundColor: '#f8fafc' }}>
       <StatusBar barStyle="light-content" />
-      
-      {/* Blue Header (Matching Image) */}
-      <View className="bg-indigo-600 pt-14 pb-6 px-6 flex-row items-center justify-between shadow-lg">
-        <View className="flex-row items-center">
-          <TouchableOpacity onPress={() => navigation.goBack()} className="mr-4">
+
+      {/* Header */}
+      <View style={{
+        backgroundColor: '#4f46e5',
+        paddingTop: 30,
+        paddingBottom: 24,
+        paddingHorizontal: 24,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+      }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity
+            onPress={() => navigateGlobal('Main')}
+            style={{ marginRight: 16 }}
+          >
             <ArrowLeft size={24} color="white" />
           </TouchableOpacity>
-          <Text className="text-white text-xl font-bold tracking-tight">Monthly View</Text>
-        </View>
-        <View className="flex-row gap-4">
-          <TouchableOpacity><Settings2 size={24} color="white" /></TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Main')}><Home size={24} color="white" /></TouchableOpacity>
+          <Text style={{ color: 'white', fontSize: 20, fontWeight: 'bold' }}>Monthly View</Text>
         </View>
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 20 }}>
-        {/* Employee Details Section */}
-        <View className="mb-6">
-          <Text className="text-slate-900 font-bold text-lg mb-2">Employee Details</Text>
-          <View className="flex-row mb-1">
-            <Text className="w-28 text-slate-400 font-bold text-sm">Name</Text>
-            <Text className="text-slate-800 font-bold text-sm">: {user?.name || '...'}</Text>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
+        {/* Employee Details */}
+        <View style={{ marginBottom: 24 }}>
+          <Text style={{ color: '#0f172a', fontWeight: 'bold', fontSize: 16, marginBottom: 8 }}>Employee Details</Text>
+          <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+            <Text style={{ width: 110, color: '#94a3b8', fontWeight: 'bold', fontSize: 13 }}>Name</Text>
+            <Text style={{ color: '#1e293b', fontWeight: 'bold', fontSize: 13 }}>: {user?.name || '...'}</Text>
           </View>
-          <View className="flex-row mb-1">
-            <Text className="w-28 text-slate-400 font-bold text-sm">Designation</Text>
-            <Text className="text-slate-800 font-bold text-sm">: {user?.role === 'admin' ? 'Administrator' : 'Employee'}</Text>
+          <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+            <Text style={{ width: 110, color: '#94a3b8', fontWeight: 'bold', fontSize: 13 }}>Designation</Text>
+            <Text style={{ color: '#1e293b', fontWeight: 'bold', fontSize: 13 }}>: {user?.role === 'admin' ? 'Administrator' : 'Employee'}</Text>
           </View>
-          <View className="flex-row mb-4">
-            <Text className="w-28 text-slate-400 font-bold text-sm">Department</Text>
-            <Text className="text-slate-800 font-bold text-sm">: {user?.department || 'General'}</Text>
-          </View>
-        </View>
-
-        {/* Summary Stats Grid */}
-        <View className="flex-row gap-3 mb-8">
-          <View className="flex-1 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm items-center">
-             <View className="flex-row items-center mb-2">
-               <View className="w-2.5 h-2.5 rounded-full bg-emerald-500 mr-2" />
-               <Text className="text-slate-800 font-bold text-xs">Present</Text>
-             </View>
-             <Text className="text-emerald-600 text-2xl font-black">{data?.summary?.present + (data?.summary?.late || 0) + (data?.summary?.halfDay || 0) || 0}</Text>
-          </View>
-          <View className="flex-1 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm items-center">
-             <View className="flex-row items-center mb-2">
-               <View className="w-2.5 h-2.5 rounded-full bg-rose-500 mr-2" />
-               <Text className="text-slate-800 font-bold text-xs">Absent</Text>
-             </View>
-             <Text className="text-rose-600 text-2xl font-black">{data?.summary?.absent || 0}</Text>
-          </View>
-          <View className="flex-1 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm items-center">
-             <View className="flex-row items-center mb-2">
-               <View className="w-2.5 h-2.5 rounded-full bg-amber-500 mr-2" />
-               <Text className="text-slate-800 font-bold text-xs">On Leave</Text>
-             </View>
-             <Text className="text-amber-600 text-2xl font-black">{data?.summary?.onLeave || 0}</Text>
+          <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+            <Text style={{ width: 110, color: '#94a3b8', fontWeight: 'bold', fontSize: 13 }}>Department</Text>
+            <Text style={{ color: '#1e293b', fontWeight: 'bold', fontSize: 13 }}>: {user?.department || 'General'}</Text>
           </View>
         </View>
 
-        {/* Date Selector Header */}
-        <View className="flex-row justify-between items-center mb-6">
-          <Text className="text-slate-900 font-black text-sm">01 {monthName.slice(0,3)} {year} - {data?.daysInMonth} {monthName.slice(0,3)} {year}</Text>
-          <View className="flex-row gap-2">
-            <TouchableOpacity onPress={() => changeMonth(-1)} className="p-1"><ChevronLeft size={20} color="#4f46e5" /></TouchableOpacity>
-            <TouchableOpacity onPress={() => changeMonth(1)} className="p-1"><ChevronRight size={20} color="#4f46e5" /></TouchableOpacity>
+        {/* Summary Stats */}
+        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 32 }}>
+          <View style={{ flex: 1, backgroundColor: 'white', padding: 16, borderRadius: 18, borderWidth: 1, borderColor: '#f1f5f9', alignItems: 'center' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#10b981', marginRight: 6 }} />
+              <Text style={{ color: '#1e293b', fontWeight: 'bold', fontSize: 11 }}>Present</Text>
+            </View>
+            <Text style={{ color: '#059669', fontSize: 24, fontWeight: 'bold' }}>
+              {(data?.summary?.present || 0) + (data?.summary?.late || 0) + (data?.summary?.halfDay || 0)}
+            </Text>
+          </View>
+          <View style={{ flex: 1, backgroundColor: 'white', padding: 16, borderRadius: 18, borderWidth: 1, borderColor: '#f1f5f9', alignItems: 'center' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#f43f5e', marginRight: 6 }} />
+              <Text style={{ color: '#1e293b', fontWeight: 'bold', fontSize: 11 }}>Absent</Text>
+            </View>
+            <Text style={{ color: '#e11d48', fontSize: 24, fontWeight: 'bold' }}>{data?.summary?.absent || 0}</Text>
+          </View>
+          <View style={{ flex: 1, backgroundColor: 'white', padding: 16, borderRadius: 18, borderWidth: 1, borderColor: '#f1f5f9', alignItems: 'center' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#facc15', marginRight: 6 }} />
+              <Text style={{ color: '#1e293b', fontWeight: 'bold', fontSize: 11 }}>Leave</Text>
+            </View>
+            <Text style={{ color: '#ca8a04', fontSize: 24, fontWeight: 'bold' }}>{data?.summary?.onLeave || 0}</Text>
           </View>
         </View>
 
-        {/* Calendar View */}
-        <View className="mb-4">
-           <Text className="text-center text-slate-800 font-bold text-lg mb-4">{monthName} {year}</Text>
-           {loading ? (
-             <View className="h-64 justify-center items-center">
-               <ActivityIndicator color="#4f46e5" size="large" />
-             </View>
-           ) : (
-             renderCalendar()
-           )}
+        {/* Month Selector */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <Text style={{ color: '#0f172a', fontWeight: 'bold', fontSize: 13 }}>
+            01 {monthName.slice(0, 3)} {year} – {data?.daysInMonth || '–'} {monthName.slice(0, 3)} {year}
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity onPress={() => changeMonth(-1)} style={{ padding: 4 }}>
+              <ChevronLeft size={20} color="#4f46e5" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => changeMonth(1)} style={{ padding: 4 }}>
+              <ChevronRight size={20} color="#4f46e5" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Calendar */}
+        <View style={{ marginBottom: 16 }}>
+          <Text style={{ textAlign: 'center', color: '#1e293b', fontWeight: 'bold', fontSize: 17, marginBottom: 16 }}>
+            {monthName} {year}
+          </Text>
+          {loading ? (
+            <View style={{ height: 256, justifyContent: 'center', alignItems: 'center' }}>
+              <ActivityIndicator color="#4f46e5" size="large" />
+            </View>
+          ) : (
+            renderCalendar()
+          )}
         </View>
       </ScrollView>
     </View>

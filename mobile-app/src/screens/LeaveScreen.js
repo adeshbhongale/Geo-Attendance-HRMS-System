@@ -7,6 +7,7 @@ import {
   Modal,
   ScrollView,
   StatusBar,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -17,7 +18,38 @@ import api from '../api/axios';
 const LEAVE_TYPES = ['Sick Leave', 'Casual Leave', 'Paid Leave'];
 const STATUS_FILTERS = ['All', 'Pending', 'Approved', 'Rejected'];
 
-import { useNavigation } from '@react-navigation/native';
+// ── Inline styles for ALL Modal content (Android Modal creates a separate React root
+//    outside NavigationContainer; NativeWind className causes context crash there) ──
+const ms = StyleSheet.create({
+  overlay:         { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  sheet:           { backgroundColor: '#fff', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, paddingBottom: 48 },
+  row:             { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  sheetTitle:      { fontSize: 20, fontWeight: 'bold', color: '#0f172a' },
+  closeBtn:        { backgroundColor: '#f1f5f9', padding: 8, borderRadius: 999 },
+  filterItem:      { paddingVertical: 14, paddingHorizontal: 20, borderRadius: 18, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  filterItemActive:{ backgroundColor: '#eef2ff', borderWidth: 1, borderColor: '#e0e7ff' },
+  filterItemIdle:  { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: 'transparent' },
+  filterText:      { fontWeight: 'bold' },
+  filterTextActive:{ color: '#4f46e5' },
+  filterTextIdle:  { color: '#475569' },
+  filterDot:       { width: 8, height: 8, borderRadius: 4, backgroundColor: '#4f46e5' },
+  // Apply Leave Modal
+  handle:          { width: 48, height: 4, backgroundColor: '#e2e8f0', borderRadius: 2, alignSelf: 'center', marginBottom: 24 },
+  label:           { fontSize: 10, fontWeight: 'bold', color: '#94a3b8', letterSpacing: 2, marginBottom: 10, marginLeft: 2 },
+  typeBtn:         { flex: 1, paddingVertical: 16, borderRadius: 18, alignItems: 'center', borderWidth: 1 },
+  typeBtnActive:   { backgroundColor: '#4f46e5', borderColor: '#4f46e5' },
+  typeBtnIdle:     { backgroundColor: '#fff', borderColor: '#e2e8f0' },
+  typeBtnText:     { fontSize: 10, fontWeight: 'bold' },
+  typeBtnTextAct:  { color: '#fff' },
+  typeBtnTextIdle: { color: '#64748b' },
+  dateBtn:         { backgroundColor: '#f8fafc', borderRadius: 18, paddingHorizontal: 16, height: 56, justifyContent: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
+  dateBtnText:     { color: '#1e293b', fontWeight: 'bold' },
+  reasonBox:       { backgroundColor: '#f8fafc', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 28, borderWidth: 1, borderColor: '#e2e8f0' },
+  submitBtn:       { backgroundColor: '#4f46e5', height: 64, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+  submitText:      { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  durationBadge:   { backgroundColor: '#eef2ff', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, marginTop: 8 },
+  durationText:    { fontSize: 10, fontWeight: 'bold', color: '#4f46e5' },
+});
 
 const LeaveScreen = ({ navigation }) => {
   const [leaves, setLeaves] = useState([]);
@@ -30,11 +62,8 @@ const LeaveScreen = ({ navigation }) => {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [historyDateFilter, setHistoryDateFilter] = useState(null);
   const [showHistoryDatePicker, setShowHistoryDatePicker] = useState(false);
-
-  // Date Picker States
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
-
   const [form, setForm] = useState({
     leaveType: 'Sick Leave',
     startDate: new Date(),
@@ -78,17 +107,14 @@ const LeaveScreen = ({ navigation }) => {
       Alert.alert('Required', 'Please enter a reason for your leave.');
       return;
     }
-
     if (form.endDate < form.startDate) {
       Alert.alert('Invalid Date', 'End date must be on or after the start date.');
       return;
     }
-
     if (balance.remaining <= 0) {
       Alert.alert('Limit Reached', 'You have already used your 3 leaves for this month.');
       return;
     }
-
     setSubmitting(true);
     try {
       await api.post('/leaves', {
@@ -110,22 +136,21 @@ const LeaveScreen = ({ navigation }) => {
 
   const getStatusStyle = (status) => {
     switch (status) {
-      case 'Approved': return { bg: 'bg-emerald-50', text: 'text-emerald-600' };
-      case 'Rejected': return { bg: 'bg-rose-50', text: 'text-rose-600' };
-      default: return { bg: 'bg-amber-50', text: 'text-amber-600' };
+      case 'Approved': return { bg: '#ecfdf5', text: '#059669' };
+      case 'Rejected': return { bg: '#fff1f2', text: '#e11d48' };
+      default:         return { bg: '#fffbeb', text: '#d97706' };
     }
   };
 
-  const formatDateLabel = (date) => {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
+  const formatDateLabel = (date) =>
+    date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   const formatLocalDate = (date) => {
     if (!date) return '';
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   };
 
   return (
@@ -137,7 +162,7 @@ const LeaveScreen = ({ navigation }) => {
         <View className="flex-row items-center">
           <TouchableOpacity
             className="w-10 h-10 rounded-xl bg-slate-50 justify-center items-center border border-slate-100 mr-4"
-            onPress={() => navigation.goBack()}
+            onPress={() => navigation.navigate('Home')}
           >
             <ArrowLeft size={20} color="#64748b" />
           </TouchableOpacity>
@@ -178,7 +203,6 @@ const LeaveScreen = ({ navigation }) => {
 
       {/* Filters Row */}
       <View className="bg-white px-6 py-4 border-b border-slate-100 flex-row gap-3">
-        {/* Status Dropdown */}
         <TouchableOpacity
           onPress={() => setShowStatusModal(true)}
           className="flex-1 bg-slate-50 h-12 rounded-2xl border border-slate-100 flex-row items-center px-4"
@@ -189,8 +213,6 @@ const LeaveScreen = ({ navigation }) => {
           </Text>
           <ChevronDown size={16} color="#94a3b8" />
         </TouchableOpacity>
-
-        {/* Date Picker */}
         <TouchableOpacity
           onPress={() => setShowHistoryDatePicker(true)}
           className="flex-1 bg-slate-50 h-12 rounded-2xl border border-slate-100 flex-row items-center px-4"
@@ -207,31 +229,31 @@ const LeaveScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Status Selection Modal */}
+      {/* ─── STATUS FILTER MODAL — ALL INLINE STYLES (no className) ─── */}
       <Modal visible={showStatusModal} transparent animationType="fade">
         <TouchableOpacity
           activeOpacity={1}
           onPress={() => setShowStatusModal(false)}
-          className="flex-1 bg-black/40 justify-end"
+          style={ms.overlay}
         >
-          <View className="bg-white rounded-t-[32px] p-6 pb-12">
-            <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-xl font-bold text-slate-900">Filter Status</Text>
-              <TouchableOpacity onPress={() => setShowStatusModal(false)} className="bg-slate-100 p-2 rounded-full">
+          <View style={ms.sheet}>
+            <View style={ms.row}>
+              <Text style={ms.sheetTitle}>Filter Status</Text>
+              <TouchableOpacity onPress={() => setShowStatusModal(false)} style={ms.closeBtn}>
                 <X size={20} color="#94a3b8" />
               </TouchableOpacity>
             </View>
+            <View style={{ height: 24 }} />
             {STATUS_FILTERS.map(s => (
               <TouchableOpacity
                 key={s}
-                onPress={() => {
-                  setFilter(s);
-                  setShowStatusModal(false);
-                }}
-                className={`py-4 px-6 rounded-2xl mb-2 flex-row justify-between items-center ${filter === s ? 'bg-indigo-50 border border-indigo-100' : 'bg-slate-50 border border-transparent'}`}
+                onPress={() => { setFilter(s); setShowStatusModal(false); }}
+                style={[ms.filterItem, filter === s ? ms.filterItemActive : ms.filterItemIdle]}
               >
-                <Text className={`font-bold ${filter === s ? 'text-indigo-600' : 'text-slate-600'}`}>{s}</Text>
-                {filter === s && <View className="w-2 h-2 rounded-full bg-indigo-600" />}
+                <Text style={[ms.filterText, filter === s ? ms.filterTextActive : ms.filterTextIdle]}>
+                  {s}
+                </Text>
+                {filter === s && <View style={ms.filterDot} />}
               </TouchableOpacity>
             ))}
           </View>
@@ -251,12 +273,12 @@ const LeaveScreen = ({ navigation }) => {
         />
       )}
 
+      {/* Leave History List */}
       <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 110 }}>
-        {/* History Header */}
         <View className="flex-row justify-between items-center mb-5">
           <View className="flex-row items-center">
             <Calendar size={16} color="#94a3b8" />
-            <Text className="text-[10px] font-bold text-slate-400 tracking-widest ml-2 ">
+            <Text className="text-[10px] font-bold text-slate-400 tracking-widest ml-2">
               {filter} RECORDS
             </Text>
           </View>
@@ -264,7 +286,7 @@ const LeaveScreen = ({ navigation }) => {
         </View>
 
         {loading ? (
-          <ActivityIndicator color="#4f46e5" size="large" className="mt-10" />
+          <ActivityIndicator color="#4f46e5" size="large" style={{ marginTop: 40 }} />
         ) : (
           leaves
             .filter(l => {
@@ -272,38 +294,30 @@ const LeaveScreen = ({ navigation }) => {
               const matchesDate = !historyDateFilter || l.startDate?.includes(formatLocalDate(historyDateFilter));
               return matchesStatus && matchesDate;
             })
-            .sort((a, b) => new Date(b.startDate) - new Date(a.startDate)) // Sort by date descending
+            .sort((a, b) => new Date(b.startDate) - new Date(a.startDate))
             .map((item, index, array) => {
-              const style = getStatusStyle(item.status);
+              const statusStyle = getStatusStyle(item.status);
               const date = new Date(item.startDate);
               const currentMonth = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-
-              // Check if this is a new month compared to the previous item
-              let showHeader = false;
-              if (index === 0) {
-                showHeader = true;
-              } else {
+              let showHeader = index === 0;
+              if (!showHeader) {
                 const prevDate = new Date(array[index - 1].startDate);
-                const prevMonth = prevDate.toLocaleString('default', { month: 'long', year: 'numeric' });
-                if (currentMonth !== prevMonth) {
+                if (prevDate.toLocaleString('default', { month: 'long', year: 'numeric' }) !== currentMonth) {
                   showHeader = true;
                 }
               }
-
               return (
                 <View key={item._id}>
                   {showHeader && (
                     <View className="flex-row items-center mt-6 mb-4">
                       <View className="h-[1px] flex-1 bg-slate-200" />
-                      <Text className="mx-4 text-[10px] font-bold text-slate-400  tracking-[2px]">
-                        {currentMonth}
-                      </Text>
+                      <Text className="mx-4 text-[10px] font-bold text-slate-400 tracking-[2px]">{currentMonth}</Text>
                       <View className="h-[1px] flex-1 bg-slate-200" />
                     </View>
                   )}
-                  <View className="bg-white p-5 rounded-2xl flex-row justify-between items-center mb-3 border border-slate-100 shadow-sm">
+                  <View className="bg-white p-5 rounded-2xl flex-row justify-between items-center mb-3 border border-slate-100">
                     <View className="flex-1">
-                      <Text className="text-base font-extrabold text-slate-800 tracking-tight">{item.leaveType}</Text>
+                      <Text className="text-base font-extrabold text-slate-800">{item.leaveType}</Text>
                       <Text className="text-xs font-bold text-slate-400 mt-1">
                         {date.toLocaleDateString()} — {new Date(item.endDate).toLocaleDateString()}
                       </Text>
@@ -318,8 +332,8 @@ const LeaveScreen = ({ navigation }) => {
                         </View>
                       </View>
                     </View>
-                    <View className={`px-3 py-2 rounded-xl ml-3 ${style.bg}`}>
-                      <Text className={`text-[10px] font-bold ${style.text}`}>{item.status}</Text>
+                    <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, marginLeft: 12, backgroundColor: statusStyle.bg }}>
+                      <Text style={{ fontSize: 10, fontWeight: 'bold', color: statusStyle.text }}>{item.status}</Text>
                     </View>
                   </View>
                 </View>
@@ -335,35 +349,40 @@ const LeaveScreen = ({ navigation }) => {
         </View>
       </ScrollView>
 
-      {/* Apply Leave Modal */}
+      {/* ─── APPLY LEAVE MODAL — ALL INLINE STYLES (no className) ─── */}
       <Modal visible={modalVisible} animationType="slide" transparent>
-        <View className="flex-1 bg-black/40 justify-end">
-          <View className="bg-white rounded-t-[32px] px-6 pt-6 pb-10 shadow-2xl">
-            <View className="items-center mb-6">
-              <View className="w-12 h-1 bg-slate-200 rounded-full mb-6" />
-              <View className="flex-row justify-between w-full items-center">
-                <Text className="text-xl font-extrabold text-slate-900">New Leave Request</Text>
-                <TouchableOpacity onPress={() => setModalVisible(false)} className="w-8 h-8 rounded-full bg-slate-100 justify-center items-center">
-                  <X size={18} color="#94a3b8" />
-                </TouchableOpacity>
-              </View>
-              <View className="mt-2 flex-row items-center">
-                <Text className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">
-                  Total Duration: {Math.ceil((form.endDate - form.startDate) / (1000 * 60 * 60 * 24)) + 1} Day(s)
-                </Text>
-              </View>
+        <View style={ms.overlay}>
+          <View style={ms.sheet}>
+            {/* Handle */}
+            <View style={ms.handle} />
+
+            {/* Title Row */}
+            <View style={[ms.row, { marginBottom: 4 }]}>
+              <Text style={ms.sheetTitle}>New Leave Request</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)} style={ms.closeBtn}>
+                <X size={18} color="#94a3b8" />
+              </TouchableOpacity>
             </View>
 
+            {/* Duration badge */}
+            <View style={ms.durationBadge}>
+              <Text style={ms.durationText}>
+                Total Duration: {Math.ceil((form.endDate - form.startDate) / (1000 * 60 * 60 * 24)) + 1} Day(s)
+              </Text>
+            </View>
+
+            <View style={{ height: 20 }} />
+
             {/* Leave Type Selector */}
-            <Text className="text-[10px] font-bold text-slate-400 tracking-widest mb-3 ml-1 ">Select Type</Text>
-            <View className="flex-row mb-6" style={{ gap: 8 }}>
+            <Text style={ms.label}>SELECT TYPE</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 24 }}>
               {LEAVE_TYPES.map((type) => (
                 <TouchableOpacity
                   key={type}
-                  className={`flex-1 py-4 rounded-2xl border items-center ${form.leaveType === type ? 'bg-indigo-600 border-indigo-600 shadow-md shadow-indigo-100' : 'bg-white border-slate-200'}`}
+                  style={[ms.typeBtn, form.leaveType === type ? ms.typeBtnActive : ms.typeBtnIdle]}
                   onPress={() => setForm({ ...form, leaveType: type })}
                 >
-                  <Text className={`text-[10px] font-bold ${form.leaveType === type ? 'text-white' : 'text-slate-500'}`}>
+                  <Text style={[ms.typeBtnText, form.leaveType === type ? ms.typeBtnTextAct : ms.typeBtnTextIdle]}>
                     {type.replace(' Leave', '')}
                   </Text>
                 </TouchableOpacity>
@@ -371,74 +390,58 @@ const LeaveScreen = ({ navigation }) => {
             </View>
 
             {/* Date Pickers */}
-            <View className="flex-row mb-6" style={{ gap: 12 }}>
-              <View className="flex-1">
-                <Text className="text-[10px] font-bold text-slate-400 tracking-widest mb-3 ml-1 ">Start Date</Text>
-                <TouchableOpacity
-                  onPress={() => setShowStartPicker(true)}
-                  className="bg-slate-50 rounded-2xl px-4 h-14 justify-center border border-slate-200"
-                >
-                  <Text className="text-slate-800 font-bold">{formatDateLabel(form.startDate)}</Text>
+            <View style={{ flexDirection: 'row', gap: 12, marginBottom: 24 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={ms.label}>START DATE</Text>
+                <TouchableOpacity onPress={() => setShowStartPicker(true)} style={ms.dateBtn}>
+                  <Text style={ms.dateBtnText}>{formatDateLabel(form.startDate)}</Text>
                 </TouchableOpacity>
               </View>
-              <View className="flex-1">
-                <Text className="text-[10px] font-bold text-slate-400 tracking-widest mb-3 ml-1 ">End Date</Text>
-                <TouchableOpacity
-                  onPress={() => setShowEndPicker(true)}
-                  className="bg-slate-50 rounded-2xl px-4 h-14 justify-center border border-slate-200"
-                >
-                  <Text className="text-slate-800 font-bold">{formatDateLabel(form.endDate)}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={ms.label}>END DATE</Text>
+                <TouchableOpacity onPress={() => setShowEndPicker(true)} style={ms.dateBtn}>
+                  <Text style={ms.dateBtnText}>{formatDateLabel(form.endDate)}</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             {/* Reason */}
-            <Text className="text-[10px] font-bold text-slate-400 tracking-widest mb-3 ml-1 ">Reason <Text className="text-rose-500">*</Text></Text>
-            <View className="bg-slate-50 rounded-2xl px-4 py-4 mb-8 border border-slate-200">
+            <Text style={ms.label}>REASON <Text style={{ color: '#f43f5e' }}>*</Text></Text>
+            <View style={ms.reasonBox}>
               <TextInput
                 placeholder="Reason for leave..."
                 value={form.reason}
                 onChangeText={(v) => setForm({ ...form, reason: v })}
                 multiline
                 numberOfLines={3}
-                className="text-slate-800 font-bold text-sm"
+                style={{ textAlignVertical: 'top', color: '#1e293b', fontWeight: 'bold', fontSize: 14 }}
                 placeholderTextColor="#cbd5e1"
-                style={{ textAlignVertical: 'top' }}
               />
             </View>
 
-            <TouchableOpacity
-              className="bg-indigo-600 h-16 rounded-2xl justify-center items-center shadow-lg shadow-indigo-200"
-              onPress={handleApply}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <Text className="text-white font-bold text-base">Submit Request</Text>
-              )}
+            {/* Submit */}
+            <TouchableOpacity style={ms.submitBtn} onPress={handleApply} disabled={submitting}>
+              {submitting
+                ? <ActivityIndicator color="white" />
+                : <Text style={ms.submitText}>Submit Request</Text>
+              }
             </TouchableOpacity>
           </View>
         </View>
 
+        {/* Date pickers inside Modal — no className used */}
         {showStartPicker && (
           <DateTimePicker
             value={form.startDate}
             mode="date"
-            onChange={(e, date) => {
-              setShowStartPicker(false);
-              if (date) setForm({ ...form, startDate: date });
-            }}
+            onChange={(e, date) => { setShowStartPicker(false); if (date) setForm({ ...form, startDate: date }); }}
           />
         )}
         {showEndPicker && (
           <DateTimePicker
             value={form.endDate}
             mode="date"
-            onChange={(e, date) => {
-              setShowEndPicker(false);
-              if (date) setForm({ ...form, endDate: date });
-            }}
+            onChange={(e, date) => { setShowEndPicker(false); if (date) setForm({ ...form, endDate: date }); }}
           />
         )}
       </Modal>

@@ -343,12 +343,18 @@ const Reports = () => {
                           <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full mt-1 inline-block ${row.timeInOutside ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>
                             {row.timeInOutside ? 'Outside' : 'Inside'}
                           </span>
+                          {row.timeInLocation && (
+                            <p className="text-[9px] text-slate-400 mt-1 leading-tight">{row.timeInLocation}</p>
+                          )}
                         </td>
                         <td className="px-6 py-5 text-center">
                           <p className="text-[11px] font-bold text-slate-700">{formatDate(row.timeOut)}</p>
                           <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full mt-1 inline-block ${row.timeOutOutside ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>
                             {row.timeOutOutside ? 'Outside' : 'Inside'}
                           </span>
+                          {row.timeOutLocation && (
+                            <p className="text-[9px] text-slate-400 mt-1 leading-tight">{row.timeOutLocation}</p>
+                          )}
                         </td>
                         <td className="px-6 py-5 text-center">
                           <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-bold tracking-widest">{row.breaksTaken} Sessions</span>
@@ -370,6 +376,9 @@ const Reports = () => {
                           <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full mt-1 inline-block ${row.timeInOutside ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>
                             {row.timeInOutside ? 'Outside' : 'Inside'}
                           </span>
+                          {row.timeInLocation && (
+                            <p className="text-[9px] text-slate-400 mt-1 leading-tight text-left max-w-[160px] mx-auto">{row.timeInLocation}</p>
+                          )}
                         </td>
                         <td className="px-6 py-5 text-center">
                           {row.timeInSelfie ? (
@@ -381,7 +390,12 @@ const Reports = () => {
                             </div>
                           ) : <span className="text-[10px] text-slate-300">NA</span>}
                         </td>
-                        <td className="px-6 py-5 text-center text-xs font-bold text-slate-700">{formatDate(row.timeOut)}</td>
+                        <td className="px-6 py-5 text-center">
+                          <p className="text-xs font-bold text-slate-700">{formatDate(row.timeOut)}</p>
+                          {row.timeOutLocation && (
+                            <p className="text-[9px] text-slate-400 mt-1 leading-tight text-left max-w-[160px] mx-auto">{row.timeOutLocation}</p>
+                          )}
+                        </td>
                         <td className="px-6 py-5 text-center">
                           {row.timeOutSelfie ? (
                             <div className="relative group/img inline-block">

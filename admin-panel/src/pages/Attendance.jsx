@@ -6,7 +6,6 @@ import {
   Calendar,
   ChevronDown,
   Loader2,
-  Search,
   TrendingUp
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -86,7 +85,6 @@ const AttendanceDashboard = () => {
   const getActiveStats = () => {
     switch (activeTab) {
       case 'Department Wise': return data?.departmentStats || [];
-      case 'Headquarter Wise': return data?.headquarterStats || [];
       case 'Shift Wise': return data?.shiftStats || [];
       default: return [];
     }
@@ -95,7 +93,6 @@ const AttendanceDashboard = () => {
   const getActiveHeader = () => {
     switch (activeTab) {
       case 'Department Wise': return 'Department Name';
-      case 'Headquarter Wise': return 'Headquarter Name';
       case 'Shift Wise': return 'Shift Name';
       default: return 'Name';
     }
@@ -107,7 +104,7 @@ const AttendanceDashboard = () => {
     <div className="space-y-8 animate-fade-up">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 px-2">
         <div>
-          <h2 className="text-xl font-bold text-slate-800 tracking-tight">Attendance Dashboard For {formatDateDisplay(selectedDate)}</h2>
+          <h2 className="text-xl font-bold text-slate-800">Attendance Dashboard For {formatDateDisplay(selectedDate)}</h2>
         </div>
         <div className="flex items-center gap-6">
           <div className="text-[11px] font-bold text-slate-500">
@@ -150,7 +147,7 @@ const AttendanceDashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Attendance Details Donut */}
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
-          <h3 className="text-[12px] font-bold text-slate-800 tracking-widest flex items-center gap-36">Attendance Details</h3>
+          <h3 className="text-[12px] font-bold text-slate-800 flex items-center gap-36">Attendance Details</h3>
           <div className="h-64 w-full relative">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -184,7 +181,7 @@ const AttendanceDashboard = () => {
 
         {/* Dynamic Wise Donut */}
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
-          <h3 className="text-[12px] font-bold text-green-600 tracking-widest text-center mb-6 uppercase">{activeTab}</h3>
+          <h3 className="text-[12px] font-bold text-green-600 text-center mb-6">{activeTab}</h3>
           <div className="h-64 w-full relative">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -203,10 +200,10 @@ const AttendanceDashboard = () => {
               </PieChart>
             </ResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="text-3xl font-black text-slate-700">
+              <span className="text-3xl font-bold text-slate-700">
                 {activeStats.reduce((acc, curr) => acc + (curr.present || 0), 0)}
               </span>
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Present</span>
+              <span className="text-[9px] font-bold text-slate-400">Total Present</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-x-8 gap-y-3 mt-8 px-4 max-h-32 overflow-y-auto no-scrollbar">
@@ -224,13 +221,13 @@ const AttendanceDashboard = () => {
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
         {/* Middle Tabs */}
         <div className="flex border-b border-slate-50 bg-slate-50/30">
-          {['Department Wise', 'Headquarter Wise', 'Shift Wise'].map((tab) => (
+          {['Department Wise', 'Shift Wise'].map((tab) => (
             <div
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-8 py-5 text-[11px] font-bold cursor-pointer transition-all border-b-2 ${activeTab === tab
-                  ? 'text-indigo-600 border-indigo-600 bg-white'
-                  : 'text-slate-400 border-transparent hover:text-slate-600'
+                ? 'text-indigo-600 border-indigo-600 bg-white'
+                : 'text-slate-400 border-transparent hover:text-slate-600'
                 }`}
             >
               {tab}

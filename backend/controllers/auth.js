@@ -18,7 +18,7 @@ exports.register = async (req, res, next) => {
       role,
     });
 
-    sendTokenResponse(user, 201, res);
+    await sendTokenResponse(user, 201, res);
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
@@ -57,7 +57,7 @@ ______________
 otp :    ${otp}
 
 ______________
-`);
+      `);
 
     res.status(200).json({
       success: true,
@@ -104,7 +104,7 @@ exports.login = async (req, res, next) => {
         return res.status(401).json({ success: false, message: 'Invalid credentials' });
       }
 
-      return sendTokenResponse(user, 200, res);
+      return await sendTokenResponse(user, 200, res);
     } else if (otp) {
       // Web panel login (uses OTP)
       if (user.role !== 'admin') {
@@ -120,7 +120,7 @@ exports.login = async (req, res, next) => {
       user.otpExpires = undefined;
       await user.save();
 
-      return sendTokenResponse(user, 200, res);
+      return await sendTokenResponse(user, 200, res);
     } else {
       return res.status(400).json({ success: false, message: 'Please provide password or OTP' });
     }
@@ -133,6 +133,10 @@ exports.login = async (req, res, next) => {
 // @route   GET /api/auth/logout
 // @access  Private
 exports.logout = async (req, res, next) => {
+  if (req.user) {
+    await User.findByIdAndUpdate(req.user.id, { isOnline: false });
+  }
+
   res.cookie('token', 'none', {
     expires: new Date(Date.now() + 10 * 1000),
     httpOnly: true,
@@ -222,7 +226,10 @@ exports.updateDetails = async (req, res, next) => {
 };
 
 // Get token from model, create cookie and send response
-const sendTokenResponse = (user, statusCode, res) => {
+const sendTokenResponse = async (user, statusCode, res) => {
+  // Update online status
+  await User.findByIdAndUpdate(user._id, { isOnline: true });
+
   // Create token
   const token = user.getSignedJwtToken();
   const refreshToken = user.getSignedRefreshToken();

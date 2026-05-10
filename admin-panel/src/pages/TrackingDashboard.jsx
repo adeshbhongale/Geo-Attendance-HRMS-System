@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Cell,
   Pie,
@@ -26,10 +26,13 @@ import CalendarPicker from '../components/CalendarPicker';
 
 const TrackingDashboard = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  // Read date from URL so it survives navigation (back from EmployeeTrackData)
+  const selectedDate = searchParams.get('date') || new Date().toISOString().split('T')[0];
+  const setSelectedDate = (date) => setSearchParams({ date }, { replace: true });
   const [showCalendar, setShowCalendar] = useState(false);
   const calendarRef = useRef(null);
 
@@ -99,7 +102,7 @@ const TrackingDashboard = () => {
 
   const DonutChart = ({ title, chartData, total }) => (
     <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
-      <h4 className="text-[11px] font-bold text-slate-400  tracking-widest mb-6">{title}</h4>
+      <h4 className="text-[11px] font-bold text-slate-400  mb-6">{title}</h4>
       <div className="h-48 relative">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -205,7 +208,7 @@ const TrackingDashboard = () => {
         <div className="p-8 border-b border-slate-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h3 className="text-xl font-bold text-slate-900 tracking-tight m-0">Present Today</h3>
-            <p className="text-slate-400 text-[10px] font-bold tracking-wider mt-1">Live staff location status</p>
+            <p className="text-slate-400 text-[10px] font-bold mt-1">Live staff location status</p>
           </div>
           <div className="relative w-full md:w-80">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -226,12 +229,12 @@ const TrackingDashboard = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/50">
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 tracking-wider border-b border-slate-100">Name</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 tracking-wider border-b border-slate-100">Department</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 tracking-wider border-b border-slate-100">Contact</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 tracking-wider border-b border-slate-100">Last Known Location</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 tracking-wider border-b border-slate-100">Distance (km)</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 tracking-wider border-b border-slate-100 text-center">Status</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 border-b border-slate-100">Name</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 border-b border-slate-100">Department</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 border-b border-slate-100">Contact</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 border-b border-slate-100">Last Known Location</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 border-b border-slate-100">Distance (km)</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 border-b border-slate-100 text-center">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -264,9 +267,12 @@ const TrackingDashboard = () => {
                   </td>
                   <td className="px-6 py-4 max-w-xs">
                     <div className="flex flex-col gap-1">
-                      <p className="text-[11px] font-bold text-slate-700 line-clamp-1">{emp.lastKnownLocation?.address || 'Location unknown'}</p>
+                      <div className="flex items-start gap-2">
+                        <MapPin size={12} className="text-indigo-400 mt-0.5 shrink-0" />
+                        <p className="text-[11px] font-bold text-slate-700 leading-relaxed">{emp.lastKnownLocation?.address || 'Location unknown'}</p>
+                      </div>
                       {emp.lastKnownLocation?.time && (
-                        <span className="text-[9px] font-bold text-slate-400">
+                        <span className="text-[9px] font-bold text-slate-400 pl-4">
                           {new Date(emp.lastKnownLocation.time).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         </span>
                       )}
@@ -314,7 +320,7 @@ const TrackingDashboard = () => {
 
         {/* Pagination */}
         <div className="p-6 border-t border-slate-50 flex items-center justify-between bg-slate-50/30">
-          <p className="text-[10px] font-bold text-slate-400  tracking-widest">
+          <p className="text-[10px] font-bold text-slate-400 ">
             Page {currentPage} of {totalPages || 1}
           </p>
           <div className="flex gap-2">

@@ -1,5 +1,4 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useNavigation } from '@react-navigation/native';
 import { ArrowLeft, Calendar, ChevronDown, Clock, Filter, RotateCcw, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
@@ -100,7 +99,7 @@ const ShiftManagementScreen = ({ navigation }) => {
         <View className="flex-row items-center">
           <TouchableOpacity
             className="w-10 h-10 rounded-xl bg-slate-50 justify-center items-center border border-slate-100 mr-4"
-            onPress={() => navigation.goBack()}
+            onPress={() => navigation.navigate('Home')}
           >
             <ArrowLeft size={20} color="#64748b" />
           </TouchableOpacity>

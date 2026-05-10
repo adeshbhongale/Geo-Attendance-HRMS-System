@@ -241,7 +241,7 @@ exports.getTrackingStats = async (req, res, next) => {
           longitude: att.punchIn?.location?.longitude
         },
         distance: att.totalDistance || 0,
-        status: att.signalStatus || (Math.random() > 0.1 ? 'online' : 'offline'),
+        status: att.user.isOnline ? 'online' : 'offline',
         attendanceStatus: att.status
       };
     });
@@ -337,7 +337,7 @@ exports.getAttendanceDashboard = async (req, res, next) => {
     };
 
     const departmentStats = await getStatsByField('department');
-    const headquarterStats = await getStatsByField('headquarter');
+
     const shiftStats = await getStatsByField('shift', true);
 
     res.status(200).json({
@@ -351,7 +351,6 @@ exports.getAttendanceDashboard = async (req, res, next) => {
           total: totalEmployees
         },
         departmentStats,
-        headquarterStats,
         shiftStats
       }
     });
@@ -428,7 +427,6 @@ exports.getEmployeeReports = async (req, res, next) => {
         department: emp.department,
         designation: emp.designation,
         shift: emp.shift?.name || 'NA',
-        headquarter: 'Main HQ',
         timeIn: a.punchIn?.time,
         timeInLocation: a.punchIn?.location?.address,
         timeInSelfie: a.punchIn?.selfie,
@@ -464,29 +462,41 @@ exports.getEmployeeReports = async (req, res, next) => {
 // @access  Private/Admin
 exports.getEmployeePersonalDetails = async (req, res, next) => {
   try {
+    const { startDate, endDate } = req.query;
     const user = await User.findById(req.params.userId).select('-password');
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    const attendance = await Attendance.find({ user: user._id }).sort({ date: -1 });
-    const Leave = require('../models/Leave');
-    const leaves = await Leave.find({ user: user._id, status: 'Approved' });
+    let query = { user: user._id };
+    if (startDate && endDate) {
+      query.date = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      };
+    }
 
-    // Calculate work days dynamic based on tenure (last 30 days)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const attendance = await Attendance.find(query).sort({ date: -1 });
+    const Leave = require('../models/Leave');
     
-    const joinDate = user.createdAt || thirtyDaysAgo;
-    const effectiveStartDate = joinDate > thirtyDaysAgo ? joinDate : thirtyDaysAgo;
+    let leaveQuery = { user: user._id, status: 'Approved' };
+    if (startDate && endDate) {
+      leaveQuery.$or = [
+        { startDate: { $gte: new Date(startDate), $lte: new Date(endDate) } },
+        { endDate: { $gte: new Date(startDate), $lte: new Date(endDate) } }
+      ];
+    }
+    const leaves = await Leave.find(leaveQuery);
+
+    // Calculate dynamic range stats
+    const start = startDate ? new Date(startDate) : new Date(new Date().setDate(new Date().getDate() - 30));
+    const end = endDate ? new Date(endDate) : new Date();
+    const diffTime = Math.abs(end - start);
+    const totalDaysInPeriod = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
     
-    const now = new Date();
-    const diffTime = Math.abs(now - effectiveStartDate);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    const totalDays = Math.min(30, diffDays);
     const presentDays = attendance.length;
     const lateCount = attendance.filter(a => a.status === 'Late').length;
+    const halfDayCount = attendance.filter(a => a.status === 'Half Day').length;
     const approvedLeaves = leaves.length;
     
     // Calculate total break time in minutes
@@ -502,12 +512,12 @@ exports.getEmployeePersonalDetails = async (req, res, next) => {
       data: {
         employee: user,
         summary: {
-          workDays: totalDays,
+          totalDays: totalDaysInPeriod,
           presentDays: presentDays,
           lateCount: lateCount,
+          halfDayCount: halfDayCount,
           approvedLeaves: approvedLeaves,
-          notMarked: Math.max(0, totalDays - presentDays - approvedLeaves),
-          expectedWorkHours: totalDays * 8, // Dynamic based on tenure
+          absentCount: Math.max(0, totalDaysInPeriod - presentDays - approvedLeaves),
           actualWorkedHours: netWorkedHours,
           totalBreakMinutes: totalBreakMinutes
         },
