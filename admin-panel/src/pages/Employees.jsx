@@ -1,4 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   AlertCircle,
   ArrowUp,
@@ -6,10 +8,12 @@ import {
   ChevronDown,
   ChevronLeft, ChevronRight,
   Clock,
+  Copy,
   Download,
   Edit2,
   Eye,
   EyeOff,
+  FileText,
   Filter,
   Loader2, Mail, Phone,
   Save,
@@ -27,6 +31,19 @@ import CalendarPicker from '../components/CalendarPicker';
 
 const Employees = () => {
   const navigate = useNavigate();
+
+  const formatTime12h = (timeStr) => {
+    if (!timeStr || timeStr === 'NA') return 'NA';
+    try {
+      const [hours, minutes] = timeStr.split(':');
+      const h = parseInt(hours);
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      return `${h12}:${minutes} ${ampm}`;
+    } catch (e) {
+      return timeStr;
+    }
+  };
   const [employees, setEmployees] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -47,6 +64,7 @@ const Employees = () => {
     shift: 'all'
   });
   const [activeFilterDropdown, setActiveFilterDropdown] = useState(null);
+  const [activeModalDropdown, setActiveModalDropdown] = useState(null);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -131,6 +149,11 @@ const Employees = () => {
     }
   };
 
+  const handleCopy = (text) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Text copied');
+  };
+
   const handleOpenModal = (emp = null) => {
     setShowPassword(false);
     if (emp) {
@@ -186,17 +209,81 @@ const Employees = () => {
       setIsExporting(false);
     }
   };
-  
+
+  const handleExportPDF = () => {
+    try {
+      setIsExporting(true);
+      const doc = new jsPDF('l', 'mm', 'a4');
+      
+      // Header Section
+      doc.setFontSize(22);
+      doc.setTextColor(30, 41, 59); // slate-800
+      doc.text('Employee List', 14, 22);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100, 116, 139); // slate-500
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
+
+      const tableData = filteredEmployees.map(emp => [
+        emp._id,
+        emp.name,
+        emp.email,
+        emp.mobile,
+        emp.department || 'N/A',
+        emp.designation || 'N/A',
+        emp.shift?.name || 'General Shift',
+        new Date(emp.createdAt).toLocaleDateString()
+      ]);
+
+      autoTable(doc, {
+        startY: 38,
+        head: [['Staff ID', 'Name', 'Email', 'Mobile', 'Department', 'Designation', 'Shift', 'Joined']],
+        body: tableData,
+        theme: 'striped',
+        headStyles: { 
+          fillColor: [79, 70, 229], // indigo-600
+          fontSize: 9,
+          fontStyle: 'bold',
+          halign: 'center'
+        },
+        bodyStyles: { 
+          fontSize: 8,
+          textColor: [51, 65, 85], // slate-700
+          halign: 'center'
+        },
+        columnStyles: {
+          0: { cellWidth: 35, fontStyle: 'bold' },
+          1: { cellWidth: 35 },
+          2: { cellWidth: 45 },
+          3: { cellWidth: 30 }
+        },
+        margin: { top: 40 },
+        didDrawPage: (data) => {
+          doc.setFontSize(8);
+          doc.text(`Page ${data.pageNumber}`, doc.internal.pageSize.width - 20, doc.internal.pageSize.height - 10);
+        }
+      });
+
+      doc.save('Employee_Directory_Report.pdf');
+      toast.success('PDF report generated');
+    } catch (err) {
+      console.error('PDF Export Error:', err);
+      toast.error('Failed to export PDF');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const handleBulkUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const formData = new FormData();
-    formData.append('file', file);
+    const bulkFormData = new FormData();
+    bulkFormData.append('file', file);
 
     try {
       setIsUploading(true);
-      const res = await api.post('/employees/bulk-upload', formData, {
+      const res = await api.post('/employees/bulk-upload', bulkFormData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       toast.success(res.data.message || 'Staff members uploaded successfully');
@@ -288,7 +375,7 @@ const Employees = () => {
   }
 
   return (
-    <div className="space-y-6 md:space-y-8 animate-fade-up">
+    <div className="space-y-6 md:space-y-8 animate-fade-up max-w-[calc(100vw-350px)] lg:max-w-full overflow-hidden">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight m-0">Staff Directory</h2>
@@ -310,14 +397,26 @@ const Employees = () => {
             {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
             Bulk Upload
           </button>
-          <button
-            className="flex items-center gap-2 bg-white text-slate-700 border border-slate-200 px-5 py-3 rounded-2xl font-bold text-xs shadow-sm hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
-            onClick={handleExport}
-            disabled={isExporting}
-          >
-            {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-            Export Data
-          </button>
+          <div className="relative group/export">
+            <button
+              className="flex items-center gap-2 bg-white text-slate-700 border border-slate-200 px-5 py-3 rounded-2xl font-bold text-xs shadow-sm hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
+              disabled={isExporting}
+            >
+              {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+              Export Data
+              <ChevronDown size={14} className="text-slate-400 group-hover/export:rotate-180 transition-transform" />
+            </button>
+            <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl z-[150] p-2 opacity-0 invisible group-hover/export:opacity-100 group-hover/export:visible transition-all">
+              <button onClick={handleExport} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-600 transition-all text-xs font-bold">
+                <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600"><Download size={14} /></div>
+                Excel Export
+              </button>
+              <button onClick={handleExportPDF} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-rose-50 text-slate-700 hover:text-rose-600 transition-all text-xs font-bold">
+                <div className="p-2 bg-rose-100 rounded-lg text-rose-600"><FileText size={14} /></div>
+                PDF Export
+              </button>
+            </div>
+          </div>
           <button
             className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
             onClick={() => handleOpenModal()}
@@ -328,69 +427,47 @@ const Employees = () => {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
+      <div className="flex flex-col lg:flex-row items-center gap-6 bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-4 flex-1 w-full sm:w-auto">
+          <div className="flex-1 min-w-[140px] bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center text-center">
+            <div className="text-xl font-bold text-slate-900 tracking-tighter">{stats.total}</div>
+            <div className="text-[9px] font-bold text-slate-400 tracking-widest mt-1">Total Staff</div>
+          </div>
+          <div className="flex-1 min-w-[140px] bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50 flex flex-col items-center justify-center text-center">
+            <div className="text-xl font-bold text-indigo-600 tracking-tighter">{stats.active}</div>
+            <div className="text-[9px] font-bold text-indigo-400 tracking-widest mt-1">Online Sessions</div>
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto">
           <div className="relative" ref={calendarRef}>
             <div
-              className="flex items-center gap-3 bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm cursor-pointer hover:bg-slate-50 transition-all"
+              className="flex items-center gap-3 bg-white border border-slate-200 px-5 py-3 rounded-2xl shadow-sm cursor-pointer hover:bg-slate-50 transition-all min-w-[160px]"
               onClick={() => setShowCalendar(!showCalendar)}
             >
               <Calendar size={14} className="text-indigo-600" />
               <span className="text-xs font-bold text-slate-700">{selectedDate}</span>
-              <ChevronDown size={12} className="text-slate-400" />
+              <ChevronDown size={14} className="text-slate-400" />
             </div>
-
             <AnimatePresence>
               {showCalendar && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 10 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="absolute top-full left-0 mt-2 z-[110] bg-white border border-slate-200 rounded-2xl shadow-2xl p-4"
-                >
-                  <CalendarPicker
-                    selectedDate={selectedDate}
-                    onSelect={(date) => {
-                      setSelectedDate(date);
-                      setShowCalendar(false);
-                    }}
-                    onClose={() => setShowCalendar(false)}
-                  />
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 10 }} exit={{ opacity: 0, y: 10 }} className="absolute top-full right-0 mt-2 z-[110] bg-white border border-slate-200 rounded-2xl shadow-2xl p-4">
+                  <CalendarPicker selectedDate={selectedDate} onSelect={(date) => { setSelectedDate(date); setShowCalendar(false); }} onClose={() => setShowCalendar(false)} />
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
 
-          {(filters.status !== 'all' || filters.department !== 'all' || filters.shift !== 'all') && (
-            <button
-              onClick={() => setFilters({ status: 'all', department: 'all', shift: 'all' })}
-              className="text-[10px] font-bold text-rose-500 hover:text-rose-600 bg-rose-50 px-3 py-2 rounded-lg border border-rose-100 transition-all"
-            >
-              Clear All Filters
-            </button>
-          )}
-        </div>
-
-        <div className="relative w-full sm:w-80">
-          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search by name, email..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="bg-white border border-slate-200 pl-12 pr-4 py-3.5 rounded-2xl outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition-all w-full text-sm font-bold text-slate-800 placeholder:text-slate-400 shadow-sm"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        <div className="glass-card p-6 border-l-4 border-indigo-600">
-          <div className="text-3xl font-bold text-slate-900 tracking-tighter">{stats.total}</div>
-          <div className="text-[10px] font-bold text-slate-400 tracking-wider">Total Staff Registered</div>
-        </div>
-        <div className="glass-card p-6 border-l-4 border-emerald-500">
-          <div className="text-3xl font-bold text-slate-900 tracking-tighter">{stats.active}</div>
-          <div className="text-[10px] font-bold text-slate-400 tracking-wider">Online Mobile Sessions</div>
+          <div className="relative w-full sm:w-80">
+            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search staff any details..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="bg-slate-50 border border-slate-100 pl-12 pr-4 py-3 rounded-2xl outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition-all w-full text-xs font-bold text-slate-800"
+            />
+          </div>
         </div>
       </div>
 
@@ -398,18 +475,18 @@ const Employees = () => {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="text-left bg-slate-50/50">
-                <th className="px-6 md:px-8 py-6 text-slate-500 text-[11px] font-bold tracking-tight min-w-[280px]">Staff Member</th>
-                <th className="px-6 py-6 text-slate-500 text-[11px] font-bold tracking-tight min-w-[200px]">Contact Details</th>
+              <tr className="text-center bg-slate-50/50">
+                <th className="px-6 md:px-8 py-6 text-slate-500 text-[10px] font-bold tracking-tight min-w-[240px] text-center">Staff Member</th>
+                <th className="px-6 py-6 text-slate-500 text-[10px] font-bold tracking-tight min-w-[180px] text-center">Contact Details</th>
 
-                <th className="px-6 py-6 text-slate-500 text-[11px] font-bold tracking-tight relative group min-w-[180px]">
-                  <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'dept' ? null : 'dept')}>
+                <th className="px-6 py-6 text-slate-500 text-[11px] font-bold tracking-tight relative group min-w-[180px] text-center">
+                  <div className="flex items-center justify-center gap-2 cursor-pointer" onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'dept' ? null : 'dept')}>
                     Department
                     <ArrowUp size={12} className={`transition-transform ${activeFilterDropdown === 'dept' ? '' : 'rotate-180'} text-indigo-500`} />
                   </div>
                   <AnimatePresence>
                     {activeFilterDropdown === 'dept' && (
-                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-100 rounded-xl shadow-2xl z-[100] p-2" ref={filterRef}>
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-48 bg-white border border-slate-100 rounded-xl shadow-2xl z-[150] p-2" ref={filterRef}>
                         <div className={`p-2 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-indigo-50 ${filters.department === 'all' ? 'text-indigo-600 bg-indigo-50' : 'text-slate-600'}`} onClick={() => { setFilters({ ...filters, department: 'all' }); setActiveFilterDropdown(null); }}>All Departments</div>
                         {distinctDepartments.map(dept => (
                           <div key={dept} className={`p-2 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-indigo-50 ${filters.department === dept ? 'text-indigo-600 bg-indigo-50' : 'text-slate-600'}`} onClick={() => { setFilters({ ...filters, department: dept }); setActiveFilterDropdown(null); }}>{dept}</div>
@@ -419,14 +496,14 @@ const Employees = () => {
                   </AnimatePresence>
                 </th>
 
-                <th className="px-6 py-6 text-slate-500 text-[11px] font-bold tracking-tight relative min-w-[180px]">
-                  <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'shift' ? null : 'shift')}>
-                    Shift
+                <th className="px-6 py-6 text-slate-500 text-[11px] font-bold tracking-tight relative min-w-[180px] text-center">
+                  <div className="flex items-center justify-center gap-2 cursor-pointer" onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'shift' ? null : 'shift')}>
+                    Shift & Time
                     <ArrowUp size={12} className={`transition-transform ${activeFilterDropdown === 'shift' ? '' : 'rotate-180'} text-indigo-500`} />
                   </div>
                   <AnimatePresence>
                     {activeFilterDropdown === 'shift' && (
-                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-100 rounded-xl shadow-2xl z-[100] p-2" ref={filterRef}>
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-48 bg-white border border-slate-100 rounded-xl shadow-2xl z-[150] p-2" ref={filterRef}>
                         <div className={`p-2 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-indigo-50 ${filters.shift === 'all' ? 'text-indigo-600 bg-indigo-50' : 'text-slate-600'}`} onClick={() => { setFilters({ ...filters, shift: 'all' }); setActiveFilterDropdown(null); }}>All Shifts</div>
                         {shifts.map(shift => (
                           <div key={shift._id} className={`p-2 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-indigo-50 ${filters.shift === shift._id ? 'text-indigo-600 bg-indigo-50' : 'text-slate-600'}`} onClick={() => { setFilters({ ...filters, shift: shift._id }); setActiveFilterDropdown(null); }}>{shift.name}</div>
@@ -436,14 +513,18 @@ const Employees = () => {
                   </AnimatePresence>
                 </th>
 
-                <th className="px-6 py-6 text-slate-500 text-[11px] font-bold tracking-tight text-center relative min-w-[140px]">
+                <th className="px-6 py-6 text-slate-500 text-[11px] font-bold tracking-tight text-center relative min-w-[100px]">
+                  Joining Date
+                </th>
+
+                <th className="px-6 py-6 text-slate-500 text-[11px] font-bold tracking-tight text-center relative min-w-[100px]">
                   <div className="flex items-center justify-center gap-2 cursor-pointer" onClick={() => setActiveFilterDropdown(activeFilterDropdown === 'status' ? null : 'status')}>
                     Status
                     <ArrowUp size={12} className={`transition-transform ${activeFilterDropdown === 'status' ? '' : 'rotate-180'} text-indigo-500`} />
                   </div>
                   <AnimatePresence>
                     {activeFilterDropdown === 'status' && (
-                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-40 bg-white border border-slate-100 rounded-xl shadow-2xl z-[100] p-2" ref={filterRef}>
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-40 bg-white border border-slate-100 rounded-xl shadow-2xl z-[150] p-2" ref={filterRef}>
                         <div className={`p-2 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-indigo-50 ${filters.status === 'all' ? 'text-indigo-600 bg-indigo-50' : 'text-slate-600'}`} onClick={() => { setFilters({ ...filters, status: 'all' }); setActiveFilterDropdown(null); }}>All Status</div>
                         <div className={`p-2 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-indigo-50 ${filters.status === 'online' ? 'text-indigo-600 bg-indigo-50' : 'text-slate-600'}`} onClick={() => { setFilters({ ...filters, status: 'online' }); setActiveFilterDropdown(null); }}>Online</div>
                         <div className={`p-2 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-indigo-50 ${filters.status === 'offline' ? 'text-indigo-600 bg-indigo-50' : 'text-slate-600'}`} onClick={() => { setFilters({ ...filters, status: 'offline' }); setActiveFilterDropdown(null); }}>Offline</div>
@@ -452,7 +533,7 @@ const Employees = () => {
                   </AnimatePresence>
                 </th>
 
-                <th className="px-6 md:px-8 py-6 text-slate-500 text-[11px] font-bold tracking-tight text-right">Actions</th>
+                <th className="px-6 py-6 text-slate-500 text-[10px] font-bold tracking-tight text-right w-20">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -486,40 +567,59 @@ const Employees = () => {
                             className="cursor-pointer"
                             onClick={() => navigate(`/employee/${emp._id}`)}
                           >
-                            <div className="font-bold text-slate-900 text-sm tracking-tight hover:text-indigo-600 transition-colors">{emp.name}</div>
-                            <div className="text-[10px] text-slate-400 font-bold tracking-tight mt-0.5 ">Staff ID: {emp._id.slice(-6)}</div>
+                            <div className="font-bold text-slate-900 text-[13px] tracking-tight hover:text-indigo-600 transition-colors">{emp.name}</div>
+                            <div className="flex items-center gap-2 mt-0.5 group/id">
+                              <span className="text-[9px] text-slate-400 font-bold tracking-tight opacity-50">ID: {emp._id.slice(-8)}</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleCopy(emp._id); }}
+                                className="opacity-0 group-hover/id:opacity-100 p-0.5 hover:bg-slate-200 rounded transition-all text-slate-400 hover:text-indigo-600"
+                                title="Copy Full ID"
+                              >
+                                <Copy size={8} />
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-6">
-                        <div className="flex flex-col gap-2">
-                          <div className="text-[11px] text-slate-600 font-bold flex items-center gap-2.5 tracking-tight">
-                            <div className="p-1 bg-slate-50 rounded-md"><Mail size={12} className="text-slate-400" /></div> {emp.email}
-                          </div>
-                          <div className="text-[11px] text-slate-500 font-bold flex items-center gap-2.5 tracking-tight">
-                            <div className="p-1 bg-slate-50 rounded-md"><Phone size={12} className="text-slate-400" /></div> {emp.mobile}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-6">
-                        <div className="font-bold text-slate-800 text-[11px] tracking-tight">{emp.designation || 'Staff Member'}</div>
-                        <div className="text-[10px] text-indigo-600 font-bold tracking-widest mt-1.5  opacity-80">{emp.department || 'General'}</div>
-                      </td>
-                      <td className="px-6 py-6">
-                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-100/50 w-fit">
-                          <Clock size={12} className="text-indigo-500" />
-                          <span className="text-[10px] font-bold text-slate-600 tracking-tight">{emp.shift?.name || 'General Shift'}</span>
                         </div>
                       </td>
                       <td className="px-6 py-6 text-center">
-                        <span className={`px-4 py-2 rounded-xl text-[10px] font-bold tracking-tight border shadow-sm ${emp.isOnline
+                        <div className="flex flex-col gap-1.5 items-center">
+                          <div className="text-[10px] text-slate-600 font-bold flex items-center gap-2 tracking-tight group/copy">
+                            <div className="p-0.5 bg-slate-50 rounded"><Mail size={10} className="text-slate-400" /></div> {emp.email}
+                            <button onClick={(e) => { e.stopPropagation(); handleCopy(emp.email); }} className="opacity-0 group-hover/copy:opacity-100 p-0.5 hover:bg-indigo-50 rounded text-indigo-400 transition-all"><Copy size={8} /></button>
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-bold flex items-center gap-2 tracking-tight group/copy">
+                            <div className="p-0.5 bg-slate-50 rounded"><Phone size={10} className="text-slate-400" /></div> {emp.mobile}
+                            <button onClick={(e) => { e.stopPropagation(); handleCopy(emp.mobile); }} className="opacity-0 group-hover/copy:opacity-100 p-0.5 hover:bg-indigo-50 rounded text-indigo-400 transition-all"><Copy size={8} /></button>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-6 text-center">
+                        <div className="font-bold text-slate-800 text-[10px] tracking-tight">{emp.designation || 'Staff Member'}</div>
+                        <div className="text-[9px] text-indigo-600 font-bold tracking-widest mt-1 opacity-80">{emp.department || 'General'}</div>
+                      </td>
+                      <td className="px-6 py-6">
+                        <div className="flex flex-col items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-slate-50 border border-slate-100/50 w-full">
+                          <div className="flex items-center gap-1.5">
+                            <Clock size={10} className="text-indigo-500" />
+                            <span className="text-[9px] font-bold text-slate-600 tracking-tight">{emp.shift?.name || 'General Shift'}</span>
+                          </div>
+                          <div className="text-[8px] font-bold text-slate-400 bg-white px-1.5 py-0.5 rounded-md border border-slate-100">
+                            {formatTime12h(emp.shift?.startTime || '09:00')} - {formatTime12h(emp.shift?.endTime || '18:00')}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-6 text-center">
+                        <div className="text-[10px] font-bold text-slate-600">{new Date(emp.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                      </td>
+                      <td className="px-4 py-6 text-center">
+                        <span className={`px-3 py-1.5 rounded-xl text-[9px] font-bold tracking-tight border shadow-sm ${emp.isOnline
                           ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
                           : 'bg-slate-100 text-slate-400 border-slate-200'
                           }`}>
                           {emp.isOnline ? 'Online' : 'Offline'}
                         </span>
                       </td>
-                      <td className="px-6 md:px-8 py-6 text-right">
+                      <td className="px-4 py-6 text-right">
                         <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             className="p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-indigo-600 hover:text-white transition-all shadow-sm active:scale-90"
@@ -543,8 +643,8 @@ const Employees = () => {
         </div>
 
         {/* Pagination Controls */}
-        <div className="px-8 py-8 border-t border-slate-50 flex items-center justify-between bg-slate-50/20">
-          <p className="text-[10px] font-bold text-slate-400 tracking-widest">
+        <div className="px-8 py-8 border-t border-slate-50 flex items-center justify-center relative bg-slate-50/20">
+          <p className="absolute left-8 text-[10px] font-bold text-slate-400 tracking-widest hidden sm:block">
             Page {currentPage} of {totalPages || 1}
           </p>
           <div className="flex gap-2.5">
@@ -568,12 +668,12 @@ const Employees = () => {
 
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-0 sm:p-4">
+          <div className="fixed inset-0 z-[2000] flex items-start justify-center bg-slate-900/40 backdrop-blur-md p-4 pt-10 sm:pt-20 overflow-y-auto">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.95, y: -20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white w-full h-full sm:h-auto sm:max-w-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col"
+              exit={{ opacity: 0, scale: 0.95, y: -20 }}
+              className="bg-white w-full sm:max-w-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col mb-10"
             >
               <div className="bg-white px-8 py-6 border-b border-slate-100 flex justify-between items-center">
                 <div>
@@ -625,41 +725,97 @@ const Employees = () => {
                     </div>
                   </div>
                   <div className="space-y-3">
-                    <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Department</label>
-                    <input type="text" value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800" placeholder="e.g., Operations" />
-                  </div>
-                  <div className="space-y-3">
                     <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Designation</label>
                     <input type="text" value={formData.designation} onChange={(e) => setFormData({ ...formData, designation: e.target.value })} className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800" placeholder="e.g., Senior Analyst" />
                   </div>
 
+                  {/* Custom Dropdowns Section */}
+                  <div className="space-y-3">
+                    <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Department</label>
+                    <div className="relative">
+                      <div
+                        onClick={() => setActiveModalDropdown(activeModalDropdown === 'dept' ? null : 'dept')}
+                        className="w-full bg-slate-50 border-2 border-transparent hover:border-indigo-100 px-5 py-4 rounded-2xl cursor-pointer flex justify-between items-center transition-all"
+                      >
+                        <span className="text-sm font-bold text-slate-800">{formData.department || 'Select Department'}</span>
+                        <ChevronDown size={18} className={`text-slate-400 transition-transform ${activeModalDropdown === 'dept' ? 'rotate-180' : ''}`} />
+                      </div>
+                      <AnimatePresence>
+                        {activeModalDropdown === 'dept' && (
+                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute z-[2100] top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl p-2 max-h-48 overflow-y-auto no-scrollbar">
+                            {distinctDepartments.length === 0 ? (
+                              <div className="p-3 text-[11px] font-bold text-slate-400 text-center">No existing departments</div>
+                            ) : (
+                              distinctDepartments.map(dept => (
+                                <div key={dept} onClick={() => { setFormData({ ...formData, department: dept }); setActiveModalDropdown(null); }} className="p-3 rounded-xl hover:bg-indigo-50 text-xs font-bold text-slate-600 hover:text-indigo-600 cursor-pointer transition-all flex items-center justify-between">
+                                  {dept}
+                                  {formData.department === dept && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
+                                </div>
+                              ))
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+
                   <div className="space-y-3">
                     <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Work Shift</label>
-                    <div className="relative group">
-                      <select
-                        value={formData.shift}
-                        onChange={(e) => setFormData({ ...formData, shift: e.target.value })}
-                        className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800 appearance-none"
+                    <div className="relative">
+                      <div
+                        onClick={() => setActiveModalDropdown(activeModalDropdown === 'shift' ? null : 'shift')}
+                        className="w-full bg-slate-50 border-2 border-transparent hover:border-indigo-100 px-5 py-4 rounded-2xl cursor-pointer flex justify-between items-center transition-all"
                       >
-                        <option value="">General Shift</option>
-                        {shifts.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                      </select>
-                      <ChevronDown size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-focus-within:text-indigo-600 transition-colors" />
+                        <span className="text-sm font-bold text-slate-800">
+                          {shifts.find(s => s._id === formData.shift)?.name || 'Select Shift'}
+                        </span>
+                        <ChevronDown size={18} className={`text-slate-400 transition-transform ${activeModalDropdown === 'shift' ? 'rotate-180' : ''}`} />
+                      </div>
+                      <AnimatePresence>
+                        {activeModalDropdown === 'shift' && (
+                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute z-[2100] top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl p-2 max-h-48 overflow-y-auto no-scrollbar">
+                            {shifts.map(s => (
+                              <div key={s._id} onClick={() => { setFormData({ ...formData, shift: s._id }); setActiveModalDropdown(null); }} className="p-3 rounded-xl hover:bg-indigo-50 text-xs font-bold text-slate-600 hover:text-indigo-600 cursor-pointer transition-all">
+                                <div className="flex items-center justify-between">
+                                  <span>{s.name}</span>
+                                  {formData.shift === s._id && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
+                                </div>
+                                <div className="text-[10px] text-slate-400 mt-1">{formatTime12h(s.startTime)} - {formatTime12h(s.endTime)}</div>
+                              </div>
+                            ))}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
 
                   <div className="space-y-3">
                     <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Access Role</label>
-                    <div className="relative group">
-                      <select
-                        value={formData.role}
-                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                        className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800 appearance-none"
+                    <div className="relative">
+                      <div
+                        onClick={() => setActiveModalDropdown(activeModalDropdown === 'role' ? null : 'role')}
+                        className="w-full bg-slate-50 border-2 border-transparent hover:border-indigo-100 px-5 py-4 rounded-2xl cursor-pointer flex justify-between items-center transition-all"
                       >
-                        <option value="employee">Staff Member</option>
-                        <option value="admin">Administrator</option>
-                      </select>
-                      <ChevronDown size={18} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-focus-within:text-indigo-600 transition-colors" />
+                        <span className="text-sm font-bold text-slate-800">
+                          {formData.role === 'admin' ? 'Administrator' : 'Staff Member'}
+                        </span>
+                        <ChevronDown size={18} className={`text-slate-400 transition-transform ${activeModalDropdown === 'role' ? 'rotate-180' : ''}`} />
+                      </div>
+                      <AnimatePresence>
+                        {activeModalDropdown === 'role' && (
+                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute z-[2100] top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl p-2">
+                            {[
+                              { id: 'employee', label: 'Staff Member' },
+                              { id: 'admin', label: 'Administrator' }
+                            ].map(r => (
+                              <div key={r.id} onClick={() => { setFormData({ ...formData, role: r.id }); setActiveModalDropdown(null); }} className="p-3 rounded-xl hover:bg-indigo-50 text-xs font-bold text-slate-600 hover:text-indigo-600 cursor-pointer transition-all flex items-center justify-between">
+                                {r.label}
+                                {formData.role === r.id && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
+                              </div>
+                            ))}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
                 </div>
@@ -679,8 +835,8 @@ const Employees = () => {
 
       <AnimatePresence>
         {confirmData.show && (
-          <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="bg-white rounded-[2.5rem] p-10 w-full max-w-[380px] text-center shadow-2xl">
+          <div className="fixed inset-0 z-[3000] flex items-start justify-center bg-slate-900/60 backdrop-blur-sm p-4 pt-20">
+            <motion.div initial={{ opacity: 0, scale: 0.9, y: -20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: -20 }} className="bg-white rounded-[2.5rem] p-10 w-full max-w-[380px] text-center shadow-2xl">
               <div className="w-20 h-20 rounded-3xl mx-auto mb-8 flex items-center justify-center bg-indigo-50 text-indigo-600">
                 <AlertCircle size={40} />
               </div>

@@ -4,18 +4,20 @@ import {
   BrainCircuit,
   Calendar,
   CalendarCheck,
-  Clock,
   Loader2,
-  Users
+  UserMinus,
+  Users,
+  UserX
 } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -25,26 +27,23 @@ import api from '../api/axios';
 import CalendarPicker from '../components/CalendarPicker';
 
 const StatCard = ({ title, value, icon, color, trend, loading }) => (
-  <div className="bg-white border border-slate-200 p-4 md:p-6 rounded-2xl flex-1 hover:shadow-xl hover:shadow-slate-200 transition-all duration-500 group">
-    <div className="flex justify-between items-start mb-6">
-      <div
-        className="p-3 rounded-xl flex items-center justify-center border border-slate-100 shadow-sm group-hover:scale-110 transition-transform"
-        style={{ backgroundColor: '#f8fafc', color: '#4f46e5' }}
-      >
-        {React.cloneElement(icon, { size: 20, strokeWidth: 2.5 })}
-      </div>
-      {trend !== undefined && (
-        <span className={`px-2 py-1 rounded-lg text-[11px] font-bold tracking-tight ${trend > 0 ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
-          {trend > 0 ? '↑' : '↓'} {Math.abs(trend)}%
-        </span>
-      )}
+  <div className="bg-white border border-slate-200 p-4 md:p-6 rounded-2xl flex-1 hover:shadow-xl hover:shadow-slate-200 transition-all duration-500 group flex flex-col items-center justify-center text-center">
+    <div className="p-4 rounded-2xl flex items-center justify-center border border-slate-100 shadow-sm group-hover:scale-110 transition-transform mb-3"
+      style={{ backgroundColor: '#f8fafc', color: '#4f46e5' }}
+    >
+      {React.cloneElement(icon, { size: 25, strokeWidth: 2.5 })}
     </div>
-    <div className="space-y-0.5">
+    <div className="space-y-1">
       <h3 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">
         {loading ? <Loader2 className="animate-spin text-slate-200" size={24} /> : value}
       </h3>
-      <p className="text-[11px] font-bold text-slate-500 tracking-tight">{title}</p>
+      <p className="text-[10px] font-bold text-slate-500 tracking-tight tracking-widest">{title}</p>
     </div>
+    {trend !== undefined && (
+      <span className={`mt-3 px-2 py-1 rounded-lg text-[10px] font-bold tracking-tight ${trend > 0 ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
+        {trend > 0 ? '↑' : '↓'} {Math.abs(trend)}%
+      </span>
+    )}
   </div>
 );
 
@@ -153,7 +152,7 @@ const Dashboard = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
         <StatCard
           title="Total Staff"
           value={stats?.totalEmployees || 0}
@@ -171,11 +170,17 @@ const Dashboard = () => {
           loading={loading}
         />
         <StatCard
-          title="Late Comers"
-          value={stats?.lateToday || 0}
-          icon={<Clock />}
-          color="#4f46e5"
-          trend={stats?.lateChange}
+          title="Leave Staff"
+          value={stats?.onLeaveToday || 0}
+          icon={<UserX />}
+          color="#f59e0b"
+          loading={loading}
+        />
+        <StatCard
+          title="Absent Staff"
+          value={stats?.absentToday || 0}
+          icon={<UserMinus />}
+          color="#ef4444"
           loading={loading}
         />
         <StatCard
@@ -188,8 +193,8 @@ const Dashboard = () => {
       </div>
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 md:gap-8">
-        <div className="xl:col-span-2 bg-white border border-slate-200 p-6 md:p-8 rounded-2xl shadow-lg shadow-slate-200/40">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+        <div className="bg-white border border-slate-200 p-6 md:p-8 rounded-3xl shadow-xl shadow-slate-100/50">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
             <h3 className="text-sm font-bold text-slate-800 tracking-tight">Weekly attendance report</h3>
             <div className="text-[11px] font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 tracking-tight">
@@ -243,45 +248,49 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 p-6 md:p-8 rounded-2xl shadow-lg shadow-slate-200/40">
-          <div className="mb-8">
+        <div className="bg-white border border-slate-200 p-6 md:p-8 rounded-3xl shadow-xl shadow-slate-100/50">
+          <div className="mb-1">
             <h3 className="text-sm font-bold text-slate-800 tracking-tight">Department Activity</h3>
             <p className="text-[11px] font-bold text-slate-500 mt-1">Staff present on {new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
           </div>
-          <div className="h-[320px] w-full min-h-[320px]">
+          <div className="h-[320px] w-full min-h-[320px] relative">
             <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={150} debounce={50}>
-              <BarChart data={stats?.departmentStats || []}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#475569', fontSize: 11, fontWeight: 700 }}
-                  dy={10}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#475569', fontSize: 11, fontWeight: 700 }}
-                />
+              <PieChart>
+                <Pie
+                  data={stats?.departmentStats || []}
+                  innerRadius={85}
+                  outerRadius={115}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {(stats?.departmentStats || []).map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={['#6366f1', '#10b981', '#8b5cf6', '#3b82f6', '#f59e0b', '#ec4899', '#06b6d4'][index % 7]} />
+                  ))}
+                </Pie>
                 <Tooltip
-                  cursor={{ fill: '#f1f5f9', radius: 8 }}
                   contentStyle={{
-                    borderRadius: '12px',
-                    border: '1px solid #cbd5e1',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                    backgroundColor: 'white'
+                    borderRadius: '16px',
+                    border: 'none',
+                    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                    padding: '12px'
                   }}
                 />
-                <Bar
-                  dataKey="value"
-                  fill="#4f46e5"
-                  radius={[6, 6, 0, 0]}
-                  barSize={32}
-                  animationDuration={2500}
-                />
-              </BarChart>
+              </PieChart>
             </ResponsiveContainer>
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-4">
+              <span className="text-4xl font-bold text-slate-800">
+                {(stats?.departmentStats || []).reduce((acc, curr) => acc + (Number(curr.value) || 0), 0)}
+              </span>
+              <span className="text-[10px] font-bold text-slate-400 tracking-widest">Total Present</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-6 max-h-24 overflow-y-auto no-scrollbar">
+            {(stats?.departmentStats || []).map((dept, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: ['#6366f1', '#10b981', '#8b5cf6', '#3b82f6', '#f59e0b', '#ec4899', '#06b6d4'][idx % 7] }} />
+                <span className="text-[11px] font-bold text-slate-500 truncate">{dept.name}: {dept.value}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>

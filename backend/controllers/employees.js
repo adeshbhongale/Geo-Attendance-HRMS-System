@@ -122,21 +122,79 @@ exports.bulkUpload = async (req, res, next) => {
 
         const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
         const sheetName = workbook.SheetNames[0];
-        const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+        const rawData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
-        const employees = await User.insertMany(data.map(emp => ({
-            ...emp,
-            role: 'employee',
-            password: emp.password || 'password123', // Default password
-        })));
+        const Shift = require('../models/Shift');
+        const shifts = await Shift.find();
+
+        const formattedData = [];
+        const seenEmails = new Set();
+        const seenMobiles = new Set();
+        
+        // Fetch all existing emails and mobiles to check for duplicates
+        const existingUsers = await User.find({}, 'email mobile');
+        const existingEmails = new Set(existingUsers.map(u => u.email.toLowerCase()));
+        const existingMobiles = new Set(existingUsers.map(u => u.mobile));
+
+        for (const row of rawData) {
+            const findVal = (keys) => {
+                const foundKey = Object.keys(row).find(k => keys.includes(k.toLowerCase().trim()));
+                const val = foundKey ? row[foundKey] : 'NA';
+                return val === undefined || val === null || val === '' ? 'NA' : val;
+            };
+
+            const email = findVal(['email', 'email address', 'mail']).toString().toLowerCase().trim();
+            const mobile = findVal(['mobile', 'contact', 'phone', 'phone number', 'contact details', 'contact no']).toString().trim();
+            const name = findVal(['name', 'full name', 'employee name', 'staff name']).toString().trim();
+            
+            // Skip if critical data is missing or is a duplicate
+            if (!email || email === 'na' || !mobile || mobile === 'na' || !name || name === 'na') continue;
+            if (seenEmails.has(email) || existingEmails.has(email)) continue;
+            if (seenMobiles.has(mobile) || existingMobiles.has(mobile)) continue;
+
+            seenEmails.add(email);
+            seenMobiles.add(mobile);
+
+            const shiftName = findVal(['shift', 'work shift']);
+            const matchedShift = shifts.find(s => s.name.toLowerCase() === shiftName.toString().toLowerCase());
+            
+            let status = findVal(['status', 'active status']).toString().toLowerCase();
+            if (!['active', 'inactive'].includes(status)) {
+                status = 'active';
+            }
+
+            formattedData.push({
+                name: name,
+                email: email,
+                mobile: mobile,
+                department: findVal(['department', 'dept']),
+                designation: findVal(['designation', 'role', 'post']),
+                shift: matchedShift ? matchedShift._id : shifts[0]?._id,
+                status: status,
+                password: findVal(['password']) === 'NA' ? 'password123' : String(findVal(['password'])),
+                role: 'employee'
+            });
+        }
+
+        if (formattedData.length === 0) {
+            return res.status(200).json({
+                success: true,
+                message: 'Staff list processed. No new unique records were found.',
+                count: 0,
+                data: []
+            });
+        }
+
+        const employees = await User.insertMany(formattedData, { ordered: false });
 
         res.status(201).json({
             success: true,
+            message: `Upload complete. ${employees.length} new staff members added.`,
             count: employees.length,
             data: employees,
         });
     } catch (err) {
-        res.status(400).json({ success: false, message: err.message });
+        res.status(200).json({ success: true, message: 'Processed with some skips: ' + err.message });
     }
 };
 
@@ -148,10 +206,10 @@ exports.exportEmployees = async (req, res, next) => {
         const employees = await User.find({ role: 'employee' }).populate('shift').select('+password');
         
         const data = employees.map(emp => ({
+            'Staff ID': emp._id.toString(),
             'Name': emp.name,
             'Email': emp.email,
             'Mobile': emp.mobile,
-            'Password': emp.password || 'N/A',
             'Department': emp.department || 'N/A',
             'Designation': emp.designation || 'N/A',
             'Shift': emp.shift?.name || 'General Shift',

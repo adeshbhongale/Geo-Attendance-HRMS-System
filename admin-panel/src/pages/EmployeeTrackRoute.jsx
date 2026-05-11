@@ -5,7 +5,6 @@ import {
   ChevronDown,
   ChevronLeft,
   Clock,
-  Download,
   Loader2,
   MapIcon,
   MapPin,
@@ -109,29 +108,6 @@ const EmployeeTrackRoute = () => {
     }
   };
 
-  const handleDownload = () => {
-    if (!data?.logs || data.logs.length === 0) return toast.error('No data to download');
-    const headers = ["Date", "Time", "Address", "Latitude", "Longitude", "Distance (m)"];
-    const rows = data.logs.map(log => [
-      new Date(log.time).toLocaleDateString('en-GB'),
-      new Date(log.time).toLocaleTimeString(),
-      log.address || 'NA',
-      log.latitude,
-      log.longitude,
-      log.distanceFromPrevious || 0
-    ]);
-
-    const csvContent = "data:text/csv;charset=utf-8,"
-      + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Route_${data.employee.name}_${date}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
 
   const mapRef = useRef(null);
 
@@ -226,13 +202,6 @@ const EmployeeTrackRoute = () => {
             </AnimatePresence>
           </div>
 
-          <button
-            onClick={handleDownload}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl text-xs font-bold hover:bg-indigo-700 hover:-translate-y-0.5 transition-all shadow-[0_10px_25px_rgba(79,70,229,0.2)] active:scale-95"
-          >
-            <Download size={16} />
-            Download CSV
-          </button>
         </div>
       </div>
 

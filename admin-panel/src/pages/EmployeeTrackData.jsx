@@ -1,4 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   Calendar,
   ChevronDown,
@@ -32,7 +34,9 @@ const EmployeeTrackData = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showCalendar, setShowCalendar] = useState(false);
+  const [showExportOptions, setShowExportOptions] = useState(false);
   const calendarRef = useRef(null);
+  const exportRef = useRef(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -102,16 +106,17 @@ const EmployeeTrackData = () => {
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentLogs = filteredLogs.slice(indexOfFirstItem, indexOfLastItem);
 
-  const handleDownload = () => {
+  const handleExportCSV = () => {
     if (!filteredLogs.length) return toast.error('No data to download');
-    const headers = ["Date", "Time", "Address", "Latitude", "Longitude", "Distance (m)"];
+    const headers = ["Date", "Time", "Address", "Latitude", "Longitude", "Distance (m)", "Status"];
     const rows = filteredLogs.map(log => [
       new Date(log.time).toLocaleDateString('en-GB'),
       new Date(log.time).toLocaleTimeString(),
-      log.address || 'NA',
+      `"${log.address?.replace(/"/g, '""') || 'NA'}"`,
       log.latitude,
       log.longitude,
-      log.distanceFromPrevious || 0
+      log.distanceFromPrevious || 0,
+      log.isSuspicious ? 'GLITCH' : 'VALID'
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8,"
@@ -126,10 +131,49 @@ const EmployeeTrackData = () => {
     document.body.removeChild(link);
   };
 
+  const handleExportPDF = () => {
+    if (!filteredLogs.length) return toast.error('No data to download');
+    const doc = new jsPDF();
+    doc.setFontSize(20);
+    doc.setTextColor(79, 70, 229);
+    doc.text('Employee Track Logs', 14, 22);
+
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Employee: ${data.employee.name}`, 14, 30);
+    doc.text(`Department: ${data.employee.department}`, 14, 35);
+    doc.text(`Date: ${date}`, 14, 40);
+    doc.text(`Total Distance: ${data.summary.totalDistance.toFixed(2)} KM`, 14, 45);
+
+    const headers = [["Time", "Address", "Coordinates", "Distance", "Status"]];
+    const body = filteredLogs.map(log => [
+      new Date(log.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      log.address || 'NA',
+      `${log.latitude.toFixed(6)}, ${log.longitude.toFixed(6)}`,
+      log.isSuspicious ? 'GLITCH' : `${(log.distanceFromPrevious || 0).toFixed(1)}m`,
+      log.isSuspicious ? 'Suspicious' : 'Valid'
+    ]);
+
+    autoTable(doc, {
+      head: headers,
+      body: body,
+      startY: 55,
+      theme: 'grid',
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] }
+    });
+
+    doc.save(`TrackLogs_${data.employee.name}_${date}.pdf`);
+  };
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (calendarRef.current && !calendarRef.current.contains(event.target)) {
         setShowCalendar(false);
+      }
+      if (exportRef.current && !exportRef.current.contains(event.target)) {
+        setShowExportOptions(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -202,13 +246,42 @@ const EmployeeTrackData = () => {
             </AnimatePresence>
           </div>
 
-          <button
-            onClick={handleDownload}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl text-xs font-bold hover:bg-indigo-700 hover:-translate-y-0.5 transition-all shadow-[0_10px_25px_rgba(79,70,229,0.2)] active:scale-95"
-          >
-            <Download size={16} />
-            Export CSV
-          </button>
+          <div className="relative" ref={exportRef}>
+            <button
+              onClick={() => setShowExportOptions(!showExportOptions)}
+              className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl text-xs font-bold hover:bg-indigo-700 hover:-translate-y-0.5 transition-all shadow-[0_10px_25px_rgba(79,70,229,0.25)] active:scale-95"
+            >
+              <Download size={16} />
+              Export Data
+              <ChevronDown size={14} className={`transition-transform ${showExportOptions ? 'rotate-180' : ''}`} />
+            </button>
+
+            <AnimatePresence>
+              {showExportOptions && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-50 py-2 z-50 overflow-hidden"
+                >
+                  <button
+                    onClick={() => { handleExportCSV(); setShowExportOptions(false); }}
+                    className="w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-colors flex items-center gap-2"
+                  >
+                    <Download size={14} className="text-slate-400" />
+                    Export as CSV
+                  </button>
+                  <button
+                    onClick={() => { handleExportPDF(); setShowExportOptions(false); }}
+                    className="w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-rose-600 transition-colors flex items-center gap-2"
+                  >
+                    <FileText size={14} className="text-slate-400" />
+                    Export as PDF
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
 

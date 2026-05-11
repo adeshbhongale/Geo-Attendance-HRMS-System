@@ -119,13 +119,14 @@ const EmployeeDetails = () => {
   );
 
   const handleExportCSV = () => {
-    const headers = ["Date", "Punch In Time", "Punch In Location", "Punch Out Time", "Punch Out Location", "Logged Hours", "Distance (KM)"];
+    const headers = ["Date", "Status", "Punch In Time", "Punch In Location", "Punch Out Time", "Punch Out Location", "Logged Hours", "Distance (KM)"];
     const rows = attendanceDetails.map(log => [
       new Date(log.date).toLocaleDateString(),
+      log.status,
       log.punchIn?.time ? new Date(log.punchIn.time).toLocaleTimeString() : '--',
-      log.punchIn?.location?.address || 'NA',
+      `${log.punchIn?.location?.address || 'NA'} (${log.punchIn?.isOutside ? 'Outside' : 'Inside'})`,
       log.punchOut?.time ? new Date(log.punchOut.time).toLocaleTimeString() : '--',
-      log.punchOut?.location?.address || 'NA',
+      `${log.punchOut?.location?.address || 'NA'} (${log.punchOut?.isOutside ? 'Outside' : 'Inside'})`,
       log.loggedHours?.toFixed(2) || '0',
       (log.totalDistance || 0).toFixed(2)
     ]);
@@ -175,12 +176,16 @@ const EmployeeDetails = () => {
     doc.text(`Total Break: ${formatDuration(summary.totalBreakMinutes / 60)}`, 60, 78);
     doc.text(`Total Distance: ${(summary.totalDistanceKm || 0).toFixed(2)} km`, 106, 78);
 
-    const headers = [["Date", "Status", "Punch In", "Punch Out", "Worked", "Distance"]];
+    const headers = [["Date", "Status", "Punch In (Location)", "Punch Out (Location)", "Worked", "Distance"]];
     const data = attendanceDetails.map(log => [
       new Date(log.date).toLocaleDateString(),
       log.status,
-      log.punchIn?.time ? new Date(log.punchIn.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--',
-      log.punchOut?.time ? new Date(log.punchOut.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--',
+      log.punchIn?.time 
+        ? `${new Date(log.punchIn.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${log.punchIn.isOutside ? 'Outside' : 'Inside'} - ${log.punchIn.location?.address || 'NA'})`
+        : '--',
+      log.punchOut?.time 
+        ? `${new Date(log.punchOut.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${log.punchOut.isOutside ? 'Outside' : 'Inside'} - ${log.punchOut.location?.address || 'NA'})`
+        : '--',
       formatDuration(log.loggedHours),
       `${(log.totalDistance || 0).toFixed(2)} km`
     ]);

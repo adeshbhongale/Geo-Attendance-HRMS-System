@@ -2,9 +2,13 @@ import {
   AnimatePresence,
   motion
 } from 'framer-motion';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   Calendar,
   ChevronDown,
+  Download,
+  FileText,
   Loader2,
   TrendingUp
 } from 'lucide-react';
@@ -27,13 +31,18 @@ const AttendanceDashboard = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
-  const [selectedDate, setSelectedDate] = useState(getTodayStr());
-  const [showCalendar, setShowCalendar] = useState(false);
-  const calendarRef = useRef(null);
+  const [startDate, setStartDate] = useState(getTodayStr());
+  const [endDate, setEndDate] = useState(getTodayStr());
+  const [showStartCalendar, setShowStartCalendar] = useState(false);
+  const [showEndCalendar, setShowEndCalendar] = useState(false);
+  const [showExportOptions, setShowExportOptions] = useState(false);
+  const startCalendarRef = useRef(null);
+  const endCalendarRef = useRef(null);
+  const exportRef = useRef(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [activeTab, setActiveTab] = useState('Department Wise');
   const [search, setSearch] = useState('');
-  
+
   const formatDuration = (decimalHours) => {
     if (!decimalHours || decimalHours <= 0) return '0m';
     const totalMinutes = Math.round(decimalHours * 60);
@@ -46,12 +55,18 @@ const AttendanceDashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
-  }, [selectedDate]);
+  }, [startDate, endDate]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (calendarRef.current && !calendarRef.current.contains(event.target)) {
-        setShowCalendar(false);
+      if (startCalendarRef.current && !startCalendarRef.current.contains(event.target)) {
+        setShowStartCalendar(false);
+      }
+      if (endCalendarRef.current && !endCalendarRef.current.contains(event.target)) {
+        setShowEndCalendar(false);
+      }
+      if (exportRef.current && !exportRef.current.contains(event.target)) {
+        setShowExportOptions(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -61,7 +76,7 @@ const AttendanceDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const res = await api.get(`/reports/attendance-dashboard?date=${selectedDate}`);
+      const res = await api.get(`/reports/attendance-dashboard?startDate=${startDate}&endDate=${endDate}`);
       setData(res.data.data);
     } catch (err) {
       toast.error('Failed to load attendance dashboard');
@@ -96,14 +111,6 @@ const AttendanceDashboard = () => {
     color: deptColors[idx % deptColors.length]
   })) || [];
 
-  const getActiveStats = () => {
-    switch (activeTab) {
-      case 'Department Wise': return data?.departmentStats || [];
-      case 'Shift Wise': return data?.shiftStats || [];
-      default: return [];
-    }
-  };
-
   const getActiveHeader = () => {
     switch (activeTab) {
       case 'Department Wise': return 'Department Name';
@@ -112,32 +119,151 @@ const AttendanceDashboard = () => {
     }
   };
 
+  const getActiveStats = () => {
+    switch (activeTab) {
+      case 'Department Wise': return data?.departmentStats || [];
+      case 'Shift Wise': return data?.shiftStats || [];
+      default: return [];
+    }
+  };
+
   const activeStats = getActiveStats();
+
+  const handleExportCSV = () => {
+    try {
+      if (!activeStats.length) return toast.error('No data to download');
+      const headers = [getActiveHeader(), "Total", "Present", "Absent", "On Leave", "Late", "Deviators", "Avg Working HR"];
+      const rows = activeStats.map(stat => [
+        stat.name,
+        stat.total,
+        stat.present,
+        stat.absent,
+        stat.onLeave,
+        stat.lateComers,
+        stat.deviators,
+        formatDuration(stat.avgWorkingHours)
+      ]);
+
+      const csvContent = "data:text/csv;charset=utf-8,"
+        + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `Attendance_Stats_${activeTab.replace(' ', '_')}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success('CSV exported successfully');
+    } catch (err) {
+      console.error('CSV Export Error:', err);
+      toast.error('Failed to export CSV');
+    }
+  };
+
+  const handleExportPDF = () => {
+    try {
+      if (!activeStats.length) return toast.error('No data to download');
+      const doc = new jsPDF();
+
+      doc.setFontSize(18);
+      doc.setTextColor(79, 70, 229);
+      doc.text(`Attendance Dashboard - ${activeTab}`, 14, 20);
+      doc.setFontSize(10);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Period: ${startDate} to ${endDate}`, 14, 28);
+
+      const headers = [[getActiveHeader(), "Total", "Present", "Absent", "On Leave", "Late", "Deviators", "Avg Working HR"]];
+      const body = activeStats.map(stat => [
+        stat.name,
+        stat.total,
+        stat.present,
+        stat.absent,
+        stat.onLeave,
+        stat.lateComers,
+        stat.deviators,
+        formatDuration(stat.avgWorkingHours)
+      ]);
+
+      autoTable(doc, {
+        head: headers,
+        body: body,
+        startY: 35,
+        theme: 'grid',
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255] }
+      });
+
+      doc.save(`Attendance_Stats_${activeTab.replace(' ', '_')}.pdf`);
+      toast.success('PDF exported successfully');
+    } catch (err) {
+      console.error('PDF Export Error:', err);
+      toast.error('Failed to export PDF');
+    }
+  };
 
   return (
     <div className="space-y-8 animate-fade-up">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 px-2">
         <div>
-          <h2 className="text-xl font-bold text-slate-800">Attendance Dashboard For {formatDateDisplay(selectedDate)}</h2>
+          <h2 className="text-xl font-bold text-slate-800">Attendance Dashboard Analysis</h2>
+          <p className="text-[11px] font-bold text-slate-400">View attendance trends from {startDate} to {endDate}</p>
         </div>
-        <div className="flex items-center gap-6">
-          <div className="text-[11px] font-bold text-slate-500">
-            Generated On: <span className="text-slate-800">{formatDateDisplay(selectedDate)} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        <div className="flex flex-wrap items-center gap-6">
+          <div className="relative" ref={exportRef}>
+            <button
+              onClick={() => setShowExportOptions(!showExportOptions)}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-[10px] tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all hover:scale-105"
+            >
+              <Download size={14} />
+              Download Statistics
+              <ChevronDown size={14} className={`transition-transform ${showExportOptions ? 'rotate-180' : ''}`} />
+            </button>
+
+            <AnimatePresence>
+              {showExportOptions && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-50 py-2 z-[120] overflow-hidden"
+                >
+                  <button
+                    onClick={() => { handleExportCSV(); setShowExportOptions(false); }}
+                    className="w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-colors flex items-center gap-2"
+                  >
+                    <Download size={14} className="text-slate-400" />
+                    Export as CSV
+                  </button>
+                  <button
+                    onClick={() => { handleExportPDF(); setShowExportOptions(false); }}
+                    className="w-full px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 hover:bg-slate-50 hover:text-rose-600 transition-colors flex items-center gap-2"
+                  >
+                    <FileText size={14} className="text-slate-400" />
+                    Export as PDF
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center gap-4">
-            <div className="relative" ref={calendarRef}>
+          <div className="flex items-center gap-3">
+            {/* Start Date */}
+            <div className="relative" ref={startCalendarRef}>
               <div
-                className="flex items-center gap-3 bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm cursor-pointer hover:bg-slate-50 transition-all"
-                onClick={() => setShowCalendar(!showCalendar)}
+                className="flex items-center gap-3 bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm cursor-pointer hover:bg-slate-50 transition-all min-w-[150px]"
+                onClick={() => setShowStartCalendar(!showStartCalendar)}
               >
                 <Calendar size={14} className="text-indigo-600" />
-                <span className="text-xs font-bold text-slate-700">{formatDateDisplay(selectedDate)}</span>
-                <ChevronDown size={12} className="text-slate-400" />
+                <div className="flex flex-col items-start leading-none">
+                  <span className="text-[8px] font-bold text-slate-400 ">From</span>
+                  <span className="text-xs font-bold text-slate-700">{startDate}</span>
+                </div>
+                <ChevronDown size={12} className={`text-slate-400 transition-transform ${showStartCalendar ? 'rotate-180' : ''}`} />
               </div>
 
               <AnimatePresence>
-                {showCalendar && (
+                {showStartCalendar && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 10 }}
@@ -145,9 +271,47 @@ const AttendanceDashboard = () => {
                     className="absolute top-full right-0 mt-2 z-[110] bg-white border border-slate-200 rounded-2xl shadow-2xl p-4"
                   >
                     <CalendarPicker
-                      selectedDate={selectedDate}
-                      onSelect={setSelectedDate}
-                      onClose={() => setShowCalendar(false)}
+                      selectedDate={startDate}
+                      onSelect={(date) => {
+                        setStartDate(date);
+                        setShowStartCalendar(false);
+                      }}
+                      onClose={() => setShowStartCalendar(false)}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* End Date */}
+            <div className="relative" ref={endCalendarRef}>
+              <div
+                className="flex items-center gap-3 bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm cursor-pointer hover:bg-slate-50 transition-all min-w-[150px]"
+                onClick={() => setShowEndCalendar(!showEndCalendar)}
+              >
+                <Calendar size={14} className="text-emerald-600" />
+                <div className="flex flex-col items-start leading-none">
+                  <span className="text-[8px] font-bold text-slate-400 ">To</span>
+                  <span className="text-xs font-bold text-slate-700">{endDate}</span>
+                </div>
+                <ChevronDown size={12} className={`text-slate-400 transition-transform ${showEndCalendar ? 'rotate-180' : ''}`} />
+              </div>
+
+              <AnimatePresence>
+                {showEndCalendar && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 10 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute top-full right-0 mt-2 z-[110] bg-white border border-slate-200 rounded-2xl shadow-2xl p-4"
+                  >
+                    <CalendarPicker
+                      selectedDate={endDate}
+                      onSelect={(date) => {
+                        setEndDate(date);
+                        setShowEndCalendar(false);
+                      }}
+                      onClose={() => setShowEndCalendar(false)}
                     />
                   </motion.div>
                 )}
@@ -161,7 +325,12 @@ const AttendanceDashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Attendance Details Donut */}
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
-          <h3 className="text-[12px] font-bold text-slate-800 flex items-center gap-36">Attendance Details</h3>
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-[12px] font-bold text-slate-800">Attendance Details</h3>
+            <div className="px-3 py-1 bg-slate-50 rounded-full border border-slate-100">
+              <p className="text-[8px] font-bold text-slate-400  tracking-tighter">Summary for selected period</p>
+            </div>
+          </div>
           <div className="h-64 w-full relative">
             <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={150} debounce={50}>
               <PieChart>
@@ -195,7 +364,18 @@ const AttendanceDashboard = () => {
 
         {/* Dynamic Wise Donut */}
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
-          <h3 className="text-[12px] font-bold text-green-600 text-center mb-6">{activeTab}</h3>
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-[12px] font-bold text-indigo-600  tracking-widest">{activeTab}</h3>
+            <div className="group relative">
+              <span className="cursor-help text-[10px] font-bold text-slate-400 flex items-center gap-1 border-b border-slate-200 border-dotted">
+                What are Deviators?
+              </span>
+              <div className="absolute bottom-full right-0 mb-2 w-48 p-3 bg-slate-900 text-white text-[9px] rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-2xl">
+                <p className="font-bold mb-1 text-indigo-400  tracking-tighter">Geofence Deviation</p>
+                Deviators are employees who marked their attendance (Punch-In/Out) from outside their assigned geofence area.
+              </div>
+            </div>
+          </div>
           <div className="h-64 w-full relative">
             <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={150} debounce={50}>
               <PieChart>

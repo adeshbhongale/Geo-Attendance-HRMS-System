@@ -27,7 +27,8 @@ const Reports = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
-  const [selectedDate, setSelectedDate] = useState(getTodayStr());
+  const [startDate, setStartDate] = useState(getTodayStr());
+  const [endDate, setEndDate] = useState(getTodayStr());
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -51,7 +52,7 @@ const Reports = () => {
   const fetchReport = async () => {
     try {
       setLoading(true);
-      const res = await api.get(`/reports/employee-reports?type=${reportType}&date=${selectedDate}&search=${search}`);
+      const res = await api.get(`/reports/employee-reports?type=${reportType}&startDate=${startDate}&endDate=${endDate}&search=${search}`);
       setData(res.data.data);
       setGeneratedOn(res.data.generatedOn);
       setCurrentPage(1); // Reset to page 1 on new data
@@ -64,7 +65,7 @@ const Reports = () => {
 
   useEffect(() => {
     fetchReport();
-  }, [reportType, selectedDate]); // Auto-fetch when filters change
+  }, [reportType, startDate, endDate]); // Auto-fetch when filters change
 
   const handleSearch = (e) => {
     setSearch(e.target.value);
@@ -80,17 +81,22 @@ const Reports = () => {
   };
 
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
-  const [showCalendar, setShowCalendar] = useState(false);
+  const [showStartCalendar, setShowStartCalendar] = useState(false);
+  const [showEndCalendar, setShowEndCalendar] = useState(false);
   const typeDropdownRef = useRef(null);
-  const calendarRef = useRef(null);
+  const startCalendarRef = useRef(null);
+  const endCalendarRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (typeDropdownRef.current && !typeDropdownRef.current.contains(event.target)) {
         setShowTypeDropdown(false);
       }
-      if (calendarRef.current && !calendarRef.current.contains(event.target)) {
-        setShowCalendar(false);
+      if (startCalendarRef.current && !startCalendarRef.current.contains(event.target)) {
+        setShowStartCalendar(false);
+      }
+      if (endCalendarRef.current && !endCalendarRef.current.contains(event.target)) {
+        setShowEndCalendar(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -119,16 +125,21 @@ const Reports = () => {
     let rows = [];
 
     if (reportType === 'Present Timing Sheet') {
-      headers = ["Name", "Mobile", "Shift", "Status", "Time In", "Time Out", "Day Worked"];
+      headers = ["Date", "Name", "Mobile", "Shift", "Status", "Check-In (Location)", "Check-Out (Location)", "Day Worked"];
       rows = filteredData.map(row => [
-        row.name, row.mobile, row.shift, row.status,
-        formatDate(row.timeIn), formatDate(row.timeOut),
+        formatFullDate(row.date),
+        row.name,
+        row.mobile,
+        row.shift,
+        row.status,
+        `${formatDate(row.timeIn)} (${row.timeInOutside ? 'Outside' : 'Inside'} - ${row.timeInLocation || 'NA'})`,
+        `${formatDate(row.timeOut)} (${row.timeOutOutside ? 'Outside' : 'Inside'} - ${row.timeOutLocation || 'NA'})`,
         formatDuration(row.totalHoursWorked)
       ]);
     } else {
-      headers = ["Name", "Mobile", "Shift", "Day Worked", "Breaks Count", "Total Break Time", "Breaks Details"];
+      headers = ["Date", "Name", "Mobile", "Shift", "Day Worked", "Breaks Count", "Total Break Time", "Breaks Details"];
       rows = filteredData.map(row => [
-        row.name, row.mobile, row.shift,
+        formatFullDate(row.date), row.name, row.mobile, row.shift,
         formatDuration(row.totalHoursWorked),
         row.breaksTaken,
         `${(row.totalBreakTime / 60).toFixed(2)}h`,
@@ -143,7 +154,7 @@ const Reports = () => {
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
     const fileName = reportType.replace(/&/g, 'and').replace(/\s+/g, '_');
-    link.setAttribute("download", `${fileName}_${selectedDate}.csv`);
+    link.setAttribute("download", `${fileName}_${startDate}_to_${endDate}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -162,7 +173,7 @@ const Reports = () => {
     doc.setFontSize(10);
     doc.setTextColor(100, 116, 139); // Slate-500
     doc.text(`Type: ${reportType}`, 14, 28);
-    doc.text(`Date: ${new Date(selectedDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}`, 14, 33);
+    doc.text(`Range: ${formatFullDate(startDate)} to ${formatFullDate(endDate)}`, 14, 33);
     doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 38);
 
     doc.setDrawColor(241, 245, 249); // Slate-100
@@ -172,16 +183,21 @@ const Reports = () => {
     let data = [];
 
     if (reportType === 'Present Timing Sheet') {
-      headers = [["Name", "Mobile", "Shift", "Status", "Time In", "Time Out", "Day Worked"]];
+      headers = [["Date", "Name", "Mobile", "Shift", "Status", "Check-In (Location)", "Check-Out (Location)", "Day Worked"]];
       data = filteredData.map(row => [
-        row.name, row.mobile, row.shift, row.status,
-        formatDate(row.timeIn), formatDate(row.timeOut),
+        formatFullDate(row.date),
+        row.name,
+        row.mobile,
+        row.shift,
+        row.status,
+        `${formatDate(row.timeIn)} (${row.timeInOutside ? 'Outside' : 'Inside'} - ${row.timeInLocation || 'NA'})`,
+        `${formatDate(row.timeOut)} (${row.timeOutOutside ? 'Outside' : 'Inside'} - ${row.timeOutLocation || 'NA'})`,
         formatDuration(row.totalHoursWorked)
       ]);
     } else {
-      headers = [["Name", "Mobile", "Shift", "Day Worked", "Breaks Count", "Total Break Time", "Breaks Details"]];
+      headers = [["Date", "Name", "Mobile", "Shift", "Day Worked", "Breaks Count", "Total Break Time", "Breaks Details"]];
       data = filteredData.map(row => [
-        row.name, row.mobile, row.shift,
+        formatFullDate(row.date), row.name, row.mobile, row.shift,
         formatDuration(row.totalHoursWorked),
         row.breaksTaken,
         formatDuration(row.totalBreakTime / 60),
@@ -199,11 +215,11 @@ const Reports = () => {
       alternateRowStyles: { fillColor: [248, 250, 252] },
       margin: { top: 20 },
       columnStyles: {
-        5: { cellWidth: reportType === 'Break Details Sheet' ? 80 : 'auto' }
+        7: { cellWidth: reportType === 'Break & work Timing Sheet' ? 80 : 'auto' }
       }
     });
 
-    doc.save(`${reportType.replace(/&/g, 'and').replace(/ /g, '_')}_${selectedDate}.pdf`);
+    doc.save(`${reportType.replace(/&/g, 'and').replace(/ /g, '_')}_${startDate}_to_${endDate}.pdf`);
   };
 
   const [showExportOptions, setShowExportOptions] = useState(false);
@@ -264,23 +280,24 @@ const Reports = () => {
             </AnimatePresence>
           </div>
 
-          {/* Date Picker */}
-          <div className="relative" ref={calendarRef}>
+          {/* Start Date Picker */}
+          <div className="relative" ref={startCalendarRef}>
+            <div className="absolute -top-6 left-2 text-[10px] font-bold text-slate-400 tracking-widest">FROM</div>
             <button
-              className="flex items-center gap-4 bg-white border border-slate-200 px-6 py-3.5 rounded-2xl shadow-sm hover:bg-slate-50 transition-all min-w-[200px] cursor-pointer group"
-              onClick={() => setShowCalendar(!showCalendar)}
+              className="flex items-center gap-4 bg-white border border-slate-200 px-6 py-3.5 rounded-2xl shadow-sm hover:bg-slate-50 transition-all min-w-[180px] cursor-pointer group"
+              onClick={() => setShowStartCalendar(!showStartCalendar)}
             >
               <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
                 <Calendar size={18} />
               </div>
               <span className="text-sm font-bold text-slate-700">
-                {new Date(selectedDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                {formatFullDate(startDate)}
               </span>
-              <ChevronDown size={16} className={`text-slate-400 ml-auto transition-transform ${showCalendar ? 'rotate-180' : ''}`} />
+              <ChevronDown size={16} className={`text-slate-400 ml-auto transition-transform ${showStartCalendar ? 'rotate-180' : ''}`} />
             </button>
 
             <AnimatePresence>
-              {showCalendar && (
+              {showStartCalendar && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 10 }}
@@ -288,9 +305,43 @@ const Reports = () => {
                   className="absolute top-full left-0 mt-3 z-[110] bg-white border border-slate-100 rounded-[2rem] shadow-2xl p-6"
                 >
                   <CalendarPicker
-                    selectedDate={selectedDate}
-                    onSelect={setSelectedDate}
-                    onClose={() => setShowCalendar(false)}
+                    selectedDate={startDate}
+                    onSelect={setStartDate}
+                    onClose={() => setShowStartCalendar(false)}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* End Date Picker */}
+          <div className="relative" ref={endCalendarRef}>
+            <div className="absolute -top-6 left-2 text-[10px] font-bold text-slate-400 tracking-widest">TO</div>
+            <button
+              className="flex items-center gap-4 bg-white border border-slate-200 px-6 py-3.5 rounded-2xl shadow-sm hover:bg-slate-50 transition-all min-w-[180px] cursor-pointer group"
+              onClick={() => setShowEndCalendar(!showEndCalendar)}
+            >
+              <div className="p-2 bg-rose-50 rounded-xl text-rose-600 group-hover:bg-rose-600 group-hover:text-white transition-colors">
+                <Calendar size={18} />
+              </div>
+              <span className="text-sm font-bold text-slate-700">
+                {formatFullDate(endDate)}
+              </span>
+              <ChevronDown size={16} className={`text-slate-400 ml-auto transition-transform ${showEndCalendar ? 'rotate-180' : ''}`} />
+            </button>
+
+            <AnimatePresence>
+              {showEndCalendar && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 10 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="absolute top-full right-0 mt-3 z-[110] bg-white border border-slate-100 rounded-[2rem] shadow-2xl p-6"
+                >
+                  <CalendarPicker
+                    selectedDate={endDate}
+                    onSelect={setEndDate}
+                    onClose={() => setShowEndCalendar(false)}
                   />
                 </motion.div>
               )}
@@ -345,7 +396,7 @@ const Reports = () => {
               {reportType === 'Present' ? 'Overall Attendance' : reportType}
             </h2>
             <p className="text-[10px] font-bold text-slate-400 tracking-widest  mt-1">
-              Generated for: {formatFullDate(selectedDate)} • Refreshed just now
+              Generated for: {formatFullDate(startDate)} to {formatFullDate(endDate)}
             </p>
           </div>
 
@@ -371,7 +422,8 @@ const Reports = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/50">
-                  <th className="px-8 py-6 text-[10px] font-bold text-slate-400 tracking-widest  border-b border-slate-50">Staff Member</th>
+                  <th className="px-6 py-6 text-[10px] font-bold text-slate-400 tracking-widest  border-b border-slate-50">Date</th>
+                  <th className="px-4 py-6 text-[10px] font-bold text-slate-400 tracking-widest  border-b border-slate-50">Staff Member</th>
                   <th className="px-6 py-6 text-[10px] font-bold text-slate-400 tracking-widest  border-b border-slate-50 text-center">Mobile</th>
 
                   {reportType === 'Present Timing Sheet' && (
@@ -400,7 +452,8 @@ const Reports = () => {
               <tbody className="divide-y divide-slate-50">
                 {currentData.map((row, idx) => (
                   <tr key={row.id} className="hover:bg-slate-50/50 transition-colors group">
-                    <td className="px-8 py-5">
+                    <td className="px-5 py-5 text-[10px] font-bold text-slate-500 whitespace-nowrap">{formatFullDate(row.date)}</td>
+                    <td className="px-4 py-5">
                       <div className="flex items-center gap-4">
                         <div
                           onClick={() => navigate(`/employee/${row.userId}`)}
@@ -422,8 +475,8 @@ const Reports = () => {
 
                     {reportType === 'Present Timing Sheet' && (
                       <>
-                        <td className="px-6 py-5 text-center">
-                          <span className="px-3 py-1 bg-slate-50 text-slate-600 rounded-full text-[10px] font-bold tracking-widest">{row.shift}</span>
+                        <td className="px-4 py-5 text-center">
+                          <span className="px-2 py-1 bg-slate-50 text-slate-600 rounded-full text-[9px] font-bold tracking-tight inline-block whitespace-nowrap border border-slate-100">{row.shift}</span>
                         </td>
                         <td className="px-6 py-5 text-center">
                           <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-tight border ${row.status === 'Present' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
@@ -489,7 +542,7 @@ const Reports = () => {
 
                     {reportType === 'Break & work Timing Sheet' && (
                       <>
-                        <td className="px-6 py-5 text-center text-xs font-bold text-slate-500">{row.shift}</td>
+                        <td className="px-4 py-5 text-center text-[9px] font-bold text-slate-500">{row.shift}</td>
                         <td className="px-6 py-5 text-center">
                           <span className="text-xs font-bold text-emerald-600">{formatDuration(row.totalHoursWorked)}</span>
                         </td>

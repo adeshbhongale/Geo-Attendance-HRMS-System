@@ -815,6 +815,19 @@ Geo-Attendance-HRMS-System/
 ---
 
 ## Setup & Deployment
+### 16. Multi-Day Attendance Reporting (May 12, 2026)
+- **Feature**: Implemented a comprehensive From/To date range picker on the Admin Reports page.
+- **Backend Enhancement**: Updated the `getEmployeeReports` controller to handle `startDate` and `endDate` parameters, performing multi-day data aggregation from the MongoDB `Attendance` collection.
+- **Dynamic UI**: Added a "Date" column to the reporting tables to clarify multi-day logs and updated the subtitle to reflect the active range.
+- **Export Consistency**: Synchronized CSV and PDF export logic to respect the selected date range, including dynamic filenames (e.g., `Present_Timing_Sheet_2026-05-11_to_2026-05-12.pdf`).
+- **Data Fidelity Fix**: Resolved a bug where the "Shift" column displayed "NA" by implementing nested Mongoose population in the `getEmployeeReports` controller.
+- **Dashboard Analytics Overhaul**: Replaced single-day views with dynamic multi-day date range filtering (`startDate` to `endDate`). All stat cards and trend graphs now aggregate data over the selected period.
+- **Attendance Dashboard Evolution**: Integrated the dual-date picker into the Attendance module, allowing for period-based department and shift-wise analysis.
+- **Enriched Attendance Exports**: Added CSV and PDF export capabilities to the Attendance Dashboard, including detailed punch-in/out addresses and geofence status (Inside/Outside) for audit-ready documentation.
+- **Employee Detail Transparency**: Synchronized the Employee Details page exports to include identical high-fidelity location data and geofence status markers.
+- **Layout Optimization**: Reduced horizontal whitespace between "Date" and "Name" columns, centrally aligned the "Shift" column, and adjusted font sizes for a pixel-perfect table fit.
+- **Enhanced Data Exports**: Upgraded CSV and PDF generators in the Reports module to include detailed punch-in and punch-out locations (address) along with the "Inside/Outside" geofence status.
+- **NFR Compliance**: Verified that multi-day report generation remains under the **2s response time** threshold through latency benchmarking.
 
 ### Local Development Setup
 
@@ -1062,6 +1075,28 @@ All debug `console.log` and `console.error` statements removed from 10 files for
 
 ---
 
-**Last Updated**: May 11, 2026
-**Version**: 1.4.0
-**Status**: Production Stable (High-Precision Tracking & Distance Audit Finalized)
+### 13. Employee Management Finalization & Interface Professionalization (May 12, 2026)
+
+**Changed**: Finalized the Staff Directory interface with centered navigation, 12hr time standards, and hardened bulk data processing.
+
+#### Admin Panel — Employee Management UI:
+- **Files**: `admin-panel/src/pages/Employees.jsx`
+- **Interface Density**: Adjusted container width to `max-w-[calc(100vw-350px)]` and reduced column padding (`px-4`) to ensure a perfect fit with the sidebar and eliminate horizontal scrolling.
+- **Pagination**: Moved navigation buttons to the **center** of the table footer for a balanced, modern aesthetic.
+- **Time Standards**: Implemented `formatTime12h` helper to display all shift schedules in 12hr format with **AM/PM** indicators.
+- **Export Suite Fixes**:
+  - Refactored PDF generation using the reliable `autoTable(doc, ...)` pattern, resolving block-scoped redeclaration errors.
+  - Included **Staff ID** as a visible string column in Excel exports for easier administrative tracking.
+
+#### Backend — Bulk Upload & Data Integrity:
+- **File**: `backend/controllers/employees.js`
+- **Intelligent Deduplication**: Upgraded the `bulkUpload` handler to cross-reference both **Email** and **Mobile** duplicates against the database and the upload file.
+- **Silent Conflict Resolution**: Records with existing credentials are now automatically skipped instead of triggering `E11000` errors, allowing valid entries to process seamlessly.
+- **Data Standardization**: Implemented mandatory "NA" fallbacks for missing fields and enforced strict enum validation for employee status ('active'/'inactive').
+- **Feedback**: Enhanced response payloads to provide granular counts of successfully added vs. skipped duplicate records.
+
+---
+
+**Last Updated**: May 12, 2026
+**Version**: 1.5.1
+**Status**: Production Stable (Employee Module Professionalized)
