@@ -16,6 +16,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import MonthlyViewScreen from './src/screens/MonthlyViewScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import ShiftManagementScreen from './src/screens/ShiftManagementScreen';
+import TrackMyRoute from './src/screens/TrackMyRoute';
 import { navigationRef } from './src/utils/navigation';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { LogBox } from 'react-native';
@@ -108,6 +109,7 @@ export default function App() {
               <RootStack.Screen name="Login" component={LoginScreen} />
               <RootStack.Screen name="Main" component={MainTabs} />
               <RootStack.Screen name="MonthlyViewScreen" component={MonthlyViewScreen} />
+              <RootStack.Screen name="TrackMyRoute" component={TrackMyRoute} />
             </RootStack.Navigator>
           </NavigationContainer>
         </SafeAreaProvider>

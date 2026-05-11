@@ -66,16 +66,32 @@ const AttendanceSchema = new mongoose.Schema({
   },
   trackingLogs: [{
     time: { type: Date, default: Date.now },
-    latitude: Number,
-    longitude: Number,
+    latitude: { type: Number, required: true },
+    longitude: { type: Number, required: true },
     address: String,
-    isOutside: Boolean,
-    distanceFromPrevious: Number
+    distanceFromPrevious: { type: Number, default: 0 },
+    totalDistanceTillNow: { type: Number, default: 0 },
+    isSuspicious: { type: Boolean, default: false },
+    accuracy: Number,
+    speed: Number,
+    altitude: Number,
+    heading: Number
   }],
   totalDistance: {
     type: Number,
     default: 0
   },
+  currentDistance: {
+    type: Number,
+    default: 0
+  },
+  lastTrackedLocation: {
+    latitude: Number,
+    longitude: Number,
+    time: Date,
+    address: String
+  },
+  lastTrackingTime: Date,
   battery: {
     type: Number,
     default: 100

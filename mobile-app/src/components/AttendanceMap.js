@@ -1,8 +1,19 @@
-import { Platform, StyleSheet, View } from 'react-native';
-import { User as UserIcon } from 'lucide-react-native';
-import MapView, { Circle, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import { Platform, StyleSheet, View, Text } from 'react-native';
+import { User as UserIcon, MapPin } from 'lucide-react-native';
+
+import MapView, { Circle, Marker, PROVIDER_GOOGLE } from './MapComponents';
 
 const AttendanceMap = ({ latitude, longitude, radius, userLocation }) => {
+  if (Platform.OS === 'web') {
+    return (
+      <View style={[styles.map, { backgroundColor: '#f8fafc', justifyContent: 'center', alignItems: 'center' }]}>
+        <MapPin size={32} color="#94a3b8" />
+        <Text style={{ color: '#64748b', fontWeight: 'bold', marginTop: 12 }}>Map View Restricted</Text>
+        <Text style={{ color: '#94a3b8', fontSize: 10, marginTop: 4 }}>Only available on native mobile devices</Text>
+      </View>
+    );
+  }
+
   // Ensure we are working with numbers
   const officeLat = Number(latitude) || 16.704151;
   const officeLng = Number(longitude) || 74.450258;

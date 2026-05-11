@@ -31,6 +31,7 @@ import {
 import api from '../api/axios';
 import AttendanceMap from '../components/AttendanceMap';
 import { formatWorkingHours } from '../utils/timeFormat';
+import socket from '../socket';
 
 
 const AttendanceScreen = ({ navigation }) => {
@@ -61,7 +62,11 @@ const AttendanceScreen = ({ navigation }) => {
   const fetchUser = async () => {
     try {
       const res = await api.get('/auth/me');
-      setUser(res.data.data);
+      const userData = res.data.data;
+      setUser(userData);
+      if (userData?._id) {
+        socket.emit('join', userData._id);
+      }
     } catch (err) {
       console.error('[DEBUG] fetchUser Error:', err.message);
     }
@@ -207,27 +212,25 @@ const AttendanceScreen = ({ navigation }) => {
 
   const [lastSentLocation, setLastSentLocation] = useState(null);
 
-  // Foreground Tracking Logic
+  const alreadyPunchedIn = !!todayAttendance?.punchIn?.time;
+  const alreadyPunchedOut = !!todayAttendance?.punchOut?.time;
+
+  // Foreground Tracking Logic (High Frequency 10s)
   useEffect(() => {
     let trackingInterval;
 
-    if (alreadyPunchedIn && !alreadyPunchedOut) {
+    const trackCurrentLocation = async (isRetry = false) => {
+      try {
+        const loc = await Location.getCurrentPositionAsync({ 
+          accuracy: Location.Accuracy.High,
+          timeout: 5000 
+        });
+        
+        const { latitude, longitude, accuracy, speed, altitude, heading } = loc.coords;
 
-      trackingInterval = setInterval(async () => {
+        // Fetch address for the point
+        let trackAddr = 'Tracking...';
         try {
-          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-          const { latitude, longitude } = loc.coords;
-
-          // Optimization: Only send if moved significantly (> 2 meters approx)
-          if (lastSentLocation) {
-            const dist = Math.sqrt(Math.pow(latitude - lastSentLocation.lat, 2) + Math.pow(longitude - lastSentLocation.lng, 2));
-            if (dist < 0.00002) { // Roughly 2 meters
-              return;
-            }
-          }
-
-          // Quick geocode
-          let trackAddr = 'Tracking...';
           const MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
           const geoRes = await fetch(
             `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${MAPS_KEY}`
@@ -236,28 +239,50 @@ const AttendanceScreen = ({ navigation }) => {
           if (geoData.status === 'OK' && geoData.results.length > 0) {
             trackAddr = geoData.results[0].formatted_address;
           }
+        } catch (e) {}
 
+        const res = await api.post('/attendance/track', {
+          latitude,
+          longitude,
+          address: trackAddr,
+          accuracy,
+          speed,
+          altitude,
+          heading,
+          battery: 100 // In real app, use expo-battery
+        });
 
-          await api.post('/attendance/track', {
-            latitude,
-            longitude,
-            address: trackAddr
-          });
-
-          setLastSentLocation({ lat: latitude, lng: longitude });
-          fetchUser(); // Update UI distance
-        } catch (err) {
+        if (res.data.retry && !isRetry) {
+          // If backend marked as suspicious, retry once immediately
+          setTimeout(() => trackCurrentLocation(true), 2000);
         }
-      }, 10000); // 10 SECONDS AS REQUESTED
+
+        setLastSentLocation({ lat: latitude, lng: longitude });
+        
+        // Update user stats (total distance etc)
+        fetchUser(); 
+      } catch (err) {
+        console.error('[TRACKING] Error:', err.message);
+      }
+    };
+
+    if (alreadyPunchedIn && !alreadyPunchedOut) {
+      // Initial track
+      trackCurrentLocation();
+
+      // Set interval for every 10 seconds
+      trackingInterval = setInterval(() => {
+        trackCurrentLocation();
+      }, 10000); 
     }
 
     return () => {
       if (trackingInterval) {
-
         clearInterval(trackingInterval);
       }
     };
-  }, [alreadyPunchedIn, alreadyPunchedOut, lastSentLocation]);
+  }, [alreadyPunchedIn, alreadyPunchedOut]);
+
 
   const fetchHistory = async () => {
     try {
@@ -352,7 +377,7 @@ const AttendanceScreen = ({ navigation }) => {
       setSelfie(null); // Clear selfie after punch
       await fetchHistory();
       Alert.alert('Punched In', res.data.message || 'Attendance marked successfully!', [
-        { text: 'OK', onPress: () => navigation.navigate('Home') },
+        { text: 'OK', onPress: () => navigation.navigate('Main') },
       ]);
     } catch (err) {
       Alert.alert('Error', err.response?.data?.message || 'Could not punch in. Please try again.');
@@ -384,7 +409,7 @@ const AttendanceScreen = ({ navigation }) => {
             setSelfie(null); // Clear selfie after punch
             await fetchHistory();
             Alert.alert('Punched Out', res.data.message || 'Shift ended successfully!', [
-              { text: 'OK', onPress: () => navigation.navigate('Home') },
+              { text: 'OK', onPress: () => navigation.navigate('Main') },
             ]);
           } catch (err) {
             Alert.alert('Error', err.response?.data?.message || 'Could not punch out. Please try again.');
@@ -396,8 +421,6 @@ const AttendanceScreen = ({ navigation }) => {
     ]);
   };
 
-  const alreadyPunchedIn = !!todayAttendance?.punchIn?.time;
-  const alreadyPunchedOut = !!todayAttendance?.punchOut?.time;
 
   const formatTime = (dateStr) => {
     if (!dateStr) return '--:--';
@@ -423,7 +446,7 @@ const AttendanceScreen = ({ navigation }) => {
         <View className="flex-row items-center">
           <TouchableOpacity
             className="w-10 h-10 rounded-xl bg-slate-50 justify-center items-center border border-slate-100 mr-4"
-            onPress={() => navigation.navigate('Home')}
+            onPress={() => navigation.navigate('Main')}
           >
             <ArrowLeft size={20} color="#64748b" />
           </TouchableOpacity>

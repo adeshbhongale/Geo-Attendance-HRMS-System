@@ -1,6 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, Briefcase, Calendar, Camera, ChevronRight, Edit3, LogOut, Mail, Phone, Shield, X } from 'lucide-react-native';
+import {
+  Calendar,
+  Camera,
+  ChevronRight,
+  LogOut,
+  MapPin,
+  User as UserIcon,
+  X
+} from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -22,29 +30,17 @@ const ProfileScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [shifts, setShifts] = useState([]);
 
-  // Edit Form State
   const [form, setForm] = useState({
     name: '',
     email: '',
     mobile: '',
-    shift: '',
     profileImage: null,
   });
 
   useEffect(() => {
     fetchProfile();
-    fetchShifts();
   }, []);
-
-  const fetchShifts = async () => {
-    try {
-      const res = await api.get('/shifts');
-      setShifts(res.data.data || []);
-    } catch (err) {
-    }
-  };
 
   const fetchProfile = async () => {
     try {
@@ -57,7 +53,6 @@ const ProfileScreen = ({ navigation }) => {
         email: freshUser.email || '',
         mobile: freshUser.mobile || '',
         profileImage: null,
-        shift: freshUser.shift?._id || '',
       });
       await AsyncStorage.setItem('user', JSON.stringify(freshUser));
     } catch (err) {
@@ -71,7 +66,6 @@ const ProfileScreen = ({ navigation }) => {
             email: parsed.email || '',
             mobile: parsed.mobile || '',
             profileImage: null,
-            shift: parsed.shift?._id || '',
           });
         }
       } catch (_) { }
@@ -92,7 +86,6 @@ const ProfileScreen = ({ navigation }) => {
         name: form.name,
         email: form.email,
         mobile: form.mobile,
-        shift: form.shift,
         profileImage: form.profileImage || 'skipped',
       };
 
@@ -112,13 +105,14 @@ const ProfileScreen = ({ navigation }) => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Camera library access is required to pick an image.');
+        Alert.alert('Permission Denied', 'Camera library access is required.');
         return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: 'images',
         allowsEditing: false,
+        aspect: [1, 1],
         quality: 0.7,
         base64: true,
       });
@@ -127,18 +121,8 @@ const ProfileScreen = ({ navigation }) => {
         setForm({ ...form, profileImage: `data:image/jpeg;base64,${result.assets[0].base64}` });
       }
     } catch (err) {
-      Alert.alert('Error', `Failed to pick image: ${err.message || 'Unknown error'}`);
-      setUpdating(false);
+      Alert.alert('Error', 'Failed to pick image.');
     }
-  };
-
-  const convertTo12Hour = (time24) => {
-    if (!time24) return '--:--';
-    const [hours, minutes] = time24.split(':');
-    let h = parseInt(hours);
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12;
-    return `${h}:${minutes} ${ampm}`;
   };
 
   const handleLogout = () => {
@@ -148,14 +132,9 @@ const ProfileScreen = ({ navigation }) => {
         text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
-          try {
-            await api.get('/auth/logout');
-          } catch (_) { }
+          try { await api.get('/auth/logout'); } catch (_) { }
           await AsyncStorage.clear();
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'Login' }],
-          });
+          navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
         },
       },
     ]);
@@ -163,205 +142,168 @@ const ProfileScreen = ({ navigation }) => {
 
   if (loading) {
     return (
-      <View className="flex-1 justify-center items-center bg-white">
-        <ActivityIndicator size="large" color="#4f46e5" />
+      <View className="flex-1 justify-center items-center bg-[#0ea5e9]">
+        <ActivityIndicator size="large" color="white" />
       </View>
     );
   }
 
-  const initial = user?.name?.charAt(0)?.toUpperCase() || 'U';
+  const MenuButton = ({ icon: Icon, label, onPress, color = "#475569" }) => (
+    <TouchableOpacity
+      onPress={onPress}
+      className="bg-white w-[31%] aspect-square rounded-xl shadow-sm border border-slate-100 items-center justify-center mb-4"
+    >
+      <View className="p-3 bg-slate-50 rounded-full mb-2">
+        <Icon size={24} color={color} />
+      </View>
+      <Text className="text-[10px] font-bold text-slate-600 text-center px-1" numberOfLines={2}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
 
   return (
-    <View className="flex-1 bg-slate-50">
-      <StatusBar barStyle="dark-content" />
+    <View className="flex-1 bg-slate-100">
+      <StatusBar barStyle="light-content" />
 
-      {/* Header */}
-      <View className="pt-14 px-6 pb-5 bg-white border-b border-slate-100 flex-row justify-between items-center">
-        <View className="flex-row items-center">
-          <TouchableOpacity
-            className="w-10 h-10 rounded-xl bg-slate-50 justify-center items-center border border-slate-100 mr-4"
-            onPress={() => navigation.navigate('Home')}
-          >
-            <ArrowLeft size={20} color="#64748b" />
-          </TouchableOpacity>
-          <Text className="text-2xl font-extrabold text-slate-900 tracking-tight">Settings</Text>
-        </View>
-        <TouchableOpacity
-          onPress={() => setEditModalVisible(true)}
-          className="bg-indigo-600 px-4 py-2 rounded-xl shadow-lg shadow-indigo-100 flex-row items-center"
-        >
-          <Edit3 size={16} color="white" />
-          <Text className="text-white font-bold ml-2 text-xs">Edit</Text>
-        </TouchableOpacity>
+      {/* Top Header Bar (No TruCode) */}
+      <View className="bg-sky-600 pt-12 pb-24 px-6 flex-row items-center justify-between">
+        <View className="w-6" /> 
+        <Text className="text-white font-bold text-lg">Profile</Text>
+        <View className="w-6" /> 
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 110 }}>
-        {/* Profile Info Section */}
-        <View className="pb-10 bg-white items-center border-b border-slate-100 pt-8 shadow-sm">
-          {user?.profileImage ? (
-            <Image
-              source={{ uri: user.profileImage }}
-              className="w-28 h-28 rounded-full mb-5"
-              style={{ shadowColor: '#4f46e5', shadowOpacity: 0.35, shadowRadius: 16 }}
-            />
-          ) : (
-            <View
-              className="w-28 h-28 rounded-full bg-indigo-600 justify-center items-center mb-5"
-              style={{ shadowColor: '#4f46e5', shadowOpacity: 0.35, shadowRadius: 16 }}
-            >
-              <Text className="text-white text-4xl font-bold">{initial}</Text>
+      <ScrollView
+        className="flex-1 -mt-20"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Profile Info Card (Matching Image) */}
+        <View className="px-6 mb-6">
+          <View className="bg-white rounded-3xl p-6 shadow-md items-center border border-slate-200">
+            <View className="w-24 h-24 rounded-full bg-slate-100 border-4 border-slate-50 items-center justify-center overflow-hidden -mt-4 shadow-sm">
+              {user?.profileImage ? (
+                <Image source={{ uri: user.profileImage }} className="w-full h-full" />
+              ) : (
+                <UserIcon size={40} color="#94a3b8" />
+              )}
             </View>
-          )}
-          <Text className="text-2xl font-bold text-slate-900 tracking-tight">{user?.name || '—'}</Text>
-          <View className="flex-row items-center mt-3 bg-indigo-50 px-5 py-2 rounded-full">
-            <Briefcase size={14} color="#4f46e5" />
-            <Text className="text-indigo-600 font-bold ml-2 text-xs">
-              {user?.designation || 'Employee'}{user?.department ? ` • ${user.department}` : ''}
+
+            <Text className="text-2xl font-bold text-slate-800 mt-4">{user?.name || 'User'}</Text>
+            <Text className="text-slate-500 font-bold text-sm mt-1">
+              {user?.department} , {user?.designation}
             </Text>
+            <Text className="text-slate-400 font-bold text-xs mt-1">{user?.email}</Text>
+            <Text className="text-slate-400 font-bold text-xs">{user?.mobile}</Text>
+
+            <TouchableOpacity
+              onPress={() => setEditModalVisible(true)}
+              className="mt-6 bg-sky-600 px-8 py-3 rounded-2xl shadow-sm"
+            >
+              <Text className="text-white font-bold">Edit Profile</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        <View className="p-6">
+        {/* Simplified Dashboard (2 boxes) */}
+        <View className="px-6 mb-8">
+          <Text className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mb-4 ml-1">My Activity</Text>
+          
+          <View className="flex-row justify-between mb-4">
+            <TouchableOpacity 
+              onPress={() => navigateGlobal('MonthlyViewScreen')}
+              className="bg-white w-[48%] p-6 rounded-3xl shadow-sm border border-slate-100"
+            >
+              <View className="w-12 h-12 bg-indigo-50 rounded-2xl items-center justify-center mb-4">
+                <Calendar size={24} color="#4f46e5" />
+              </View>
+              <Text className="text-slate-900 font-bold text-base">Monthly</Text>
+              <Text className="text-slate-900 font-bold text-base">Attendance</Text>
+              <View className="mt-4 flex-row items-center">
+                <Text className="text-indigo-600 font-bold text-xs">VIEW ALL</Text>
+                <ChevronRight size={14} color="#4f46e5" />
+              </View>
+            </TouchableOpacity>
 
-
-          {/* Personal Details */}
-          <View className="bg-white rounded-3xl p-6 border border-slate-100 mb-6 shadow-sm">
-            <Text className="text-[10px] font-bold text-slate-400 tracking-widest mb-6 ">Contact Information</Text>
-
-            <View className="flex-row items-center mb-6">
-              <View className="w-10 h-10 rounded-xl bg-slate-50 justify-center items-center">
-                <Mail size={18} color="#64748b" />
+            <TouchableOpacity 
+              onPress={() => navigateGlobal('TrackMyRoute')}
+              className="bg-white w-[48%] p-6 rounded-3xl shadow-sm border border-slate-100"
+            >
+              <View className="w-12 h-12 bg-rose-50 rounded-2xl items-center justify-center mb-4">
+                <MapPin size={24} color="#e11d48" />
               </View>
-              <View className="ml-4 flex-1">
-                <Text className="text-[10px] font-bold text-slate-400 tracking-widest ">Email</Text>
-                <Text className="text-base font-bold text-slate-800 mt-0.5">{user?.email || 'N/A'}</Text>
+              <Text className="text-slate-900 font-bold text-base">Track</Text>
+              <Text className="text-slate-900 font-bold text-base">Location</Text>
+              <View className="mt-4 flex-row items-center">
+                <Text className="text-rose-600 font-bold text-xs">DAY WISE</Text>
+                <ChevronRight size={14} color="#e11d48" />
               </View>
-            </View>
-
-            <View className="flex-row items-center mb-6">
-              <View className="w-10 h-10 rounded-xl bg-slate-50 justify-center items-center">
-                <Phone size={18} color="#64748b" />
-              </View>
-              <View className="ml-4 flex-1">
-                <Text className="text-[10px] font-bold text-slate-400 tracking-widest ">Phone</Text>
-                <Text className="text-base font-bold text-slate-800 mt-0.5">{user?.mobile || 'N/A'}</Text>
-              </View>
-            </View>
-
-            <View className="flex-row items-center">
-              <View className="w-10 h-10 rounded-xl bg-slate-50 justify-center items-center">
-                <Shield size={18} color="#64748b" />
-              </View>
-              <View className="ml-4 flex-1">
-                <Text className="text-[10px] font-bold text-slate-400 tracking-widest ">Role</Text>
-                <Text className="text-base font-bold text-slate-800 mt-0.5">
-                  {user?.role === 'admin' ? 'Administrator' : 'Employee'}
-                </Text>
-              </View>
-            </View>
+            </TouchableOpacity>
           </View>
 
-
-
-          {/* Monthly Record Button */}
-          <TouchableOpacity
-            onPress={() => navigateGlobal('MonthlyViewScreen')}
-            className="bg-white rounded-3xl p-5 border border-slate-100 mb-6 flex-row justify-between items-center shadow-sm"
-          >
-            <View className="flex-row items-center">
-              <View className="w-12 h-12 rounded-2xl bg-amber-50 justify-center items-center mr-4">
-                <Calendar size={22} color="#f59e0b" />
-              </View>
-              <View>
-                <Text className="text-slate-800 font-bold text-base">Attendance History</Text>
-                <Text className="text-slate-400 font-bold text-xs mt-0.5">View your monthly summary</Text>
-              </View>
-            </View>
-            <ChevronRight size={20} color="#94a3b8" />
-          </TouchableOpacity>
-
-          {/* Sign Out */}
-          <TouchableOpacity
-            className="bg-rose-50 flex-row items-center p-5 rounded-2xl border border-rose-100"
+          {/* Horizontal Sign Out */}
+          <TouchableOpacity 
             onPress={handleLogout}
-            activeOpacity={0.85}
+            className="flex-row items-center justify-center bg-rose-50 p-5 rounded-2xl border border-rose-100 mt-4"
           >
-            <View className="w-10 h-10 rounded-xl bg-rose-500 justify-center items-center shadow-md shadow-rose-100">
-              <LogOut size={18} color="white" />
-            </View>
-            <Text className="flex-1 ml-4 text-rose-600 font-extrabold text-base">Sign Out</Text>
-            <ChevronRight size={18} color="#fb7185" />
+            <LogOut size={24} color="#e11d48" />
+            <Text className="text-rose-600 font-bold text-lg ml-3">Sign Out Account</Text>
           </TouchableOpacity>
-
-          <Text className="text-center text-slate-300 text-[10px] mt-10 font-bold tracking-widest ">
-            Geo-Attendance HRMS • v1.0.0
-          </Text>
         </View>
       </ScrollView>
 
       {/* Edit Profile Modal */}
       <Modal visible={editModalVisible} animationType="slide" transparent>
-        <View className="flex-1 bg-black/40 justify-end">
-          <View className="bg-white rounded-t-[32px] px-6 pt-6 pb-10 shadow-2xl">
+        <View className="flex-1 bg-black/50 justify-end">
+          <View className="bg-white rounded-t-[40px] px-8 pt-8 pb-12 shadow-2xl">
             <View className="flex-row justify-between items-center mb-8">
-              <Text className="text-2xl font-bold text-slate-900">Manage Account</Text>
+              <Text className="text-2xl font-bold text-slate-800 tracking-tight">Edit Profile</Text>
               <TouchableOpacity onPress={() => setEditModalVisible(false)} className="bg-slate-100 p-2 rounded-full">
-                <X size={20} color="#94a3b8" />
+                <X size={20} color="#64748b" />
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              <View className="gap-6">
-                <View className="items-center">
-                  <Text className="text-[10px] font-bold text-slate-400 tracking-widest mb-3  self-start ml-1">Profile Picture</Text>
-                  <TouchableOpacity
-                    className="w-32 h-32 rounded-full border-2 border-dashed border-slate-200 justify-center items-center overflow-hidden bg-slate-50"
-                    onPress={pickProfileImage}
-                  >
-                    {form.profileImage ? (
-                      <Image
-                        source={{ uri: form.profileImage }}
-                        className="w-full h-full"
-                        resizeMode="cover"
-                      />
-                    ) : user?.profileImage ? (
-                      <Image
-                        source={{ uri: user.profileImage }}
-                        className="w-full h-full"
-                        resizeMode="cover"
-                      />
+              <View className="items-center mb-8">
+                <TouchableOpacity onPress={pickProfileImage} className="relative">
+                  <View className="w-24 h-24 rounded-full bg-slate-100 overflow-hidden border-2 border-slate-100">
+                    {(form.profileImage || user?.profileImage) ? (
+                      <Image source={{ uri: form.profileImage || user.profileImage }} className="w-full h-full" />
                     ) : (
-                      <View className="items-center">
-                        <Camera size={32} color="#cbd5e1" />
-                        <Text className="text-slate-400 font-bold text-[8px] mt-1">TAP TO CHANGE</Text>
+                      <View className="flex-1 items-center justify-center">
+                        <Camera size={32} color="#94a3b8" />
                       </View>
                     )}
-                  </TouchableOpacity>
-                </View>
+                  </View>
+                  <View className="absolute bottom-0 right-0 bg-indigo-600 p-2 rounded-full border-2 border-white">
+                    <Camera size={14} color="white" />
+                  </View>
+                </TouchableOpacity>
+              </View>
 
+              <View className="space-y-4">
                 <View>
-                  <Text className="text-[10px] font-bold text-slate-400 tracking-widest mb-2.5 ml-1 ">Full Name</Text>
+                  <Text className="text-[10px] font-bold text-slate-400  tracking-widest mb-2 ml-1">Full Name</Text>
                   <TextInput
-                    className="bg-slate-50 rounded-2xl px-5 h-14 border border-slate-200 text-slate-800 font-bold"
+                    className="bg-slate-50 rounded-xl px-5 h-14 border border-slate-100 font-bold text-slate-800"
                     value={form.name}
                     onChangeText={(v) => setForm({ ...form, name: v })}
-                    placeholder="Full Name"
+                    placeholder="Enter full name"
                   />
                 </View>
-                <View>
-                  <Text className="text-[10px] font-bold text-slate-400 tracking-widest mb-2.5 ml-1 ">Email Address</Text>
+                <View className="mt-4">
+                  <Text className="text-[10px] font-bold text-slate-400  tracking-widest mb-2 ml-1">Email</Text>
                   <TextInput
-                    className="bg-slate-50 rounded-2xl px-5 h-14 border border-slate-200 text-slate-800 font-bold"
+                    className="bg-slate-50 rounded-xl px-5 h-14 border border-slate-100 font-bold text-slate-800"
                     value={form.email}
                     onChangeText={(v) => setForm({ ...form, email: v })}
                     keyboardType="email-address"
                     autoCapitalize="none"
                   />
                 </View>
-                <View>
-                  <Text className="text-[10px] font-bold text-slate-400 tracking-widest mb-2.5 ml-1 ">Mobile Number</Text>
+                <View className="mt-4">
+                  <Text className="text-[10px] font-bold text-slate-400  tracking-widest mb-2 ml-1">Mobile</Text>
                   <TextInput
-                    className="bg-slate-50 rounded-2xl px-5 h-14 border border-slate-200 text-slate-800 font-bold"
+                    className="bg-slate-50 rounded-xl px-5 h-14 border border-slate-100 font-bold text-slate-800"
                     value={form.mobile}
                     onChangeText={(v) => setForm({ ...form, mobile: v })}
                     keyboardType="phone-pad"
@@ -369,14 +311,14 @@ const ProfileScreen = ({ navigation }) => {
                 </View>
 
                 <TouchableOpacity
-                  className="bg-indigo-600 h-16 rounded-2xl justify-center items-center mt-6 shadow-xl shadow-indigo-200"
                   onPress={handleUpdate}
                   disabled={updating}
+                  className="bg-[#0ea5e9] h-16 rounded-xl items-center justify-center mt-8 shadow-lg shadow-sky-100"
                 >
                   {updating ? (
                     <ActivityIndicator color="white" />
                   ) : (
-                    <Text className="text-white font-bold text-base  tracking-tight">Update My Profile</Text>
+                    <Text className="text-white font-bold text-lg">Save Changes</Text>
                   )}
                 </TouchableOpacity>
               </View>

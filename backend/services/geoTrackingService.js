@@ -49,3 +49,47 @@ exports.calculateTotalDistance = (points) => {
   }
   return parseFloat(total.toFixed(6));
 };
+
+/**
+ * Validates if a new location point is realistic compared to the last point
+ * @param {Object} lastPoint - Previous location point
+ * @param {Object} newPoint - New location point
+ * @returns {Object} { isValid, isSuspicious, distance, reason }
+ */
+exports.validateLocation = (lastPoint, newPoint) => {
+  if (!lastPoint) return { isValid: true, isSuspicious: false, distance: 0 };
+
+  const distance = exports.calculateDistance(
+    lastPoint.latitude,
+    lastPoint.longitude,
+    newPoint.latitude,
+    newPoint.longitude
+  );
+
+  const timeDiff = (new Date(newPoint.time) - new Date(lastPoint.time)) / 1000; // in seconds
+  
+  // If time difference is very small (e.g. < 5s) but distance is large, it's suspicious
+  // Max realistic speed: 180 km/h = 50 m/s
+  // In 10 seconds, max travel is 500 meters.
+  if (timeDiff > 0 && distance > 0.5 && (distance / (timeDiff / 3600)) > 180) {
+    return {
+      isValid: false,
+      isSuspicious: true,
+      distance,
+      reason: 'Unrealistic speed (> 180km/h)'
+    };
+  }
+
+  // Jump detection: > 500m in 10s is suspicious
+  if (timeDiff <= 15 && distance > 0.5) {
+    return {
+      isValid: false,
+      isSuspicious: true,
+      distance,
+      reason: 'Large jump in short interval'
+    };
+  }
+
+  return { isValid: true, isSuspicious: false, distance };
+};
+

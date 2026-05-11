@@ -17,21 +17,23 @@ const seedData = async () => {
     await mongoose.connect(process.env.MONGO_URI);
     console.log('Connected to MongoDB for seeding...');
 
+    const { clearCloudinaryStorage } = require('../utils/cloudinary');
     // 1. Clear existing data
     await Promise.all([
       User.deleteMany(),
       Attendance.deleteMany(),
       Leave.deleteMany(),
       Shift.deleteMany(),
-      Location.deleteMany()
+      Location.deleteMany(),
+      clearCloudinaryStorage()
     ]);
-    console.log('Cleared existing collections.');
+    console.log('Cleared existing collections and Cloudinary storage.');
 
     // 2. Create Shifts
     const shifts = await Shift.insertMany([
-      { name: 'Morning Shift', startTime: '08:00', endTime: '14:00', gracePeriod: 15, halfDayAfter: '10:00', workingHours: 8 },
-      { name: 'Evening Shift', startTime: '14:00', endTime: '22:00', gracePeriod: 15, halfDayAfter: '16:00', workingHours: 8 },
-      { name: 'Night Shift', startTime: '22:00', endTime: '04:00', gracePeriod: 15, halfDayAfter: '00:00', workingHours: 8, isNightShift: true }
+      { name: 'Morning Shift', startTime: '08:00', endTime: '16:00', gracePeriod: 15, halfDayAfter: '11:00', workingHours: 8 },
+      { name: 'Evening Shift', startTime: '16:00', endTime: '00:00', gracePeriod: 15, halfDayAfter: '19:00', workingHours: 8 },
+      { name: 'Night Shift', startTime: '00:00', endTime: '08:00', gracePeriod: 15, halfDayAfter: '03:00', workingHours: 8, isNightShift: true }
     ]);
     console.log(`Created ${shifts.length} Shifts.`);
 
@@ -81,6 +83,7 @@ const seedData = async () => {
         headquarter: i % 3 === 0 ? 'Ichalkaranji HQ' : 'Pune HQ',
         leaveBalance: 3,
         monthlyLeaveLimit: 3,
+        isOnline: false,
         createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
       });
     }
@@ -90,15 +93,15 @@ const seedData = async () => {
     employeeData.push({
       name: 'Adesh Bhongale',
       email: 'adesh@example.com',
-      mobile: '9876543210',
+      mobile: '100000000',
       password: adeshPassword,
       role: 'employee',
       department: 'Sales',
       designation: 'Sr.Sales Engineer',
       shift: shifts[0]._id,
-      headquarter: 'Mumbai HQ',
       leaveBalance: 3,
       monthlyLeaveLimit: 3,
+      isOnline: false,
       createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
     });
 
@@ -248,47 +251,55 @@ const seedData = async () => {
         let lastLat = office.latitude;
         let lastLng = office.longitude;
 
-        // Part 1: 30 logs within 20m radius (Ultra-Tense)
-        // 0.00018 degrees is approx 20 meters
+        // Part 1: 30 logs within 200m radius (High visibility)
+        // 0.0018 degrees is approx 200 meters
         const localTrips = 6;
-        const logsPerLocalTrip = 5; 
+        const logsPerLocalTrip = 5;
         for (let t = 0; t < localTrips; t++) {
           const angle = (Math.PI * 2 * Math.random());
-          const distDeg = (Math.random() * 0.00018); // Approx 20m
+          // Ensure a minimum jump of ~100m (0.0009 deg)
+          const distDeg = 0.0009 + (Math.random() * 0.0018);
           const targetLat = office.latitude + (distDeg * Math.cos(angle));
           const targetLng = office.longitude + (distDeg * Math.sin(angle));
 
           for (let i = 0; i < logsPerLocalTrip; i++) {
-            const ratio = i < (logsPerLocalTrip / 2) ? (i / (logsPerLocalTrip / 2)) : (1 - ((i - (logsPerLocalTrip / 2)) / (logsPerLocalTrip / 2)));
-            const jitter = (Math.random() - 0.5) * 0.000005; // Extremely tiny jitter for 20m zone
+            // Sharper ratio to ensure jumps are not divided into tiny sub-meters
+            const ratio = (i + 1) / logsPerLocalTrip;
+            const jitter = (Math.random() - 0.5) * 0.0001; // ~10m jitter
             const currentLat = office.latitude + (targetLat - office.latitude) * ratio + jitter;
             const currentLng = office.longitude + (targetLng - office.longitude) * ratio + jitter;
 
             const segmentDist = geoService.calculateDistance(lastLat, lastLng, currentLat, currentLng);
             totalDistanceKm += segmentDist;
-            currentTime = new Date(currentTime.getTime() + (durationMs / 45)); 
+            currentTime = new Date(currentTime.getTime() + (durationMs / 45));
 
             trackingLogs.push({
               time: new Date(currentTime),
               latitude: currentLat,
               longitude: currentLng,
-              address: `${(geoService.calculateDistance(office.latitude, office.longitude, currentLat, currentLng) * 1000).toFixed(1)}m from HQ (Micro-Zone)`,
+              address: `Main Road Sector ${t + 1}, ${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}`,
               isOutside: false,
-              distanceFromPrevious: segmentDist * 1000
+              distanceFromPrevious: parseFloat((segmentDist * 1000).toFixed(2))
             });
             lastLat = currentLat;
             lastLng = currentLng;
           }
         }
 
-        // Part 2: 10 logs for a 400m Road Trip (Strict Go and Come)
-        const roadTripAngle = Math.random() * Math.PI * 2;
-        const roadDistDeg = 0.0036; // Approx 400m
+        // Part 2: 10 logs for a 500m Road Trip (Moderate movement)
+        const roadTripAngle = (Math.PI * 2 * (empIndex / employees.length)) + (d * 0.1);
+        const roadDistDeg = 0.0045; // Approx 500m
         const roadTargetLat = office.latitude + (roadDistDeg * Math.cos(roadTripAngle));
         const roadTargetLng = office.longitude + (roadDistDeg * Math.sin(roadTripAngle));
 
+        const staysOutside = (empIndex % 4 === 0); // 25% of employees stay outside
         for (let i = 0; i <= 8; i++) {
-          const ratio = i <= 4 ? (i / 4) : (1 - ((i - 4) / 4));
+          let ratio;
+          if (staysOutside) {
+            ratio = (i + 1) / 9; // Direct trip away
+          } else {
+            ratio = i <= 4 ? (i / 4) : (1 - ((i - 4) / 4)); // Round trip
+          }
           const jitter = (Math.random() - 0.5) * 0.00001; // Low jitter for road consistency
           const currentLat = office.latitude + (roadTargetLat - office.latitude) * ratio + jitter;
           const currentLng = office.longitude + (roadTargetLng - office.longitude) * ratio + jitter;
@@ -297,18 +308,22 @@ const seedData = async () => {
           totalDistanceKm += segmentDist;
           currentTime = new Date(currentTime.getTime() + (durationMs / 45));
 
+          const isPointOutside = geoService.calculateDistance(office.latitude, office.longitude, currentLat, currentLng) > (office.radius / 1000);
+
           trackingLogs.push({
             time: new Date(currentTime),
             latitude: currentLat,
             longitude: currentLng,
-            address: `${(geoService.calculateDistance(office.latitude, office.longitude, currentLat, currentLng) * 1000).toFixed(0)}m Road Mission`,
-            isOutside: false,
-            distanceFromPrevious: segmentDist * 1000
+            address: `Service Road Point ${i + 1}, ${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}`,
+            isOutside: isPointOutside,
+            distanceFromPrevious: parseFloat((segmentDist * 1000).toFixed(2))
           });
           lastLat = currentLat;
           lastLng = currentLng;
         }
         // --- END ULTRA-DENSE TRACKING ---
+
+        const finalLog = trackingLogs[trackingLogs.length - 1];
 
         attendanceRecords.push({
           user: emp._id,
@@ -329,6 +344,13 @@ const seedData = async () => {
           // Canonical service computes this — stored in DB so APIs always return consistent data
           workingHours: parseFloat(workingHoursVal.toFixed(2)),
           lateTime: lateTimeVal,
+          isOutside: finalLog.isOutside,
+          lastTrackedLocation: {
+            latitude: finalLog.latitude,
+            longitude: finalLog.longitude,
+            address: finalLog.address,
+            time: finalLog.time
+          },
           // STANDARDIZED: both `distance` and `totalDistance` always set to same value
           distance: parseFloat(totalDistanceKm.toFixed(6)),
           totalDistance: parseFloat(totalDistanceKm.toFixed(6)),
@@ -336,9 +358,8 @@ const seedData = async () => {
           breaks: breaks,
           isLate: lateTimeVal > 0,
           isHalfDay: isHalfDay,
-          isOutside: Math.random() < 0.2,
           trackingLogs: trackingLogs,
-          signalStatus: 'online'
+          signalStatus: 'offline'
         });
       }
     }

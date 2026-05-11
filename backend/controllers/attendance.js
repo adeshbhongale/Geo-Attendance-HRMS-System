@@ -306,18 +306,18 @@ exports.getAllAttendance = async (req, res, next) => {
 // @access  Private
 exports.trackLocation = async (req, res, next) => {
   try {
-    const { latitude, longitude, address } = req.body;
+    const { latitude, longitude, address, accuracy, speed, altitude, heading, battery } = req.body;
     const userId = req.user.id;
 
     const now = new Date();
-    const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-    const startOfDay = new Date(today);
-    const endOfDay = new Date(today);
-    endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
+    // Use the same date logic as punchIn for consistency
+    const todayStr = now.toISOString().split('T')[0];
+    const startOfDay = new Date(todayStr + "T00:00:00.000Z");
+    const endOfDay = new Date(todayStr + "T23:59:59.999Z");
 
     const attendance = await Attendance.findOne({
       user: userId,
-      date: { $gte: startOfDay, $lt: endOfDay },
+      date: { $gte: startOfDay, $lte: endOfDay },
       "punchOut.time": { $exists: false }
     });
 
@@ -325,69 +325,115 @@ exports.trackLocation = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'No active session found to track' });
     }
 
-    if (attendance.punchOut?.time) {
-      return res.status(400).json({ success: false, message: 'Shift already ended' });
-    }
-
     const office = await Location.findOne({ name: 'Office Main' }) || await Location.findOne();
-    const distance = calculateDistance(latitude, longitude, office.latitude, office.longitude);
-    const isOutside = distance > office.radius;
-
-    // Calculate distance from last point
-    let incrementalDistance = 0;
-    let lastLat, lastLng;
-
-    if (attendance.trackingLogs.length > 0) {
-      const lastPoint = attendance.trackingLogs[attendance.trackingLogs.length - 1];
-      lastLat = lastPoint.latitude;
-      lastLng = lastPoint.longitude;
-    } else {
-      // First log, calculate distance from punch-in
-      lastLat = attendance.punchIn.location.latitude;
-      lastLng = attendance.punchIn.location.longitude;
-    }
-
-    // Try Google Road Distance first, fallback to mathematical straight-line
-    const googleDistance = await getGoogleRoadDistance(lastLat, lastLng, latitude, longitude);
     
-    if (googleDistance !== null) {
-      incrementalDistance = googleDistance;
-      // Distance calculated
-
+    // Get last point for validation
+    let lastPoint = null;
+    if (attendance.trackingLogs.length > 0) {
+      lastPoint = attendance.trackingLogs[attendance.trackingLogs.length - 1];
     } else {
-      incrementalDistance = calculateDistance(latitude, longitude, lastLat, lastLng);
-      // Fallback distance
-
+      lastPoint = {
+        latitude: attendance.punchIn.location.latitude,
+        longitude: attendance.punchIn.location.longitude,
+        time: attendance.punchIn.time
+      };
     }
 
-    // Teleportation Guard: If distance > 5km in a short interval, ignore it (likely GPS jump to 0,0)
-    if (incrementalDistance > 5) {
-       incrementalDistance = 0;
+    // Smart Validation
+    const validation = geoService.validateLocation(lastPoint, {
+      latitude,
+      longitude,
+      time: now
+    });
+
+    const isOutside = office ? (calculateDistance(latitude, longitude, office.latitude, office.longitude) > office.radius) : false;
+
+    // Handle suspicious points
+    if (validation.isSuspicious) {
+      // Still log it but mark as suspicious
+      attendance.trackingLogs.push({
+        time: now,
+        latitude,
+        longitude,
+        address,
+        isSuspicious: true,
+        accuracy,
+        speed,
+        altitude,
+        heading,
+        distanceFromPrevious: 0 // Don't add distance for suspicious points
+      });
+      
+      await attendance.save();
+
+      return res.status(200).json({
+        success: true,
+        message: 'Location marked as suspicious',
+        isSuspicious: true,
+        retry: true // Signal mobile app to retry fetch
+      });
     }
 
-    attendance.totalDistance = parseFloat(((attendance.totalDistance || 0) + incrementalDistance).toFixed(6));
-    attendance.distance = attendance.totalDistance; // Sync fields
+    // Valid point processing
+    const incrementalDistance = validation.distance;
+    const totalDistanceTillNow = (attendance.totalDistance || 0) + incrementalDistance;
 
-    attendance.trackingLogs.push({
-      time: new Date(),
+    attendance.totalDistance = parseFloat(totalDistanceTillNow.toFixed(6));
+    attendance.currentDistance = attendance.totalDistance; // Sync fields
+    attendance.distance = attendance.totalDistance;
+    attendance.isOutside = isOutside;
+
+    attendance.lastTrackedLocation = {
       latitude,
       longitude,
       address,
-      isOutside,
-      distanceFromPrevious: incrementalDistance * 1000 // Store in meters for consistency
+      time: now
+    };
+    attendance.lastTrackingTime = now;
+    if (battery) attendance.battery = battery;
+
+    attendance.trackingLogs.push({
+      time: now,
+      latitude,
+      longitude,
+      address,
+      distanceFromPrevious: parseFloat((incrementalDistance * 1000).toFixed(2)), // Store in METERS for frontend
+      totalDistanceTillNow: parseFloat(totalDistanceTillNow.toFixed(6)), // Keep in KM
+      isSuspicious: false,
+      accuracy,
+      speed,
+      altitude,
+      heading
     });
 
     await attendance.save();
 
+    // Broadcast to Admin via Socket.IO
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('locationUpdated', {
+        userId,
+        userName: req.user.name,
+        latitude,
+        longitude,
+        address,
+        time: now,
+        totalDistance: attendance.totalDistance,
+        isOutside
+      });
+    }
+
     res.status(200).json({
       success: true,
       message: 'Location tracked',
-      isOutside
+      isOutside,
+      totalDistance: attendance.totalDistance
     });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
 };
+
 
 // @desc    Get monthly attendance summary and daily status
 // @route   GET /api/attendance/monthly-view

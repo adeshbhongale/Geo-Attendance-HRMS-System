@@ -12,7 +12,6 @@
 8. [Authentication Flow](#authentication-flow)
 9. [Folder Structure](#folder-structure)
 10. [Recent System Changes (May 2026)](#recent-system-changes-may-2026)
-11. [Setup & Deployment](#setup--deployment)
 
 ## Project Overview
 
@@ -169,8 +168,11 @@ The system follows a modern three-tier client-server architecture:
   startTime: String (HH:mm format, required),
   endTime: String (HH:mm format, required),
   gracePeriod: Number (in minutes, default: 15),
-  halfDayLimit: Number (in hours, default: 4),
-  lateRules: String (description of late arrival rules),
+  halfDayAfter: String (HH:mm format, default: "11:00"),
+  punchInCutoff: String (HH:mm format, default: "14:00"),
+  workingHours: Number (default: 8),
+  weeklyOff: [String] (default: ['Sunday']),
+  isNightShift: Boolean (default: false),
   timestamps: { createdAt, updatedAt }
 }
 ```
@@ -445,7 +447,6 @@ JWT Contains:
 3. OTP sent to admin (logged in console)
 4. OTP valid for 10 minutes
 5. Admin enters OTP
-6. Backend validates OTP
 7. JWT and Refresh Token issued
 ```
 
@@ -726,6 +727,91 @@ Geo-Attendance-HRMS-System/
 - **Comprehensive Seeding**: Updated `seed_comprehensive.js` to include advanced test points for multi-session attendance, diverse leave patterns, and varied geofencing scenarios.
 - **Navigation Hardening**: Verified that all new screens are correctly wrapped in the Navigation context to prevent "Couldn't find navigation context" errors on native Android builds.
 
+### 9. Geo-Intelligence, Admin Location Display & Date Persistence (May 10, 2026)
+
+**Changed**: Full-address geocoding across all admin views, Punch location cards in Track Data, and date persistence fix in Tracking Dashboard.
+
+#### Mobile App — Google Geocoding for Background Tracking Logs
+
+- **File**: `mobile-app/src/screens/DashboardScreen.js`
+- **Before**: Background tracking pings (every 2 min) stored addresses as `"${street}, ${city}"` — short, truncated format.
+- **After**: Now calls **Google Geocoding API** (`formatted_address`) for each ping. Full addresses (building, ward, road, area, city, state, pincode) are stored in every `trackingLog` entry.
+- **Fallback**: If Google API fails → `expo-location reverseGeocodeAsync` with all available fields joined.
+
+#### Admin Panel — Reports: Full Address in Time Columns
+
+- **File**: `admin-panel/src/pages/Reports.jsx`
+- **Employee Overview Sheet**: Check-In and Check-Out columns now show the full `timeInLocation` / `timeOutLocation` address below the time value.
+- **Present Timing Sheet**: In Time and Out Time columns display the full address below the time (with `max-w-[160px]` wrap constraint for column width balance).
+- Backend already returned `timeInLocation` and `timeOutLocation` fields — only frontend rendering was added.
+
+#### Admin Panel — Tracking Dashboard: Full Address, No Truncation
+
+- **File**: `admin-panel/src/pages/TrackingDashboard.jsx`
+- **Before**: "Last Known Location" column used `line-clamp-1` — address cut off with `...`.
+- **After**: Removed `line-clamp-1`. Address wraps fully with an indigo `MapPin` icon prefix and timestamp indented below.
+
+#### Admin Panel — EmployeeTrackData: Punch Location Cards
+
+- **File**: `admin-panel/src/pages/EmployeeTrackData.jsx`
+- **New section** added between the employee summary card and the activity logs table:
+  - 🟢 **Punch In Location card**: Shows exact full address + punch-in time + lat/lng coordinates.
+  - 🔴 **Punch Out Location card**: Shows exact full address + punch-out time + lat/lng coordinates.
+  - Cards only render if attendance data exists for the selected date.
+- **Activity Logs table**: Removed `max-w-md` truncation from Location Address column. `MapPin` icon upgraded to indigo for better visibility. Addresses wrap freely.
+
+#### Admin Panel — TrackingDashboard: Date Persists Across Navigation
+
+- **File**: `admin-panel/src/pages/TrackingDashboard.jsx`
+- **Root Cause**: `selectedDate` used `useState` — reset to today on every component remount.
+- **Scenario that failed**: Select date → click employee → open EmployeeTrackData → press back → **date resets to today**.
+- **Fix**: Replaced `useState` with `useSearchParams`. Date stored in URL as `?date=YYYY-MM-DD`.
+- **Result**: Browser back button and in-app navigation now preserve the selected date correctly.
+
+### 10. Stability Hardening & Shift Re-Configuration (May 11, 2026)
+
+**Changed**: Standardized shift timings, removed debug telemetry, and hardened mobile route tracking.
+
+- **Files**: `backend/server.js`, `mobile-app/src/screens/TrackMyRoute.js`, `mobile-app/src/screens/ProfileScreen.js`, `backend/data/seed.json`
+
+#### Shift Re-Configuration:
+- **Standardized 8-Hour Shifts**:
+  - **Morning Shift**: 08:00 AM to 04:00 PM
+  - **Evening Shift**: 04:00 PM to 12:00 AM (Midnight)
+  - **Night Shift**: 12:00 AM to 08:00 AM
+- **Seeding**: Updated the global `seed.json` with these standard timings and re-seeded the production database.
+
+#### Mobile UI & UX Modernization:
+- **Dashboard Simplification**: Redesigned the `ProfileScreen` to use a clean, dashboard-style grid with primary actions:
+  - **Monthly Attendance Card**: Quick access to monthly logs.
+  - **Track Location Card**: Day-wise movement history.
+  - **Horizontal Sign Out**: High-visibility logout button at the bottom of the dashboard.
+- **Visual Branding**: Removed all legacy "TruCode" and "Geoattend" branding, replacing it with a generic, professional "Profile" and "Dashboard" interface.
+
+#### Tracking Stability & 404 Resolution:
+- **Direct Route Mounting**: Resolved persistent 404 errors in mobile API calls by mounting high-priority tracking routes directly in `server.js`.
+- **Render Hardening**: Implemented robust coordinate validation in `TrackMyRoute.js` to prevent crashes caused by partial or malformed location payloads.
+- **Diagnostic Cleanup**: Completely stripped all `[DEBUG]` logs and console telemetry from both the Backend and Mobile application to prepare for production readiness.
+
+### 11. High-Fidelity Tracking & Simulation Analytics (May 11, 2026)
+
+**Changed**: Upgraded movement simulation scale and real-time connectivity tracking for enterprise-grade auditing.
+
+- **Files**: `backend/scripts/seed_comprehensive.js`, `backend/scripts/simulateMovement.js`, `backend/server.js`, `mobile-app/src/screens/AttendanceScreen.js`
+
+#### Movement Scale & Visibility:
+- **Substantial Telemetry**: Refactored the movement simulation logic to ensure every tracking log entry reflects a meaningful distance. 
+  - **Local Trips**: Expanded to a ~100m - 200m radius with a minimum jump of 50m per segment.
+  - **Road Trips**: Expanded to a ~2.2km - 3.3km range with multi-kilometer jumps for long-range auditing.
+- **Visual Impact**: These changes ensure that the "Distance (km)" and "Meter Lines" in the Admin Dashboard logs are substantial and clearly visible on the map, eliminating sub-meter "noise" logs.
+
+#### Real-Time Connectivity Tracking:
+- **isOnline Persistence**: Implemented real-time socket `join` and `disconnect` handlers. When an employee opens the mobile app, they are instantly marked as **Online** in the database.
+- **Geofence Adherence Sync**: The root `isOutside` status of each attendance record is now dynamically updated during every location ping, ensuring 100% data consistency between the Tracking Dashboard and the official attendance reports.
+
+#### Multi-User Telemetry Variety:
+- **Unique Trails**: Every seeded employee now follows a unique, date-dependent movement path. 25% of employees are simulated to end their day outside the geofence, providing a diverse dataset for testing adherence alerts and compliance auditing.
+
 ---
 
 ## Setup & Deployment
@@ -737,12 +823,6 @@ Geo-Attendance-HRMS-System/
 ```bash
 cd backend
 npm install
-
-# Create .env file with:
-# MONGO_URI=mongodb://localhost:27017/geo-attendance
-# JWT_SECRET=your_jwt_secret_key
-# REFRESH_TOKEN_SECRET=your_refresh_token_secret
-# PORT=5000
 
 # Seed database
 npm run seed

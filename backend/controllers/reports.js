@@ -201,14 +201,18 @@ exports.getTrackingStats = async (req, res) => {
       .populate('user', 'name email department mobile designation profileImage isOnline');
 
     const presentCount = attendance.length;
-
     const onLeaveCount = await Leave.countDocuments({
       status: 'Approved',
       startDate: { $lte: targetDate },
       endDate:   { $gte: targetDate }
     });
-
     const absentCount = Math.max(0, totalEmployees - presentCount - onLeaveCount);
+
+    const onlineCount  = await User.countDocuments({ role: 'employee', isOnline: true });
+    const offlineCount = Math.max(0, totalEmployees - onlineCount);
+
+    const outsideCount = attendance.filter(a => a.isOutside).length;
+    const insideCount  = Math.max(0, presentCount - outsideCount);
 
     const employeesData = attendance
       .filter(att => att.user)
@@ -235,7 +239,8 @@ exports.getTrackingStats = async (req, res) => {
           distance: parseFloat((att.totalDistance || att.distance || 0).toFixed(2)),
           workingHours:     statsService.calculateWorkingHours(att),
           status:           att.user.isOnline ? 'online' : 'offline',
-          attendanceStatus: att.status
+          attendanceStatus: att.status,
+          isOutside:        att.isOutside
         };
       });
 
@@ -244,9 +249,9 @@ exports.getTrackingStats = async (req, res) => {
       data: {
         stats: {
           total:       totalEmployees,
-          tracking:    { enabled: totalEmployees, disabled: 0 },
-          presence:    { present: presentCount, absent: absentCount, onLeave: onLeaveCount },
-          permissions: { granted: presentCount, denied: 0 }
+          connectivity: { online: onlineCount, offline: offlineCount },
+          presence:     { present: presentCount, absent: absentCount, onLeave: onLeaveCount },
+          geofence:     { inside: insideCount, outside: outsideCount }
         },
         employees: employeesData
       }
@@ -573,9 +578,12 @@ exports.getEmployeeTrackDetails = async (req, res) => {
         exists:   true,
         employee: attendance.user,
         summary: {
-          // Standardized field: `distance` (km)
-          distance:          parseFloat((attendance.distance || attendance.totalDistance || 0).toFixed(4)),
-          workingHours:      statsService.calculateWorkingHours(attendance),
+          // Standardized field: `totalDistance` (km)
+          // Robust Fallback: If summary field is 0, sum up the logs in KM
+          totalDistance: (attendance.totalDistance || attendance.distance) 
+            ? parseFloat((attendance.totalDistance || attendance.distance).toFixed(4))
+            : parseFloat((logs.reduce((acc, l) => acc + (l.distanceFromPrevious || 0), 0) / 1000).toFixed(4)),
+          workingHours: statsService.calculateWorkingHours(attendance),
           lastKnownLocation: attendance.trackingLogs?.length > 0
             ? attendance.trackingLogs[attendance.trackingLogs.length - 1]
             : attendance.punchIn?.location
@@ -589,3 +597,39 @@ exports.getEmployeeTrackDetails = async (req, res) => {
     res.status(400).json({ success: false, message: err.message });
   }
 };
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/reports/track-details-me   (mobile — own track route)
+// ─────────────────────────────────────────────────────────────
+exports.getEmployeeTrackDetailsMe = async (req, res) => {
+  try {
+    const { date }   = req.query;
+    const targetDate = date ? parseUTCDate(date) : todayUTC();
+
+    const attendance = await Attendance.findOne({
+      user: req.user.id,
+      date: targetDate
+    });
+
+    if (!attendance) {
+      return res.json({ success: true, data: { exists: false, message: 'No tracking data' } });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        exists: true,
+        summary: {
+          totalDistance: attendance.totalDistance || 0,
+          workingHours: 0
+        },
+        logs: attendance.trackingLogs || [],
+        punchIn: attendance.punchIn,
+        punchOut: attendance.punchOut
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+

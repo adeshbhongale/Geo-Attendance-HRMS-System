@@ -97,9 +97,9 @@ const TrackingDashboard = () => {
     );
   }
 
-  const trackingChartData = [
-    { name: 'TrackingEnabled', value: data?.stats?.tracking?.enabled || 0, color: '#facc15' },
-    { name: 'TrackingNotEnabled', value: data?.stats?.tracking?.disabled || 0, color: '#cbd5e1' }
+  const connectivityChartData = [
+    { name: 'Online', value: data?.stats?.connectivity?.online || 0, color: '#10b981' },
+    { name: 'Offline', value: data?.stats?.connectivity?.offline || 0, color: '#cbd5e1' }
   ];
 
   const presenceChartData = [
@@ -108,14 +108,14 @@ const TrackingDashboard = () => {
     { name: 'On Leave', value: data?.stats?.presence?.onLeave || 0, color: '#6366f1' }
   ];
 
-  const permissionsChartData = [
-    { name: 'Granted', value: data?.stats?.permissions?.granted || 0, color: '#6366f1' },
-    { name: 'Denied', value: data?.stats?.permissions?.denied || 0, color: '#f43f5e' }
+  const geofenceChartData = [
+    { name: 'Inside', value: data?.stats?.geofence?.inside || 0, color: '#6366f1' },
+    { name: 'Outside', value: data?.stats?.geofence?.outside || 0, color: '#f43f5e' }
   ];
 
   const DonutChart = ({ title, chartData, total }) => (
     <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
-      <h4 className="text-[11px] font-bold text-slate-400  mb-6">{title}</h4>
+      <h4 className="text-[11px] font-bold text-slate-400  mb-6 tracking-widest">{title}</h4>
       <div className="h-48 w-full min-h-[150px] relative">
         <ResponsiveContainer width="99%" height="100%" minHeight={150} debounce={50}>
           <PieChart>
@@ -202,8 +202,8 @@ const TrackingDashboard = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <DonutChart
-          title="Live Tracking Status"
-          chartData={trackingChartData}
+          title="Online/Offline Status"
+          chartData={connectivityChartData}
           total={data?.stats?.total || 0}
         />
         <DonutChart
@@ -212,9 +212,9 @@ const TrackingDashboard = () => {
           total={data?.stats?.total || 0}
         />
         <DonutChart
-          title="App Permissions"
-          chartData={permissionsChartData}
-          total={data?.stats?.total || 0}
+          title="Inside/Outside Geofence"
+          chartData={geofenceChartData}
+          total={data?.stats?.presence?.present || 0}
         />
       </div>
 
@@ -248,6 +248,7 @@ const TrackingDashboard = () => {
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 border-b border-slate-100">Contact</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 border-b border-slate-100">Last Known Location</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 border-b border-slate-100 text-center">Distance (km)</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 border-b border-slate-100 text-center">Adherence</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 border-b border-slate-100 text-center">Worked</th>
                 <th className="px-6 py-4 text-[10px] font-bold text-slate-400 border-b border-slate-100 text-center">Status</th>
               </tr>
@@ -311,6 +312,13 @@ const TrackingDashboard = () => {
                           View Route
                         </button>
                       </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex justify-center">
+                      <span className={`px-2 py-1 rounded-full text-[8px] font-bold tracking-widest ${emp.isOutside ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-emerald-50 text-emerald-600 border border-emerald-100'}`}>
+                        {emp.isOutside ? 'OUTSIDE' : 'INSIDE'}
+                      </span>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-center">

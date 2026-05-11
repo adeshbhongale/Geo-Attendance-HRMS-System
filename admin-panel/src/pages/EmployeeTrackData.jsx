@@ -19,7 +19,10 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import CalendarPicker from '../components/CalendarPicker';
 
+import socket from '../socket';
+
 const EmployeeTrackData = () => {
+
   const { userId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -39,18 +42,55 @@ const EmployeeTrackData = () => {
     fetchTrackDetails();
   }, [userId, date]);
 
+  // Real-time updates
+  useEffect(() => {
+    const handleLocationUpdate = (payload) => {
+      if (payload.userId === userId) {
+        setData(prev => {
+          if (!prev) return prev;
+          const isDuplicate = prev.logs.some(log => 
+            new Date(log.time).getTime() === new Date(payload.time).getTime()
+          );
+          if (isDuplicate) return prev;
+
+          const newLog = {
+            latitude: payload.latitude,
+            longitude: payload.longitude,
+            time: payload.time,
+            address: payload.address,
+            distanceFromPrevious: payload.distanceFromPrevious || 0,
+            isSuspicious: payload.isSuspicious
+          };
+
+          return {
+            ...prev,
+            logs: [newLog, ...prev.logs], // Prepend for table view
+            summary: {
+              ...prev.summary,
+              totalDistance: payload.totalDistance
+            }
+          };
+        });
+      }
+    };
+
+    socket.on('locationUpdated', handleLocationUpdate);
+    return () => socket.off('locationUpdated', handleLocationUpdate);
+  }, [userId]);
+
   const fetchTrackDetails = async () => {
     try {
       setLoading(true);
       const res = await api.get(`/reports/track-details/${userId}?date=${date}`);
       setData(res.data.data);
-      setCurrentPage(1); // Reset to page 1 on new data
+      setCurrentPage(1);
     } catch (err) {
       toast.error('Failed to load track data');
     } finally {
       setLoading(false);
     }
   };
+
 
   const filteredLogs = data?.logs?.filter(log =>
     log.address?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -278,10 +318,14 @@ const EmployeeTrackData = () => {
                     </div>
                   </td>
                   <td className="px-8 py-5 text-center">
-                    <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-bold tracking-widest">
-                      {log.distanceFromPrevious ? `${log.distanceFromPrevious.toFixed(1)}m` : '0m'}
-                    </span>
+                    <div className="flex flex-col items-center gap-1">
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-widest ${log.isSuspicious ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-emerald-50 text-emerald-600'}`}>
+                        {log.isSuspicious ? 'GLITCH' : (log.distanceFromPrevious ? `${log.distanceFromPrevious.toFixed(1)}m` : '0m')}
+                      </span>
+                      {log.isSuspicious && <span className="text-[8px] font-bold text-rose-400">Filtered</span>}
+                    </div>
                   </td>
+
                 </tr>
               ))}
               {currentLogs.length === 0 && (

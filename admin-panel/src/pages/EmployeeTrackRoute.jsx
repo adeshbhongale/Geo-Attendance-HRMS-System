@@ -1,4 +1,4 @@
-import { DirectionsRenderer, DirectionsService, GoogleMap, MarkerF, Polyline, useJsApiLoader } from '@react-google-maps/api';
+import { GoogleMap, MarkerF, Polyline, useJsApiLoader } from '@react-google-maps/api';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Calendar,
@@ -7,9 +7,9 @@ import {
   Clock,
   Download,
   Loader2,
+  MapIcon,
   MapPin,
   Navigation,
-  Play,
   Table as TableIcon
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -18,7 +18,10 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import CalendarPicker from '../components/CalendarPicker';
 
-const libraries = ['places'];
+import socket from '../socket';
+
+const libraries = ['places', 'geometry'];
+
 
 const EmployeeTrackRoute = () => {
   const { userId } = useParams();
@@ -42,6 +45,58 @@ const EmployeeTrackRoute = () => {
     fetchTrackDetails();
   }, [userId, date]);
 
+  // Real-time updates via Socket.IO
+  useEffect(() => {
+    const handleLocationUpdate = (payload) => {
+      if (payload.userId === userId) {
+        setData(prev => {
+          if (!prev) return prev;
+
+          // Check if this log already exists (to prevent duplicates)
+          const isDuplicate = prev.logs.some(log =>
+            new Date(log.time).getTime() === new Date(payload.time).getTime()
+          );
+          if (isDuplicate) return prev;
+
+          const newLog = {
+            latitude: payload.latitude,
+            longitude: payload.longitude,
+            time: payload.time,
+            address: payload.address,
+            distanceFromPrevious: payload.distanceFromPrevious || 0
+          };
+
+          return {
+            ...prev,
+            logs: [...prev.logs, newLog],
+            summary: {
+              ...prev.summary,
+              totalDistance: payload.totalDistance,
+              lastKnownLocation: {
+                address: payload.address,
+                time: payload.time
+              }
+            }
+          };
+        });
+      }
+    };
+
+    socket.on('locationUpdated', handleLocationUpdate);
+    return () => {
+      socket.off('locationUpdated', handleLocationUpdate);
+    };
+  }, [userId]);
+
+  const path = useMemo(() => {
+    if (!data?.logs) return [];
+    return data.logs.map(log => ({
+      lat: log.latitude,
+      lng: log.longitude
+    }));
+  }, [data]);
+
+
   const fetchTrackDetails = async () => {
     try {
       setLoading(true);
@@ -53,14 +108,6 @@ const EmployeeTrackRoute = () => {
       setLoading(false);
     }
   };
-
-  const path = useMemo(() => {
-    if (!data?.logs) return [];
-    return data.logs.map(log => ({
-      lat: log.latitude,
-      lng: log.longitude
-    }));
-  }, [data]);
 
   const handleDownload = () => {
     if (!data?.logs || data.logs.length === 0) return toast.error('No data to download');
@@ -98,21 +145,21 @@ const EmployeeTrackRoute = () => {
   };
 
   useEffect(() => {
-    if (mapRef.current && path.length > 0) {
+    if (mapRef.current && path.length > 0 && !loading) {
       const bounds = new window.google.maps.LatLngBounds();
       path.forEach(p => bounds.extend(p));
       mapRef.current.fitBounds(bounds);
-      
-      // Add a slight padding if there's only one point or points are too close
+
       if (path.length === 1) {
         mapRef.current.setZoom(15);
       }
     }
-  }, [path]);
+  }, [path, loading]);
 
   const center = useMemo(() => data?.logs?.length > 0
-    ? { lat: data.logs[0].latitude, lng: data.logs[0].longitude }
+    ? { lat: data.logs[data.logs.length - 1].latitude, lng: data.logs[data.logs.length - 1].longitude }
     : { lat: 16.7050, lng: 74.4567 }, [data]);
+
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -146,7 +193,7 @@ const EmployeeTrackRoute = () => {
           </button>
           <div>
             <h1 className="text-xl font-bold text-slate-800 tracking-tight">{lastOnly ? 'Live Location' : 'Route Tracking'}</h1>
-            <p className="text-[10px] font-bold text-slate-400 tracking-widest ">{lastOnly ? 'Current Position' : 'Live Movement Trail'}</p>
+            <p className="text-[10px] font-bold text-slate-400 tracking-widest ">{lastOnly ? 'Current Position' : 'Live Movement'}</p>
           </div>
         </div>
 
@@ -184,7 +231,7 @@ const EmployeeTrackRoute = () => {
             className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl text-xs font-bold hover:bg-indigo-700 hover:-translate-y-0.5 transition-all shadow-[0_10px_25px_rgba(79,70,229,0.2)] active:scale-95"
           >
             <Download size={16} />
-            Download Trail
+            Download CSV
           </button>
         </div>
       </div>
@@ -228,7 +275,7 @@ const EmployeeTrackRoute = () => {
 
             <div className="flex items-center gap-3">
               <button className="flex-1 px-6 py-3 bg-emerald-500 text-white rounded-2xl text-[11px] font-bold flex items-center justify-center gap-2 shadow-[0_8px_20px_rgba(16,185,129,0.25)] hover:bg-emerald-600 hover:-translate-y-0.5 transition-all active:scale-95">
-                <Play size={14} fill="currentColor" /> Play Route
+                <MapIcon size={14} /> View Map
               </button>
               <button
                 onClick={() => navigate(`/track-data/${userId}?date=${date}`)}
@@ -257,7 +304,7 @@ const EmployeeTrackRoute = () => {
             </div>
             <div>
               <p className="text-[10px] font-bold text-slate-400 tracking-widest  mb-0.5">Total Distance</p>
-              <p className="text-xs font-bold text-indigo-600">{(data?.summary?.distance || 0).toFixed(3)} KM</p>
+              <p className="text-xs font-bold text-indigo-600">{(data?.summary?.totalDistance || 0).toFixed(3)} KM</p>
             </div>
           </div>
 
@@ -305,44 +352,46 @@ const EmployeeTrackRoute = () => {
           }}
         >
           {path.length >= 2 && (
-             <Polyline
-               path={path}
-               options={{
-                 strokeColor: '#ef4444',
-                 strokeWeight: 4,
-                 strokeOpacity: 0.8,
-                 zIndex: 10
-               }}
-             />
+            <Polyline
+              path={path}
+              options={{
+                strokeColor: '#ef4444',
+                strokeWeight: 4,
+                strokeOpacity: 0.8,
+                zIndex: 10
+              }}
+            />
           )}
 
           {path.length > 0 && (
             <>
-              {!lastOnly && (
+              {/* Previous Point Marker (if it exists) */}
+              {path.length >= 2 && (
                 <MarkerF
-                  position={path[0]}
+                  position={path[path.length - 2]}
                   icon={{
-                    url: "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
-                    anchor: new google.maps.Point(10, 10),
-                    labelOrigin: new google.maps.Point(10, -10)
+                    url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+                    anchor: window.google ? new window.google.maps.Point(10, 10) : null,
+                    scale: 0.6
                   }}
                   label={{
-                    text: "START",
-                    fontSize: "10px",
+                    text: "PREVIOUS",
+                    fontSize: "9px",
                     fontWeight: "bold",
-                    color: "#059669"
+                    color: "#3b82f6"
                   }}
                 />
               )}
+
+              {/* Current Point Marker */}
               <MarkerF
                 position={path[path.length - 1]}
                 icon={{
                   url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
-                  anchor: new google.maps.Point(10, 10),
-                  labelOrigin: new google.maps.Point(10, -10)
+                  anchor: window.google ? new window.google.maps.Point(10, 10) : null,
                 }}
                 label={{
-                  text: "CURRENT",
+                  text: "LIVE",
                   fontSize: "10px",
                   fontWeight: "bold",
                   color: "#dc2626"
@@ -350,6 +399,7 @@ const EmployeeTrackRoute = () => {
               />
             </>
           )}
+
         </GoogleMap>
       </div>
     </div>

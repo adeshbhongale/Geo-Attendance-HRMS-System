@@ -237,39 +237,39 @@
   "shifts": [
     {
       "name": "Morning Shift",
-      "startTime": "09:00",
-      "endTime": "18:00",
+      "startTime": "08:00",
+      "endTime": "16:00",
       "gracePeriod": 15,
       "halfDayAfter": "11:00",
-      "workingHours": 9,
+      "workingHours": 8,
       "weeklyOff": [
         "Sunday"
       ],
       "isNightShift": false
     },
     {
-      "name": "Night Shift",
-      "startTime": "20:00",
-      "endTime": "05:00",
-      "gracePeriod": 10,
-      "halfDayAfter": "22:00",
-      "workingHours": 9,
+      "name": "Evening Shift",
+      "startTime": "16:00",
+      "endTime": "00:00",
+      "gracePeriod": 15,
+      "halfDayAfter": "19:00",
+      "workingHours": 8,
       "weeklyOff": [
         "Sunday"
       ],
       "isNightShift": true
     },
     {
-      "name": "General Shift",
-      "startTime": "10:00",
-      "endTime": "19:00",
-      "gracePeriod": 5,
-      "halfDayAfter": "12:00",
-      "workingHours": 9,
+      "name": "Night Shift",
+      "startTime": "00:00",
+      "endTime": "08:00",
+      "gracePeriod": 15,
+      "halfDayAfter": "03:00",
+      "workingHours": 8,
       "weeklyOff": [
         "Sunday"
       ],
-      "isNightShift": false
+      "isNightShift": true
     }
   ],
   "location": {

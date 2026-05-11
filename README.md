@@ -230,31 +230,13 @@ cd backend
 npm install
 ```
 
-#### Create Environment File
-
-```bash
-# Copy .env.example to .env (if available)
-cp .env.example .env
-
-# Create .env manually with the following variables:
-cat > .env << EOF
-# Database Configuration
-MONGO_URI=mongodb://localhost:27017/geo-attendance
-
-# JWT Configuration
-JWT_SECRET=your_jwt_secret_key
-REFRESH_TOKEN_SECRET=your_refresh_token_secret
-PORT=5000
-EOF
-```
-
 #### Verify MongoDB Connection
 
 ```bash
 # For local MongoDB
 mongod
 
-# Or use MongoDB Atlas connection string in .env
+# Or use MongoDB Atlas connection string
 ```
 
 #### Seed Database
@@ -302,19 +284,6 @@ cd admin-panel
 npm install
 ```
 
-#### Create Environment File
-
-```bash
-cat > .env << EOF
-# API Configuration
-VITE_API_BASE_URL=http://localhost:5000/api
-VITE_API_TIMEOUT=10000
-
-# App Configuration
-VITE_APP_NAME=Geo-Attendance HRMS
-VITE_APP_VERSION=1.0.0
-EOF
-```
 
 #### Start Development Server
 
@@ -354,19 +323,6 @@ cd mobile-app
 npm install
 ```
 
-#### Create Environment File
-
-```bash
-cat > .env << EOF
-# API Configuration
-EXPO_PUBLIC_API_BASE_URL=http://localhost:5000/api
-EXPO_PUBLIC_API_TIMEOUT=10000
-
-# App Configuration
-EXPO_PUBLIC_APP_NAME=Geo-Attendance
-EXPO_PUBLIC_VERSION=1.0.0
-EOF
-```
 
 #### Install Expo CLI (if not already installed)
 
@@ -537,12 +493,7 @@ DELETE /shifts/:id               - Delete shift (admin)
 
 ```bash
 # Login with OTP
-curl -X POST http://localhost:5000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "identifier": "adesh@example.com",
-    "otp": "1234567"
-  }'
+
 
 # Punch-in with GPS
 curl -X POST http://localhost:5000/api/attendance/punch-in \
@@ -607,39 +558,6 @@ db.leaves.find().limit(5)
 
 ---
 
-## ⚙️ Environment Configuration
-
-### Backend Environment Variables
-
-```env
-# Database
-MONGO_URI=mongodb://localhost:27017/geo-attendance
-
-# JWT Tokens
-JWT_SECRET=your_jwt_secret
-REFRESH_TOKEN_SECRET=your_refresh_secret
-
-# Server
-PORT=5000
-NODE_ENV=development
-```
-
-### Admin Panel Environment Variables
-
-```env
-VITE_API_BASE_URL=http://localhost:5000/api
-VITE_API_TIMEOUT=10000
-VITE_APP_NAME=Geo-Attendance HRMS
-```
-
-### Mobile App Environment Variables
-
-```env
-EXPO_PUBLIC_API_BASE_URL=http://localhost:5000/api
-EXPO_PUBLIC_API_TIMEOUT=10000
-```
-
----
 
 ## 🐛 Troubleshooting
 
@@ -652,8 +570,7 @@ EXPO_PUBLIC_API_TIMEOUT=10000
 # For local MongoDB:
 mongod
 
-# For MongoDB Atlas, verify connection string in .env
-# MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/geo-attendance
+# For MongoDB Atlas, verify connection string
 ```
 
 **Port Already in Use**

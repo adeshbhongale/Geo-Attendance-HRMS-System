@@ -9,8 +9,10 @@ const {
   getAttendanceDashboard,
   getEmployeeReports,
   getEmployeePersonalDetails,
-  getEmployeeTrackDetails
+  getEmployeeTrackDetails,
+  getEmployeeTrackDetailsMe
 } = require('../controllers/reports');
+
 
 const router = express.Router();
 
@@ -18,8 +20,15 @@ const { protect, authorize } = require('../middleware/auth');
 
 router.use(protect);
 
-// Employee (mobile app) — own stats
+// Mobile App — Own tracking data (High priority)
+router.get('/track-details-me', getEmployeeTrackDetailsMe);
+
+// Diagnostic route
+router.get('/ping', (req, res) => res.send('pong'));
+
+// Mobile App — Own stats
 router.get('/my-stats', getEmployeeStats);
+
 
 // Admin only routes
 router.get('/daily',                authorize('admin'), getDailyReport);

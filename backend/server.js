@@ -23,6 +23,8 @@ const app = express();
 // Disable ETag to prevent 304 Not Modified statuses
 app.disable('etag');
 
+const { protect } = require('./middleware/auth');
+
 // Global middleware to prevent caching and resolve 304 issues
 app.use((req, res, next) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -90,14 +92,34 @@ const io = socketio(server, {
   }
 });
 
+// Make io accessible in controllers
+app.set('io', io);
+
+
+const User = require('./models/User');
+
 // Socket.io integration
 io.on('connection', (socket) => {
+  socket.on('join', async (userId) => {
+    try {
+      socket.userId = userId;
+      await User.findByIdAndUpdate(userId, { isOnline: true });
+      io.emit('userStatusChanged', { userId, status: 'online' });
+    } catch (err) {}
+  });
+
   socket.on('updateLocation', (data) => {
-    // data: { userId, latitude, longitude }
+    // data: { userId, latitude, longitude, address, totalDistance, isOutside }
     io.emit('locationUpdated', data);
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
+    try {
+      if (socket.userId) {
+        await User.findByIdAndUpdate(socket.userId, { isOnline: false });
+        io.emit('userStatusChanged', { userId: socket.userId, status: 'offline' });
+      }
+    } catch (err) {}
   });
 });
 
