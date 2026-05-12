@@ -20,6 +20,12 @@ connectDB();
 
 const app = express();
 
+// Enable CORS (Must be at the very top)
+app.use(cors({
+  origin: true,
+  credentials: true,
+}));
+
 // Disable ETag to prevent 304 Not Modified statuses
 app.disable('etag');
 
@@ -63,12 +69,6 @@ app.use(limiter);
 
 // Prevent http param pollution
 app.use(hpp());
-
-// Enable CORS
-app.use(cors({
-  origin: true,
-  credentials: true,
-}));
 
 // Set static folder
 app.use(express.static('public'));

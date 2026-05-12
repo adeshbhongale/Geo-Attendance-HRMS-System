@@ -27,7 +27,7 @@ const Leaves = () => {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [showDurationDropdown, setShowDurationDropdown] = useState(false);
-  
+
   const statusDropdownRef = useRef(null);
   const typeDropdownRef = useRef(null);
   const durationDropdownRef = useRef(null);
@@ -443,7 +443,7 @@ const Leaves = () => {
                         </button>
                       </div>
                     ) : (
-                      <span className="text-[10px] font-bold text-slate-300  tracking-widest italic">No actions</span>
+                      <span className="text-[10px] font-bold text-slate-300 tracking-widest">No actions</span>
                     )}
                   </td>
                 </tr>

@@ -356,6 +356,20 @@ const Shifts = () => {
               </div>
             </div>
           ))}
+          {shifts.length === 0 && (
+            <div className="col-span-full py-20 flex flex-col items-center justify-center bg-white rounded-[2.5rem] border border-slate-100 shadow-sm">
+              <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300 mb-4">
+                <Clock size={32} />
+              </div>
+              <p className="text-slate-400 font-bold text-sm">No shifts Available.</p>
+              <button
+                onClick={() => handleOpenModal()}
+                className="mt-4 text-white font-bold bg-indigo-600 p-2 rounded-xl text-xs hover:underline"
+              >
+                Create your first shift
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Employee Shift Overview Section */}

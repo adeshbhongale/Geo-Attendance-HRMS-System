@@ -55,13 +55,18 @@ exports.getEmployees = async (req, res, next) => {
 // @access  Private/Admin
 exports.addEmployee = async (req, res, next) => {
     try {
-        let profileImageUrl = req.body.profileImage;
+        const { email, mobile } = req.body;
+    
+    const existingUser = await User.findOne({ $or: [{ email }, { mobile }] });
+    if (existingUser) {
+      const field = existingUser.email === email ? 'Email' : 'Mobile number';
+      return res.status(400).json({ success: false, message: `${field} already exists in our records.` });
+    }
 
-        // Create user first to get ID for Cloudinary public_id
-        const employee = await User.create({
-            ...req.body,
-            role: 'employee',
-        });
+    const employee = await User.create({
+      ...req.body,
+      role: 'employee',
+    });
 
         if (req.file) {
             const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
@@ -86,8 +91,22 @@ exports.addEmployee = async (req, res, next) => {
 // @access  Private/Admin
 exports.updateEmployee = async (req, res, next) => {
     try {
+        const { email, mobile, password } = req.body;
+        
+        // Check if new email/mobile already exists for another user
+        const existingUser = await User.findOne({ 
+            _id: { $ne: req.params.id }, 
+            $or: [{ email }, { mobile }] 
+        });
+        
+        if (existingUser) {
+            const field = existingUser.email === email ? 'Email' : 'Mobile number';
+            return res.status(400).json({ success: false, message: `${field} already belongs to another staff member.` });
+        }
+
         let updateData = { ...req.body };
 
+        // Handle profile image upload
         if (req.file) {
             const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
             const uploadResult = await uploadProfileImage(base64Image, req.params.id);
@@ -96,10 +115,23 @@ exports.updateEmployee = async (req, res, next) => {
             }
         }
 
-        const employee = await User.findByIdAndUpdate(req.params.id, updateData, {
-            new: true,
-            runValidators: true,
-        });
+        let employee;
+        if (password) {
+            // Must use save() to trigger password hashing pre-save hook
+            employee = await User.findById(req.params.id);
+            if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
+            
+            Object.assign(employee, updateData);
+            await employee.save();
+        } else {
+            // If no password, remove it from updateData to prevent overwriting with blank/null
+            delete updateData.password;
+            
+            employee = await User.findByIdAndUpdate(req.params.id, updateData, {
+                new: true,
+                runValidators: true,
+            });
+        }
 
         if (!employee) {
             return res.status(404).json({ success: false, message: 'Employee not found' });

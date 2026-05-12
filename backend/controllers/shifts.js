@@ -6,17 +6,6 @@ const Shift = require('../models/Shift');
 exports.getShifts = async (req, res, next) => {
   try {
     let shifts = await Shift.find();
-    
-    // Seed default shifts if database is empty
-    if (shifts.length === 0) {
-      await Shift.create([
-        { name: 'Day Shift', startTime: '09:00', endTime: '18:00', gracePeriod: 15, halfDayLimit: 4 },
-        { name: 'Night Shift', startTime: '21:00', endTime: '06:00', gracePeriod: 15, halfDayLimit: 4 },
-        { name: 'Half Day', startTime: '09:00', endTime: '13:00', gracePeriod: 10, halfDayLimit: 2 }
-      ]);
-      shifts = await Shift.find();
-    }
-
     const User = require('../models/User');
     const shiftsWithStats = await Promise.all(shifts.map(async (shift) => {
       const userCount = await User.countDocuments({ shift: shift._id });
@@ -73,9 +62,9 @@ exports.deleteShift = async (req, res, next) => {
     const User = require('../models/User');
     const assignedCount = await User.countDocuments({ shift: req.params.id });
     if (assignedCount > 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Cannot delete shift: ${assignedCount} employees are currently assigned to it.` 
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete shift: ${assignedCount} employees are currently assigned to it.`
       });
     }
 

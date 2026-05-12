@@ -10,23 +10,10 @@ exports.getOfficeSettings = async (req, res, next) => {
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
 
-    let office = await Location.findOne({ name: 'Office Main' });
-    if (!office) {
-      // Try to find any location if 'Office Main' doesn't exist
-      office = await Location.findOne();
-    }
-    if (!office) {
-      // Create default if still not exists
-      office = await Location.create({
-        name: 'Office Main',
-        latitude: 16.7050,
-        longitude: 74.2433,
-        radius: 200,
-      });
-    }
+    const office = await Location.findOne({ name: 'Office Main' }) || await Location.findOne();
     res.status(200).json({
       success: true,
-      data: office,
+      data: office || null,
     });
   } catch (err) {
     console.error('Get settings error:', err);

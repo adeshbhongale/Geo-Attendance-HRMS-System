@@ -561,6 +561,12 @@ const Employees = () => {
                       <Filter size={32} className="text-slate-200" />
                       No matching staff members found
                     </div>
+                    <button
+                      onClick={() => handleOpenModal()}
+                      className="mt-4 text-white font-bold bg-indigo-600 p-2 rounded-xl text-xs hover:underline"
+                    >
+                      Add New Employee
+                    </button>
                   </td>
                 </tr>
               ) : (
@@ -781,31 +787,13 @@ const Employees = () => {
                   {/* Custom Dropdowns Section */}
                   <div className="space-y-3">
                     <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Department</label>
-                    <div className="relative">
-                      <div
-                        onClick={() => setActiveModalDropdown(activeModalDropdown === 'dept' ? null : 'dept')}
-                        className="w-full bg-slate-50 border-2 border-transparent hover:border-indigo-100 px-5 py-4 rounded-2xl cursor-pointer flex justify-between items-center transition-all"
-                      >
-                        <span className="text-sm font-bold text-slate-800">{formData.department || 'Select Department'}</span>
-                        <ChevronDown size={18} className={`text-slate-400 transition-transform ${activeModalDropdown === 'dept' ? 'rotate-180' : ''}`} />
-                      </div>
-                      <AnimatePresence>
-                        {activeModalDropdown === 'dept' && (
-                          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute z-[2100] top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl p-2 max-h-48 overflow-y-auto no-scrollbar">
-                            {distinctDepartments.length === 0 ? (
-                              <div className="p-3 text-[11px] font-bold text-slate-400 text-center">No existing departments</div>
-                            ) : (
-                              distinctDepartments.map(dept => (
-                                <div key={dept} onClick={() => { setFormData({ ...formData, department: dept }); setActiveModalDropdown(null); }} className="p-3 rounded-xl hover:bg-indigo-50 text-xs font-bold text-slate-600 hover:text-indigo-600 cursor-pointer transition-all flex items-center justify-between">
-                                  {dept}
-                                  {formData.department === dept && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
-                                </div>
-                              ))
-                            )}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
+                    <input 
+                      type="text" 
+                      value={formData.department} 
+                      onChange={(e) => setFormData({ ...formData, department: e.target.value })} 
+                      className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800" 
+                      placeholder="e.g., IT, Sales, HR" 
+                    />
                   </div>
 
                   <div className="space-y-3">

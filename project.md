@@ -1019,10 +1019,6 @@ eas submit --platform android --latest
 - **Fix**: Replaced `useState` with `useSearchParams`. Date stored in URL as `?date=YYYY-MM-DD`.
 - **Result**: Browser back button and in-app navigation now preserve the selected date correctly.
 
-#### Mobile App — Production Console.log Cleanup
-
-All debug `console.log` and `console.error` statements removed from 10 files for production build:
-`App.js`, `axios.js`, `ErrorBoundary.js`, `AttendanceScreen.js`, `DashboardScreen.js`, `LeaveScreen.js`, `LoginScreen.js`, `MonthlyViewScreen.js`, `ProfileScreen.js`, `navigation.js`
 
 ### 10. HRMS Reporting Analytics Stabilization & Professional Export (May 11, 2026)
 
@@ -1116,8 +1112,36 @@ All debug `console.log` and `console.error` statements removed from 10 files for
 - **Strict Configuration**: Enforced the use of `VITE_API_URL` (Admin), `VITE_IMAGE_URL` (Admin), and `EXPO_PUBLIC_API_URL` (Mobile) across all networking layers.
 - **Dynamic Derivation**: Configured the mobile socket and image handlers to dynamically derive their endpoints from the primary environment variable, ensuring the system is fully portable and deployment-ready.
 
+### 15. Mobile Attendance Stabilization & Sync Logic Hardening (May 13, 2026)
+
+**Changed**: Finalized the mobile application's attendance infrastructure to ensure production-level stability, accurate reporting synchronization, and hardened tracking lifecycle management.
+
+#### Dashboard & Interface Synchronization:
+- **Files**: `mobile-app/src/screens/DashboardScreen.js`
+- **Logic Sync**: Completely refactored the Dashboard's attendance detection to match the high-reliability logic of the Attendance page. It now derives status from the full history instead of a single backend flag.
+- **"Day Completed" State**: Replaced the punch button with a professional, non-clickable status badge once a shift is finished, ensuring 100% clarity on the end-of-day state.
+- **Dynamic Reporting**: Implemented a fully dynamic "Month Year Report" label and statistics grid that automatically transitions as the calendar month changes (e.g., May to June).
+- **Time Visibility**: Upgraded punch-in/out time displays with high-contrast color badges (Emerald/Rose) for immediate readability.
+
+#### Tracking Stability & Network Hardening:
+- **Files**: `mobile-app/src/screens/AttendanceScreen.js`, `backend/server.js`
+- **404 Resolution**: Implemented an immediate termination guard for background tracking. The app now kills the location interval instantly upon punch-out, resolving the "404 No Active Session" network errors.
+- **CORS Optimization**: Relocated the CORS middleware to the top of the backend stack to prevent pre-flight failures during high-concurrency tracking requests.
+- **Request Guarding**: Added silence-filters for transient network errors to ensure a smooth, notification-free experience for the user during the tracking lifecycle.
+
+#### Monthly Reporting & Data Integrity:
+- **Files**: `backend/controllers/attendance.js`, `mobile-app/src/screens/MonthlyViewScreen.js`
+- **Accurate Absenteeism**: Resolved the bug where future dates and pre-joining dates were incorrectly marked as "Absent".
+- **Joining Date Enforcement**: Implemented strict `createdAt` comparison (using epoch timestamps) to ensure the calendar remains blank for dates before the employee's official hire date.
+- **Future Date Logic**: Hardened the calendar rendering to ensure all upcoming dates are shown as "Pending/Blank" instead of generating false-negative attendance marks.
+
+#### Admin Panel - Employee Management Improvements:
+- **File**: `admin-panel/src/pages/Employees.jsx`, `backend/controllers/employees.js`
+- **Deduplication**: Enforced multi-field duplicate checks (Email + Mobile) during employee creation to prevent database integrity conflicts.
+- **UX**: Converted Department selection from a fixed dropdown to a flexible text input to accommodate organizational growth.
+
 ---
 
-**Last Updated**: May 12, 2026
-**Version**: 1.6.0
-**Status**: Production Ready (Stable & Decoupled)
+**Last Updated**: May 13, 2026
+**Version**: 1.7.0
+**Status**: Production Ready (Stable & Synchronized)

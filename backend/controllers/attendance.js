@@ -447,6 +447,16 @@ exports.getMonthlyView = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Please provide month and year' });
     }
 
+    const user = await User.findById(userId).select('+createdAt');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    // Use createdAt as joining date. Normalize to start of day UTC.
+    // Fallback to a very old date if for some reason createdAt is missing
+    const joiningDate = user.createdAt ? new Date(user.createdAt) : new Date(0);
+    joiningDate.setUTCHours(0, 0, 0, 0);
+
     const startDate = new Date(Date.UTC(year, month - 1, 1));
     const endDate = new Date(Date.UTC(year, month, 1));
 
@@ -481,9 +491,9 @@ exports.getMonthlyView = async (req, res, next) => {
     const dailyStatus = {};
 
     const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
-    const today = now.getDate();
+    const currentYear = now.getUTCFullYear();
+    const currentMonth = now.getUTCMonth() + 1;
+    const today = now.getUTCDate();
 
     // Initialize all days
     for (let i = 1; i <= daysInMonth; i++) {
@@ -495,13 +505,26 @@ exports.getMonthlyView = async (req, res, next) => {
                       (parseInt(year) === currentYear && parseInt(month) === currentMonth && i > today);
 
       const isToday = (parseInt(year) === currentYear && parseInt(month) === currentMonth && i === today);
+      
+      // Check if date is before joining (using timestamps for reliable comparison)
+      const isBeforeJoining = d.getTime() < joiningDate.getTime();
+
+      // Default status
+      let status = 'Absent';
+      if (isFuture) status = 'Future';
+      else if (isToday) status = 'Today';
+      else if (isBeforeJoining) status = 'BeforeJoining';
+
+      // Color logic: Blank for Sundays, Future, Before Joining, or Today (initial)
+      let color = (isSunday || isFuture || isBeforeJoining || isToday) ? 'transparent' : '#f43f5e';
 
       dailyStatus[i] = { 
-        status: isFuture ? 'Future' : 'Absent', 
-        color: (isSunday || isFuture) ? 'transparent' : '#f43f5e', // Red for absent
+        status, 
+        color,
         isSunday,
         isFuture,
-        isToday
+        isToday,
+        isBeforeJoining
       };
     }
 
@@ -513,13 +536,15 @@ exports.getMonthlyView = async (req, res, next) => {
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
         if (d.getMonth() + 1 === parseInt(month) && d.getFullYear() === parseInt(year)) {
           const day = d.getDate();
-          dailyStatus[day] = { 
-            ...dailyStatus[day],
-            status: 'On Leave', 
-            color: '#f59e0b', // Yellow/Amber for leave
-            isFuture: false 
-          }; 
-          summary.onLeave++;
+          if (dailyStatus[day] && !dailyStatus[day].isBeforeJoining) {
+            dailyStatus[day] = { 
+              ...dailyStatus[day],
+              status: 'On Leave', 
+              color: '#f59e0b', // Yellow/Amber for leave
+              isFuture: false 
+            }; 
+            summary.onLeave++;
+          }
         }
       }
     });
@@ -534,37 +559,36 @@ exports.getMonthlyView = async (req, res, next) => {
         color = '#f59e0b'; // Yellow for Late/Half Day
       }
 
-      dailyStatus[day] = { 
-        ...dailyStatus[day],
-        status, 
-        color,
-        isFuture: false,
-        punchIn: record.punchIn?.time,
-        punchOut: record.punchOut?.time
-      };
+      if (dailyStatus[day]) {
+        dailyStatus[day] = { 
+          ...dailyStatus[day],
+          status, 
+          color,
+          isFuture: false,
+          isBeforeJoining: false, 
+          punchIn: record.punchIn?.time,
+          punchOut: record.punchOut?.time
+        };
 
-      if (status === 'Present') summary.present++;
-      else if (status === 'Late') summary.late++;
-      else if (status === 'Half Day') summary.halfDay++;
-      
-      // statsService already required at top (canonical service)
-      summary.totalWorkedHours += statsService.calculateWorkingHours(record);
-      summary.totalBreakMinutes += record.breaks?.reduce((acc, b) => acc + (b.duration || 0), 0) || 0;
+        if (status === 'Present') summary.present++;
+        else if (status === 'Late') summary.late++;
+        else if (status === 'Half Day') summary.halfDay++;
+        
+        summary.totalWorkedHours += statsService.calculateWorkingHours(record);
+        summary.totalBreakMinutes += record.breaks?.reduce((acc, b) => acc + (b.duration || 0), 0) || 0;
+      }
     });
 
-    // Calculate Absent (days not present and not on leave, only up to today if current month)
-    let relevantDaysCount = 0;
-    if (parseInt(year) < currentYear || (parseInt(year) === currentYear && parseInt(month) < currentMonth)) {
-      relevantDaysCount = daysInMonth;
-    } else if (parseInt(year) === currentYear && parseInt(month) === currentMonth) {
-      relevantDaysCount = today;
-    }
-
-    // Count non-working days (Sundays) to exclude from absenteeism if desired, 
-    // but here we just follow the "Absent" status assigned during initialization.
+    // Calculate Absent (Exclude future dates, today, and pre-joining dates)
     summary.absent = 0;
-    for (let i = 1; i <= relevantDaysCount; i++) {
-       if (dailyStatus[i].status === 'Absent' && !dailyStatus[i].isSunday) {
+    for (let i = 1; i <= daysInMonth; i++) {
+       const dayStatus = dailyStatus[i];
+       // Only count as absent if it's NOT a future date, NOT today, NOT Sunday, and NOT before joining
+       if (dayStatus.status === 'Absent' && 
+           !dayStatus.isSunday && 
+           !dayStatus.isBeforeJoining && 
+           !dayStatus.isFuture && 
+           !dayStatus.isToday) {
          summary.absent++;
        }
     }

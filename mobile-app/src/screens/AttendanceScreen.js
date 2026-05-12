@@ -219,14 +219,26 @@ const AttendanceScreen = ({ navigation }) => {
   const alreadyPunchedOut = !!todayAttendance?.punchOut?.time;
 
   // Foreground Tracking Logic (High Frequency 10s)
+  const [isTracking, setIsTracking] = useState(false);
+
   useEffect(() => {
     let trackingInterval;
 
     const trackCurrentLocation = async (isRetry = false) => {
+      // Immediate stop if already punched out
+      if (alreadyPunchedOut) {
+        if (trackingInterval) clearInterval(trackingInterval);
+        return;
+      }
+
+      // Prevent overlapping requests if one is already in progress
+      if (isTracking && !isRetry) return;
+
       try {
+        setIsTracking(true);
         const loc = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.High,
-          timeout: 5000
+          timeout: 10000 // Increased timeout
         });
 
         const { latitude, longitude, accuracy, speed, altitude, heading } = loc.coords;
@@ -242,7 +254,9 @@ const AttendanceScreen = ({ navigation }) => {
           if (geoData.status === 'OK' && geoData.results.length > 0) {
             trackAddr = geoData.results[0].formatted_address;
           }
-        } catch (e) { }
+        } catch (e) {
+          console.log('[TRACKING] Geocoding failed, using coordinates');
+        }
 
         const res = await api.post('/attendance/track', {
           latitude,
@@ -252,7 +266,7 @@ const AttendanceScreen = ({ navigation }) => {
           speed,
           altitude,
           heading,
-          battery: 100 // In real app, use expo-battery
+          battery: 100 
         });
 
         if (res.data.retry && !isRetry) {
@@ -265,7 +279,20 @@ const AttendanceScreen = ({ navigation }) => {
         // Update user stats (total distance etc)
         fetchUser();
       } catch (err) {
-        console.error('[TRACKING] Error:', err.message);
+        // Silently ignore 404 (No active session) to avoid UI spam after punch-out
+        if (err.response?.status === 404) {
+          if (trackingInterval) clearInterval(trackingInterval);
+          return;
+        }
+
+        // Detailed error logging for diagnostics
+        if (err.message === 'Network Error') {
+          console.error('[TRACKING] Network Error: Backend unreachable.');
+        } else {
+          console.error('[TRACKING] Error:', err.message);
+        }
+      } finally {
+        if (!isRetry) setIsTracking(false);
       }
     };
 

@@ -99,7 +99,7 @@ const ProfileScreen = ({ navigation }) => {
       const res = await api.put('/auth/updatedetails', updateData);
       setUser(res.data.data);
       await AsyncStorage.setItem('user', JSON.stringify(res.data.data));
-      
+
       setEditModalVisible(false);
       setToast({ show: true, message: 'Profile updated successfully!', type: 'success' });
       setTimeout(() => setToast(prev => ({ ...prev, show: false })), 2000);
@@ -186,7 +186,7 @@ const ProfileScreen = ({ navigation }) => {
               )}
             </View>
 
-            <Text className="text-2xl font-bold text-slate-800 mt-4">{user?.name || 'User'}</Text>
+            <Text className="text-2xl font-bold text-slate-800 text-center mt-4">{user?.name || 'User'}</Text>
             <Text className="text-slate-500 font-bold text-sm mt-1">
               {user?.department} , {user?.designation}
             </Text>

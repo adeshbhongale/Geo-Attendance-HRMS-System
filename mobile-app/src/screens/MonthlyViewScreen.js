@@ -93,13 +93,13 @@ const MonthlyViewScreen = () => {
     for (let day = 1; day <= daysInMonth; day++) {
       const status = dailyStatus[day];
       const isToday = status?.isToday;
-      const isSunday = new Date(currentDate.getFullYear(), currentDate.getMonth(), day).getDay() === 0;
+      const isFuture = status?.isFuture;
+      const isBeforeJoining = status?.isBeforeJoining;
 
-      let dotBg = 'transparent';
-      if (!isSunday && status?.status) {
-        if (['Present', 'Late', 'Half Day'].includes(status.status)) dotBg = '#10b981';
-        else if (status.status === 'Absent') dotBg = '#f43f5e';
-        else if (['On Leave', 'Leave'].includes(status.status)) dotBg = '#facc15';
+      // Dots are transparent for Sundays, Future dates, and dates before the joining date
+      let dotBg = status?.color || 'transparent';
+      if (isFuture || isBeforeJoining) {
+        dotBg = 'transparent';
       }
 
       cells.push(

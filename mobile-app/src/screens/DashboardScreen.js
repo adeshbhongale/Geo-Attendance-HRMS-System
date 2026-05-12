@@ -38,9 +38,17 @@ const DashboardScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [mapFull, setMapFull] = useState(false);
 
-  const isPunchIn = !!attendance?.punchIn?.time;
-  const isPunchOut = !!attendance?.punchOut?.time;
-  const isOnDuty = isPunchIn && !isPunchOut;
+  const [isPunchIn, setIsPunchIn] = useState(false);
+  const [isPunchOut, setIsPunchOut] = useState(false);
+  const [isOnDuty, setIsOnDuty] = useState(false);
+
+  useEffect(() => {
+    const punchIn = !!attendance?.punchIn?.time;
+    const punchOut = !!attendance?.punchOut?.time;
+    setIsPunchIn(punchIn);
+    setIsPunchOut(punchOut);
+    setIsOnDuty(punchIn && !punchOut);
+  }, [attendance]);
 
   // Redundant fetchAll removed as fetchDashboardData is handled on focus below
 
@@ -260,25 +268,59 @@ const DashboardScreen = ({ navigation }) => {
 
       const results = await Promise.allSettled([
         api.get('/auth/me'),
+        api.get('/reports/employee-stats'),
+        api.get('/attendance/history'),
         api.get('/settings/office'),
-        api.get('/reports/my-stats')
       ]);
 
       if (results[0].status === 'fulfilled') {
         setUserData(results[0].value.data.data);
-        setAttendance(results[0].value.data.todayAttendance);
       }
-
       if (results[1].status === 'fulfilled') {
-        setOffice(results[1].value.data.data);
+        setStats(results[1].value.data.data);
+      }
+      if (results[3].status === 'fulfilled') {
+        setOffice(results[3].value.data.data);
       }
 
+      // Sync Attendance Logic with AttendanceScreen.js
       if (results[2].status === 'fulfilled') {
-        setStats(results[2].value.data.data);
+        const records = results[2].value.data.data || [];
+
+        // 1. Look for active session
+        let currentSession = records.find(r => r.punchIn?.time && !r.punchOut?.time);
+
+        // 2. If no active session, find the most recent record for today
+        if (!currentSession && records.length > 0) {
+          const now = new Date();
+          const todayStr = now.toISOString().split('T')[0];
+
+          currentSession = records.find(r => {
+            if (!r.punchIn?.time) return false;
+            const rDate = r.date ? new Date(r.date).toISOString().split('T')[0] : null;
+            const pOutDate = r.punchOut?.time ? new Date(r.punchOut.time).toISOString().split('T')[0] : null;
+            return rDate === todayStr || pOutDate === todayStr;
+          });
+        }
+
+        // 3. Ignore Absent placeholders
+        if (currentSession && currentSession.status === 'Absent') {
+          currentSession = null;
+        }
+
+        setAttendance(currentSession || null);
+      }
+
+      // Handle stats calculation
+      if (results[1].status === 'fulfilled' && userData?.shift) {
+        const liveStats = calculateLiveStats(results[1].value.data.data);
+        setStats(liveStats);
       }
     } catch (err) {
+      console.error('Error fetching dashboard data:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -356,42 +398,54 @@ const DashboardScreen = ({ navigation }) => {
 
             <View className="flex-row items-center justify-between mb-8">
               <View className="items-center flex-1">
-                <Text className="text-[10px] font-bold text-slate-400  mb-2">Punch In</Text>
-                <Text className="text-xl font-bold text-slate-900">{punchInTime}</Text>
+                <Text className="text-[10px] font-bold text-slate-400 mb-2 tracking-widest">Punch In Time</Text>
+                <View className="bg-emerald-50 px-3 py-1 rounded-lg">
+                  <Text className="text-xl font-bold text-emerald-700">{punchInTime}</Text>
+                </View>
               </View>
-              <View className="w-[1px] h-10 bg-slate-100" />
+              <View className="w-[1px] h-10 bg-slate-100 mx-2" />
               <View className="items-center flex-1">
-                <Text className="text-[10px] font-bold text-slate-400  mb-2">Punch Out</Text>
-                <Text className="text-xl font-bold text-slate-900">{punchOutTime}</Text>
+                <Text className="text-[10px] font-bold text-slate-400 mb-2 tracking-widest">Punch Out Time</Text>
+                <View className="bg-rose-50 px-3 py-1 rounded-lg">
+                  <Text className="text-xl font-bold text-rose-700">{punchOutTime}</Text>
+                </View>
               </View>
             </View>
 
-            <TouchableOpacity
-              onPress={() => (isPunchOut || countdown?.isFuture || countdown?.isMissed) ? null : navigation.navigate('Attendance')}
-              disabled={isPunchOut || countdown?.isFuture || countdown?.isMissed}
-              className={`h-16 rounded-2xl flex-row justify-center items-center shadow-lg ${(isPunchOut || countdown?.isMissed) ? 'bg-slate-100' :
-                countdown?.isFuture ? 'bg-indigo-50 border border-indigo-100' :
-                  isOnDuty ? 'bg-rose-500 shadow-rose-100' : 'bg-indigo-600 shadow-indigo-100'
-                }`}
-            >
-              <Clock size={20} color={isPunchOut || countdown?.isMissed ? '#94a3b8' : countdown?.isFuture ? '#6366f1' : 'white'} />
-              <Text className={`ml-3 font-bold text-base tracking-tight ${(isPunchOut || countdown?.isMissed) ? 'text-slate-400' :
-                countdown?.isFuture ? 'text-indigo-400' : 'text-white'
-                }`}>
-                {isPunchOut ? 'Day Completed' :
-                  countdown?.isMissed ? 'Day Completed (Absent)' :
-                    countdown?.isFuture ? 'Shift Not Started' :
-                      isOnDuty ? 'Punch Out Now' : 'Punch In Now'}
-              </Text>
-            </TouchableOpacity>
+            {isPunchOut || countdown?.isMissed ? (
+              <View className="h-16 rounded-2xl bg-slate-50 flex-row justify-center items-center border border-slate-100 shadow-sm">
+                <CircleCheck size={24} color="#10b981" />
+                <View className="ml-3">
+                  <Text className="font-bold text-lg text-slate-800 tracking-tight">Day Completed</Text>
+                  {countdown?.isMissed && <Text className="text-[10px] text-rose-500 font-bold">Marked as Absent</Text>}
+                </View>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={() => (countdown?.isFuture) ? null : navigation.navigate('Attendance')}
+                disabled={countdown?.isFuture}
+                activeOpacity={0.8}
+                className={`h-16 rounded-2xl flex-row justify-center items-center shadow-lg ${countdown?.isFuture ? 'bg-slate-50 border border-slate-100' :
+                  isOnDuty ? 'bg-rose-500 shadow-rose-200' : 'bg-indigo-600 shadow-indigo-200'
+                  }`}
+              >
+                <Clock size={20} color={countdown?.isFuture ? '#94a3b8' : 'white'} />
+                <Text className={`ml-3 font-bold text-lg tracking-tight ${countdown?.isFuture ? 'text-slate-400' : 'text-white'
+                  }`}>
+                  {countdown?.isFuture ? 'Shift Not Started' :
+                    isOnDuty ? 'Punch Out Now' : 'Punch In Now'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
-        {/* Centered Month Label */}
+        {/* Centered Month Label - Fully Dynamic (Changes to June-2026 automatically) */}
         <View className="items-center mt-6">
-          <View className="bg-slate-100 px-4 py-1.5 rounded-full">
-            <Text className="text-[10px] font-bold text-slate-500  tracking-widest">
-              ({new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '-')})
+          <View className="bg-white px-6 py-2.5 rounded-full border border-slate-100 shadow-sm flex-row items-center">
+            <Calendar size={14} color="#4f46e5" />
+            <Text className="text-[11px] font-bold text-slate-700 tracking-widest ml-2">
+              {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} Report
             </Text>
           </View>
         </View>

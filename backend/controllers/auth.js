@@ -51,7 +51,7 @@ exports.sendOTP = async (req, res, next) => {
     await user.save();
 
     // Console log OTP for testing as requested
-    console.log(`
+    (`
 ______________
 
 otp :    ${otp}
@@ -190,14 +190,14 @@ exports.getMe = async (req, res, next) => {
   }
   // --- End Self-Healing Logic ---
 
-  // First, look for an active session (must have a punch-in time)
+  // First, look for any active session (must have a punch-in time but NO punch-out)
   let attendance = await AttendanceModel.findOne({
     user: req.user.id,
     "punchIn.time": { $exists: true },
     "punchOut.time": { $exists: false }
   }).sort('-date');
 
-  // 2. If no active session, look for a completed record for today (must have a punch-in time)
+  // 2. If no active session, look for the most recent completed record today or from a night shift ending today
   if (!attendance) {
     attendance = await AttendanceModel.findOne({
       user: req.user.id,
@@ -206,7 +206,7 @@ exports.getMe = async (req, res, next) => {
         { date: { $gte: todayStart, $lt: todayEnd } },
         { "punchOut.time": { $gte: todayStart, $lt: todayEnd } }
       ]
-    }).sort('-punchOut.time');
+    }).sort('-date -punchIn.time'); // Get the latest one
   }
 
   res.status(200).json({
