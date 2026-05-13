@@ -194,12 +194,7 @@ const AttendanceScreen = ({ navigation }) => {
       return { allowed: false, status: 'Upcoming', message: 'Shift Not Started' };
     }
 
-    // 4. Shift has already ended completely
-    if (now > end) {
-      return { allowed: false, status: 'Missed', message: 'Shift Ended' };
-    }
-
-    // 5. Otherwise, allow punch-in (even if late/half-day)
+    // 4. Otherwise, allow punch-in (even if late/half-day)
     return { allowed: true };
   };
 
@@ -218,7 +213,7 @@ const AttendanceScreen = ({ navigation }) => {
   const alreadyPunchedIn = !!todayAttendance?.punchIn?.time;
   const alreadyPunchedOut = !!todayAttendance?.punchOut?.time;
 
-  // Foreground Tracking Logic (High Frequency 10s)
+  // 5.Foreground Tracking Logic (High Frequency 10s)
   const [isTracking, setIsTracking] = useState(false);
 
   useEffect(() => {
@@ -238,7 +233,7 @@ const AttendanceScreen = ({ navigation }) => {
         setIsTracking(true);
         const loc = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.High,
-          timeout: 8000 
+          timeout: 8000
         });
 
         const { latitude, longitude, accuracy, speed, altitude, heading } = loc.coords;
@@ -284,7 +279,7 @@ const AttendanceScreen = ({ navigation }) => {
           speed,
           altitude,
           heading,
-          battery: 100 
+          battery: 100
         });
 
         if (res.data.retry && !isRetry) {

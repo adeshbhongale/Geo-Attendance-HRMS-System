@@ -26,17 +26,18 @@ const ShiftManagementScreen = ({ navigation }) => {
   const [dateFilter, setDateFilter] = useState(null); // Date object
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  const handleRefresh = async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await api.get('/auth/me');
+      setUserData(res.data.data);
+      await fetchHistory();
+    } catch (e) { }
+    setHistoryLoading(false);
+  };
+
   useEffect(() => {
-    const init = async () => {
-      setLoading(true);
-      try {
-        const res = await api.get('/auth/me');
-        setUserData(res.data.data);
-        await fetchHistory();
-      } catch (e) { }
-      setLoading(false);
-    };
-    init();
+    handleRefresh();
   }, []);
 
 
@@ -105,6 +106,12 @@ const ShiftManagementScreen = ({ navigation }) => {
           <Text className="text-2xl font-extrabold text-white tracking-tight">Company Shifts</Text>
         </View>
         <View className="flex-row items-center gap-3">
+          <TouchableOpacity
+            onPress={handleRefresh}
+            className="w-10 h-10 rounded-xl bg-slate-50 justify-center items-center border border-slate-100"
+          >
+            <RotateCcw size={18} color="#64748b" />
+          </TouchableOpacity>
         </View>
       </View>
 

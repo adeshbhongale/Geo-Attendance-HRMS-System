@@ -275,8 +275,25 @@ exports.getAllAttendance = async (req, res, next) => {
     const allUsers = await User.find({ role: { $ne: 'admin' } }).populate('shift', 'name');
     const presentUserIds = new Set(attendance.map(a => a.user?._id?.toString()));
     
+    const now = new Date();
+    const isToday = searchDate.getUTCDate() === now.getUTCDate() && 
+                    searchDate.getUTCMonth() === now.getUTCMonth() && 
+                    searchDate.getUTCFullYear() === now.getUTCFullYear();
+    
+    // Check if it's "end of day" (past 11:59 PM or simply near the end)
+    // Or we can just say if it's today, we don't show absentees until the day is actually over (tomorrow)
+    // But usually "end of day" in this context means after shift hours.
+    // However, the user said "until day is end", so let's check if current time is late (e.g. past 8 PM) or just hide them for today.
+    const isEndOfDay = now.getHours() >= 23; // Very late
+
     const absentRecords = allUsers
       .filter(user => !presentUserIds.has(user._id.toString()))
+      .filter(user => {
+        // If not today (i.e. past date), always show absentees
+        if (!isToday) return true;
+        // If today, only show if it's end of day
+        return isEndOfDay;
+      })
       .map(user => ({
         _id: `absent_${user._id}`,
         user: user,
