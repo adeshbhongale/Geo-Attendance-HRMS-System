@@ -1,10 +1,13 @@
 import axios from 'axios';
 
+const rawApiUrl = import.meta.env.VITE_API_URL || '';
+const cleanApiUrl = rawApiUrl.replace(/^["'](.+)["']$/, '$1').replace(/\/+$/, '');
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: cleanApiUrl,
 });
 
-export const IMAGE_BASE_URL = import.meta.env.VITE_IMAGE_URL || import.meta.env.VITE_API_URL?.replace('/api', '');
+export const IMAGE_BASE_URL = import.meta.env.VITE_IMAGE_URL || cleanApiUrl.replace('/api', '');
 
 // ── Request Interceptor: attach Bearer token from localStorage ──────────────
 api.interceptors.request.use(

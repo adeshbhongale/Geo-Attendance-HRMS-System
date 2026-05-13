@@ -134,7 +134,6 @@ A comprehensive HRMS solution with real-time GPS tracking, geo-fencing, and shif
 - **Socket.io** - Real-time communication
 - **JWT (jsonwebtoken)** - Authentication
 - **bcryptjs** - Password hashing
-- **OTP (otp-generator)** - OTP generation
 - **XLSX** - Excel file handling
 - **CORS** - Cross-origin handling
 - **Dotenv** - Environment variables
@@ -306,7 +305,7 @@ npm run lint      # Run ESLint
 
 1. Access the web portal
 2. Enter your admin email
-3. Enter the OTP (check backend console in development)
+3. Enter the Password (check backend console in development)
 
 ---
 
@@ -446,8 +445,7 @@ http://localhost:5000/api
 
 ```
 POST   /auth/register           - Register new user
-POST   /auth/send-otp            - Send OTP for login
-POST   /auth/login               - Login with OTP/password
+POST   /auth/login               - Login with password
 POST   /auth/logout              - Logout user
 POST   /auth/refresh-token       - Refresh JWT token
 GET    /auth/me                  - Get current user profile
@@ -489,24 +487,6 @@ POST   /shifts/                  - Create shift (admin)
 PUT    /shifts/:id               - Update shift (admin)
 DELETE /shifts/:id               - Delete shift (admin)
 ```
-
-### Sample API Request
-
-```bash
-# Login with OTP
-
-
-# Punch-in with GPS
-curl -X POST http://localhost:5000/api/attendance/punch-in \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "latitude": 16.704151,
-    "longitude": 74.450258,
-    "address": "Office Location"
-  }'
-```
-
 ---
 
 ## 💾 Database Seeding
@@ -515,17 +495,24 @@ curl -X POST http://localhost:5000/api/attendance/punch-in \
 
 ```bash
 cd backend
+npm run seedmore
+or
 npm run seed
 ```
 
-### Seeded Data
+### 📊 Comprehensive Seeded Data
+The system is pre-populated with a production-scale dataset for testing analytics and tracking:
 
-- **10 Users**: 1 admin + 9 employees
-- **3 Shifts**: General Shift, Morning Shift, Night Shift
-- **1 Office Location**: Geo-fence with 200m radius
-- **20 Attendance Records**: 2 records per employee (today and yesterday)
-- **27 Leave Records**: Mixed statuses and types
-- **Tracking Logs**: Multiple location points per attendance
+- **16 Total Users**: 1 Super Admin + 15 Employees (across IT, Sales, HR, Support, and Logistics).
+- **3 Production Shifts**:
+  - **Morning Shift**: 08:00 - 16:00
+  - **Evening Shift**: 16:00 - 00:00
+  - **Night Shift**: 00:00 - 08:00 (Crosses midnight boundary)
+- **1 Office HQ**: Geo-fence set at **Ichalkaranji HQ** with a precise 200m radius.
+- **~400 Attendance Records**: Full **30-day historical data** for all employees, including weekend gaps and randomized statuses (Present, Late, Half-Day, Absent).
+- **~150 Leave Records**: Comprehensive leave history including **Past, Current, and Future** planned leaves with all statuses (Pending, Approved, Rejected, Cancelled).
+- **High-Density Micro-Tracking**: Exactly **50 GPS tracking points** per attendance record, simulating dense internal movement (1-10m increments) with distance calculations.
+---
 
 ### Manual Database Reset
 
@@ -533,7 +520,7 @@ npm run seed
 cd backend
 npm run reset-db
 # Then reseed:
-npm run seed
+npm run seedmore / npm run seed
 ```
 
 ### View Seeded Data
@@ -735,7 +722,6 @@ eas submit --platform android
 - **Geo-fence Radius**: 200 meters (configurable)
 - **JWT Expiry**: 15 minutes
 - **Refresh Token Expiry**: 7 days
-- **OTP Validity**: 10 minutes
 - **Max Concurrent Users**: 10,000+
 - **API Response Time**: <200ms
 
