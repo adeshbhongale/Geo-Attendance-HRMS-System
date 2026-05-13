@@ -104,6 +104,8 @@ const AttendanceSchema = new mongoose.Schema({
   shiftInfo: {
     name: String,
     startTime: String, // HH:mm
+    endTime: String,   // HH:mm
+    requiredHours: Number
   }
 }, {
   timestamps: true,

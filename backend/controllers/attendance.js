@@ -96,16 +96,6 @@ exports.punchIn = async (req, res, next) => {
         cutoffTime.setDate(cutoffTime.getDate() + 1);
       }
 
-      // Removed shift end cutoff to allow punch in after shift ends
-      /*
-      if (now > cutoffTime) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `Shift ended. You cannot punch in after ${user.shift.endTime}.` 
-        });
-      }
-      */
-
       // Calculate Half Day Status
       if (user.shift.halfDayAfter) {
         const [hHour, hMin] = user.shift.halfDayAfter.split(':').map(Number);
@@ -117,8 +107,6 @@ exports.punchIn = async (req, res, next) => {
         }
       }
     }
-
-    // Location status is recorded via isOutside, status remains Present or Late
 
     const attendance = await Attendance.create({
       user: userId,
@@ -135,7 +123,9 @@ exports.punchIn = async (req, res, next) => {
       isOutside,
       shiftInfo: {
         name: user.shift.name,
-        startTime: user.shift.startTime
+        startTime: user.shift.startTime,
+        endTime: user.shift.endTime,
+        requiredHours: user.shift.workingHours
       }
     });
 
@@ -190,8 +180,9 @@ exports.punchOut = async (req, res, next) => {
 
     const user = await User.findById(userId).populate('shift');
     
-    // Half day check based on working hours
-    if (user.shift && !attendance.isHalfDay && attendance.workingHours < (user.shift.workingHours / 2)) {
+    // Half day check based on snapshotted shift working hours
+    const requiredHours = attendance.shiftInfo?.requiredHours || user.shift?.workingHours || 9;
+    if (!attendance.isHalfDay && attendance.workingHours < (requiredHours / 2)) {
       attendance.isHalfDay = true;
       attendance.status = 'Half Day';
     }
@@ -255,12 +246,11 @@ exports.getAllAttendance = async (req, res, next) => {
       searchDate = start;
     }
 
-    // statsService already required at top (canonical service)
     const attendanceRaw = await Attendance.find(query)
       .populate({
         path: 'user',
-        select: 'name email department shift',
-        populate: { path: 'shift', select: 'name' }
+        select: 'name email department shift createdAt',
+        populate: { path: 'shift', select: 'name startTime endTime' }
       })
       .sort('-date');
 
@@ -272,7 +262,7 @@ exports.getAllAttendance = async (req, res, next) => {
       };
     });
 
-    const allUsers = await User.find({ role: { $ne: 'admin' } }).populate('shift', 'name');
+    const allUsers = await User.find({ role: { $ne: 'admin' } }).populate('shift', 'name startTime endTime');
     const presentUserIds = new Set(attendance.map(a => a.user?._id?.toString()));
     
     const now = new Date();
@@ -280,19 +270,33 @@ exports.getAllAttendance = async (req, res, next) => {
                     searchDate.getUTCMonth() === now.getUTCMonth() && 
                     searchDate.getUTCFullYear() === now.getUTCFullYear();
     
-    // Check if it's "end of day" (past 11:59 PM or simply near the end)
-    // Or we can just say if it's today, we don't show absentees until the day is actually over (tomorrow)
-    // But usually "end of day" in this context means after shift hours.
-    // However, the user said "until day is end", so let's check if current time is late (e.g. past 8 PM) or just hide them for today.
-    const isEndOfDay = now.getHours() >= 23; // Very late
+    const isEndOfDay = now.getHours() >= 23; 
 
     const absentRecords = allUsers
       .filter(user => !presentUserIds.has(user._id.toString()))
       .filter(user => {
-        // If not today (i.e. past date), always show absentees
+        const userCreated = new Date(user.createdAt);
+        userCreated.setUTCHours(0, 0, 0, 0);
+        
+        // 1. If user was created AFTER the search date, they don't exist yet
+        if (userCreated > searchDate) return false;
+
+        // 2. If it's a past date, show as absent if no punch
         if (!isToday) return true;
-        // If today, only show if it's end of day
-        return isEndOfDay;
+
+        // 3. If it's today:
+        // - Exclude if created TODAY (New Employee)
+        if (userCreated.getTime() === searchDate.getTime()) return false;
+
+        // - Mark as absent if shift has ended
+        if (user.shift) {
+          const [eH, eM] = user.shift.endTime.split(':').map(Number);
+          const shiftEnd = new Date();
+          shiftEnd.setHours(eH, eM, 0, 0);
+          if (now > shiftEnd) return true;
+        }
+
+        return false;
       })
       .map(user => ({
         _id: `absent_${user._id}`,
@@ -330,14 +334,12 @@ exports.trackLocation = async (req, res, next) => {
     const userId = req.user.id;
 
     const now = new Date();
-    // Use the same date logic as punchIn for consistency
     const todayStr = now.toISOString().split('T')[0];
     const startOfDay = new Date(todayStr + "T00:00:00.000Z");
-    const endOfDay = new Date(todayStr + "T23:59:59.999Z");
 
     const attendance = await Attendance.findOne({
       user: userId,
-      date: { $gte: startOfDay, $lte: endOfDay },
+      date: { $gte: startOfDay },
       "punchOut.time": { $exists: false }
     });
 
@@ -347,7 +349,6 @@ exports.trackLocation = async (req, res, next) => {
 
     const office = await Location.findOne({ name: 'Office Main' }) || await Location.findOne();
     
-    // Get last point for validation
     let lastPoint = null;
     if (attendance.trackingLogs.length > 0) {
       lastPoint = attendance.trackingLogs[attendance.trackingLogs.length - 1];
@@ -359,7 +360,6 @@ exports.trackLocation = async (req, res, next) => {
       };
     }
 
-    // Smart Validation
     const validation = geoService.validateLocation(lastPoint, {
       latitude,
       longitude,
@@ -368,9 +368,7 @@ exports.trackLocation = async (req, res, next) => {
 
     const isOutside = office ? (calculateDistance(latitude, longitude, office.latitude, office.longitude) > office.radius) : false;
 
-    // Handle suspicious points
     if (validation.isSuspicious) {
-      // Still log it but mark as suspicious
       attendance.trackingLogs.push({
         time: now,
         latitude,
@@ -381,34 +379,20 @@ exports.trackLocation = async (req, res, next) => {
         speed,
         altitude,
         heading,
-        distanceFromPrevious: 0 // Don't add distance for suspicious points
+        distanceFromPrevious: 0
       });
-      
       await attendance.save();
-
-      return res.status(200).json({
-        success: true,
-        message: 'Location marked as suspicious',
-        isSuspicious: true,
-        retry: true // Signal mobile app to retry fetch
-      });
+      return res.status(200).json({ success: true, message: 'Location marked as suspicious', isSuspicious: true, retry: true });
     }
 
-    // Valid point processing
     const incrementalDistance = validation.distance;
     const totalDistanceTillNow = (attendance.totalDistance || 0) + incrementalDistance;
 
     attendance.totalDistance = parseFloat(totalDistanceTillNow.toFixed(6));
-    attendance.currentDistance = attendance.totalDistance; // Sync fields
     attendance.distance = attendance.totalDistance;
     attendance.isOutside = isOutside;
 
-    attendance.lastTrackedLocation = {
-      latitude,
-      longitude,
-      address,
-      time: now
-    };
+    attendance.lastTrackedLocation = { latitude, longitude, address, time: now };
     attendance.lastTrackingTime = now;
     if (battery) attendance.battery = battery;
 
@@ -417,8 +401,8 @@ exports.trackLocation = async (req, res, next) => {
       latitude,
       longitude,
       address,
-      distanceFromPrevious: parseFloat((incrementalDistance * 1000).toFixed(2)), // Store in METERS for frontend
-      totalDistanceTillNow: parseFloat(totalDistanceTillNow.toFixed(6)), // Keep in KM
+      distanceFromPrevious: parseFloat((incrementalDistance * 1000).toFixed(2)),
+      totalDistanceTillNow: parseFloat(totalDistanceTillNow.toFixed(6)),
       isSuspicious: false,
       accuracy,
       speed,
@@ -428,7 +412,6 @@ exports.trackLocation = async (req, res, next) => {
 
     await attendance.save();
 
-    // Broadcast to Admin via Socket.IO
     const io = req.app.get('io');
     if (io) {
       io.emit('locationUpdated', {
@@ -443,24 +426,16 @@ exports.trackLocation = async (req, res, next) => {
       });
     }
 
-    res.status(200).json({
-      success: true,
-      message: 'Location tracked',
-      isOutside,
-      totalDistance: attendance.totalDistance
-    });
+    res.status(200).json({ success: true, message: 'Location tracked', isOutside, totalDistance: attendance.totalDistance });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
 };
 
-
-// @desc    Get monthly attendance summary and daily status
-// @route   GET /api/attendance/monthly-view
-// @access  Private
+// @desc    Get monthly attendance view
 exports.getMonthlyView = async (req, res, next) => {
   try {
-    const { month, year } = req.query; // Expects numeric month (1-12) and year (e.g., 2026)
+    const { month, year } = req.query;
     const userId = req.user.id;
 
     if (!month || !year) {
@@ -468,12 +443,8 @@ exports.getMonthlyView = async (req, res, next) => {
     }
 
     const user = await User.findById(userId).select('+createdAt');
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     
-    // Use createdAt as joining date. Normalize to start of day UTC.
-    // Fallback to a very old date if for some reason createdAt is missing
     const joiningDate = user.createdAt ? new Date(user.createdAt) : new Date(0);
     joiningDate.setUTCHours(0, 0, 0, 0);
 
@@ -485,17 +456,8 @@ exports.getMonthlyView = async (req, res, next) => {
       date: { $gte: startDate, $lt: endDate }
     }).sort('date');
 
-    const summary = {
-      present: 0,
-      late: 0,
-      halfDay: 0,
-      absent: 0,
-      onLeave: 0,
-      totalWorkedHours: 0,
-      totalBreakMinutes: 0
-    };
+    const summary = { present: 0, late: 0, halfDay: 0, absent: 0, onLeave: 0, totalWorkedHours: 0, totalBreakMinutes: 0 };
 
-    // Fetch leaves for this month
     const Leave = require('../models/Leave');
     const leaves = await Leave.find({
       user: userId,
@@ -506,160 +468,90 @@ exports.getMonthlyView = async (req, res, next) => {
       ]
     });
 
-    // Create a map of days
     const daysInMonth = new Date(year, month, 0).getDate();
     const dailyStatus = {};
-
     const now = new Date();
-    const currentYear = now.getUTCFullYear();
-    const currentMonth = now.getUTCMonth() + 1;
-    const today = now.getUTCDate();
 
-    // Initialize all days
     for (let i = 1; i <= daysInMonth; i++) {
       const d = new Date(Date.UTC(year, month - 1, i));
       const isSunday = d.getUTCDay() === 0;
-      
-      const isFuture = (parseInt(year) > currentYear) || 
-                      (parseInt(year) === currentYear && parseInt(month) > currentMonth) ||
-                      (parseInt(year) === currentYear && parseInt(month) === currentMonth && i > today);
+      const isFuture = (parseInt(year) > now.getUTCFullYear()) || 
+                      (parseInt(year) === now.getUTCFullYear() && parseInt(month) > (now.getUTCMonth() + 1)) ||
+                      (parseInt(year) === now.getUTCFullYear() && parseInt(month) === (now.getUTCMonth() + 1) && i > now.getUTCDate());
 
-      const isToday = (parseInt(year) === currentYear && parseInt(month) === currentMonth && i === today);
-      
-      // Check if date is before joining (using timestamps for reliable comparison)
+      const isToday = (parseInt(year) === now.getUTCFullYear() && parseInt(month) === (now.getUTCMonth() + 1) && i === now.getUTCDate());
       const isBeforeJoining = d.getTime() < joiningDate.getTime();
 
-      // Default status
       let status = 'Absent';
       if (isFuture) status = 'Future';
       else if (isToday) status = 'Today';
       else if (isBeforeJoining) status = 'BeforeJoining';
 
-      // Color logic: Blank for Sundays, Future, Before Joining, or Today (initial)
       let color = (isSunday || isFuture || isBeforeJoining || isToday) ? 'transparent' : '#f43f5e';
 
-      dailyStatus[i] = { 
-        status, 
-        color,
-        isSunday,
-        isFuture,
-        isToday,
-        isBeforeJoining
-      };
+      dailyStatus[i] = { status, color, isSunday, isFuture, isToday, isBeforeJoining };
     }
 
-    // Mark Leaves (Yellow)
     leaves.forEach(leave => {
       let start = new Date(leave.startDate);
       let end = new Date(leave.endDate);
-      
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        if (d.getMonth() + 1 === parseInt(month) && d.getFullYear() === parseInt(year)) {
-          const day = d.getDate();
+        if (d.getUTCMonth() + 1 === parseInt(month) && d.getUTCFullYear() === parseInt(year)) {
+          const day = d.getUTCDate();
           if (dailyStatus[day] && !dailyStatus[day].isBeforeJoining) {
-            dailyStatus[day] = { 
-              ...dailyStatus[day],
-              status: 'On Leave', 
-              color: '#f59e0b', // Yellow/Amber for leave
-              isFuture: false 
-            }; 
+            dailyStatus[day] = { ...dailyStatus[day], status: 'On Leave', color: '#f59e0b', isFuture: false }; 
             summary.onLeave++;
           }
         }
       }
     });
 
-    // Mark Attendance
     attendance.forEach(record => {
       const day = new Date(record.date).getUTCDate();
       let status = record.status || 'Present';
-      let color = '#10b981'; // Green for present
-
-      if (status === 'Late' || status === 'Half Day') {
-        color = '#f59e0b'; // Yellow for Late/Half Day
-      }
+      let color = '#10b981';
+      if (status === 'Late' || status === 'Half Day') color = '#f59e0b';
 
       if (dailyStatus[day]) {
-        dailyStatus[day] = { 
-          ...dailyStatus[day],
-          status, 
-          color,
-          isFuture: false,
-          isBeforeJoining: false, 
-          punchIn: record.punchIn?.time,
-          punchOut: record.punchOut?.time
-        };
-
+        dailyStatus[day] = { ...dailyStatus[day], status, color, isFuture: false, isBeforeJoining: false, punchIn: record.punchIn?.time, punchOut: record.punchOut?.time };
         if (status === 'Present') summary.present++;
         else if (status === 'Late') summary.late++;
         else if (status === 'Half Day') summary.halfDay++;
-        
         summary.totalWorkedHours += statsService.calculateWorkingHours(record);
         summary.totalBreakMinutes += record.breaks?.reduce((acc, b) => acc + (b.duration || 0), 0) || 0;
       }
     });
 
-    // Calculate Absent (Exclude future dates, today, and pre-joining dates)
     summary.absent = 0;
     for (let i = 1; i <= daysInMonth; i++) {
        const dayStatus = dailyStatus[i];
-       // Only count as absent if it's NOT a future date, NOT today, NOT Sunday, and NOT before joining
-       if (dayStatus.status === 'Absent' && 
-           !dayStatus.isSunday && 
-           !dayStatus.isBeforeJoining && 
-           !dayStatus.isFuture && 
-           !dayStatus.isToday) {
+       if (dayStatus.status === 'Absent' && !dayStatus.isSunday && !dayStatus.isBeforeJoining && !dayStatus.isFuture && !dayStatus.isToday) {
          summary.absent++;
        }
     }
 
-    res.status(200).json({
-      success: true,
-      data: {
-        summary,
-        dailyStatus,
-        daysInMonth,
-        monthName: new Date(year, month - 1).toLocaleString('default', { month: 'long' })
-      }
-    });
+    res.status(200).json({ success: true, data: { summary, dailyStatus, daysInMonth, monthName: new Date(year, month - 1).toLocaleString('default', { month: 'long' }) } });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
 };
+
 exports.toggleBreak = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const attendance = await Attendance.findOne({
-      user: userId,
-      "punchOut.time": { $exists: false }
-    }).sort('-date');
+    const attendance = await Attendance.findOne({ user: userId, "punchOut.time": { $exists: false } }).sort('-date');
+    if (!attendance) return res.status(400).json({ success: false, message: 'No active punch-in session found' });
 
-    if (!attendance) {
-      return res.status(400).json({ success: false, message: 'No active punch-in session found' });
-    }
-
-    // Check if there's an ongoing break (one without endTime)
     const activeBreakIndex = attendance.breaks.findIndex(b => !b.endTime);
-
     if (activeBreakIndex !== -1) {
-      // End current break
       attendance.breaks[activeBreakIndex].endTime = new Date();
       const diff = attendance.breaks[activeBreakIndex].endTime - attendance.breaks[activeBreakIndex].startTime;
-      attendance.breaks[activeBreakIndex].duration = Math.round(diff / (1000 * 60)); // minutes
+      attendance.breaks[activeBreakIndex].duration = Math.round(diff / (1000 * 60));
     } else {
-      // Start new break
-      attendance.breaks.push({
-        startTime: new Date()
-      });
+      attendance.breaks.push({ startTime: new Date() });
     }
-
     await attendance.save();
-
-    res.status(200).json({
-      success: true,
-      message: activeBreakIndex !== -1 ? 'Break ended' : 'Break started',
-      data: attendance
-    });
+    res.status(200).json({ success: true, message: activeBreakIndex !== -1 ? 'Break ended' : 'Break started', data: attendance });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }

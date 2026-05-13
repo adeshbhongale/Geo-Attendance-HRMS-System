@@ -1,3 +1,5 @@
+import * as TaskManager from 'expo-task-manager';
+import * as Location from 'expo-location';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -6,6 +8,7 @@ import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { enableScreens } from 'react-native-screens';
+import api from './src/api/axios';
 
 enableScreens();
 
@@ -21,21 +24,38 @@ import { navigationRef } from './src/utils/navigation';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { LogBox } from 'react-native';
 
-// Enable all logs
-LogBox.ignoreAllLogs(false);
+LogBox.ignoreAllLogs(true);
 
-// Global JS error handler
-if (global.ErrorUtils) {
-  global.ErrorUtils.setGlobalHandler((error, isFatal) => {
-    // Silent in production — re-enable during debugging if needed
-  });
-}
+const LOCATION_TASK_NAME = 'background-location-task';
+
+// Define the background task
+TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
+  if (error) {
+    console.error('[BACKGROUND] Task Error:', error.message);
+    return;
+  }
+  if (data) {
+    const { locations } = data;
+    const location = locations[0];
+    if (location) {
+      try {
+        await api.post('/attendance/track', {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          address: 'Background tracking...',
+          battery: 100
+        });
+      } catch (err) {
+        // Silent fail in background
+      }
+    }
+  }
+});
 
 const RootStack = createStackNavigator();
 const DashboardStackNav = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Dashboard Stack
 function DashboardStack() {
   return (
     <DashboardStackNav.Navigator screenOptions={{ headerShown: false }}>
@@ -44,7 +64,6 @@ function DashboardStack() {
   );
 }
 
-// Main Tab Navigator
 function MainTabs() {
   return (
     <Tab.Navigator

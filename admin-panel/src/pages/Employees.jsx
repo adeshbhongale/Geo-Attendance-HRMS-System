@@ -18,6 +18,7 @@ import {
   Loader2, Mail, Phone,
   Save,
   Search,
+  Share2,
   Trash2,
   Upload,
   UserPlus,
@@ -55,12 +56,15 @@ const Employees = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successData, setSuccessData] = useState(null);
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [saving, setSaving] = useState(false);
   const [confirmData, setConfirmData] = useState({ show: false, type: '', action: null, message: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [officeSet, setOfficeSet] = useState(true);
   const fileInputRef = useRef(null);
 
   // Advanced Filters State
@@ -142,12 +146,20 @@ const Employees = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [empRes, shiftRes] = await Promise.all([
+      const [empRes, shiftRes, officeRes] = await Promise.all([
         api.get('/employees'),
-        api.get('/shifts')
+        api.get('/shifts'),
+        api.get('/settings/office')
       ]);
       setEmployees(empRes.data.data);
       setShifts(shiftRes.data.data);
+
+      const office = officeRes.data.data;
+      if (!office || !office.latitude || !office.longitude || office.latitude === 0) {
+        setOfficeSet(false);
+      } else {
+        setOfficeSet(true);
+      }
     } catch (err) {
       toast.error('Failed to load staff data');
     } finally {
@@ -161,6 +173,20 @@ const Employees = () => {
   };
 
   const handleOpenModal = (emp = null) => {
+    if (!emp) {
+      // Prerequisite checks for new employee
+      if (!officeSet) {
+        toast.error('Please set office location in Settings before adding staff members', { duration: 5000 });
+        navigate('/settings');
+        return;
+      }
+      if (shifts.length === 0) {
+        toast.error('Please create at least one shift in Shift Management before adding staff members', { duration: 5000 });
+        navigate('/shifts');
+        return;
+      }
+    }
+
     setShowPassword(false);
     if (emp) {
       setEditingEmployee(emp);
@@ -233,7 +259,7 @@ const Employees = () => {
       doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
 
       const tableData = filteredEmployees.map(emp => [
-        emp._id,
+        emp._id.slice(-8),
         emp.name,
         emp.email,
         emp.mobile,
@@ -245,7 +271,7 @@ const Employees = () => {
 
       autoTable(doc, {
         startY: 38,
-        head: [['Staff ID', 'Name', 'Email', 'Mobile', 'Department', 'Designation', 'Shift', 'Joined']],
+        head: [['Emp ID', 'Name', 'Email', 'Mobile', 'Department', 'Designation', 'Shift', 'Joined']],
         body: tableData,
         theme: 'striped',
         headStyles: {
@@ -343,9 +369,16 @@ const Employees = () => {
             });
             toast.success('Staff details updated');
           } else {
-            await api.post('/employees', data, {
+            const rawPassword = formData.password;
+            const res = await api.post('/employees', data, {
               headers: { 'Content-Type': 'multipart/form-data' }
             });
+            const createdEmp = res.data.data;
+            setSuccessData({
+              ...createdEmp,
+              password: rawPassword
+            });
+            setShowSuccessModal(true);
             toast.success('New staff member added');
           }
           fetchData();
@@ -882,6 +915,105 @@ const Employees = () => {
               <div className="flex gap-4">
                 <button className="flex-1 bg-slate-50 text-slate-500 font-bold py-4 rounded-2xl hover:bg-slate-100 transition-all" onClick={() => setConfirmData({ ...confirmData, show: false })}>Cancel</button>
                 <button className="flex-1 bg-indigo-600 text-white font-bold py-4 rounded-2xl hover:bg-indigo-700 transition-all shadow-lg" onClick={executeConfirmedAction}>Confirm</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showSuccessModal && successData && (
+          <div className="fixed inset-0 z-[4000] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-[2.5rem] p-8 w-full max-w-[450px] shadow-2xl relative overflow-hidden text-center"
+            >
+              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-indigo-500 to-purple-500"></div>
+
+              <div className="flex justify-between items-start mb-6">
+                <div className="bg-emerald-50 text-emerald-600 p-3 rounded-2xl">
+                  <UserPlus size={24} />
+                </div>
+                <button
+                  onClick={() => setShowSuccessModal(false)}
+                  className="bg-slate-50 p-2 rounded-xl text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <h3 className="text-2xl font-bold text-slate-900 mb-2 tracking-tight">Profile Created!</h3>
+              <p className="text-slate-500 text-sm font-bold mb-6">Share these credentials with the employee</p>
+
+              <div className="bg-slate-50 rounded-3xl p-6 mb-8 border border-slate-100 space-y-4 text-left">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400  tracking-widest">Employee Info</p>
+                  <p className="text-sm font-bold text-slate-800">Hi {successData.name}</p>
+                  <p className="text-[13px] font-bold text-slate-600">Your profile has been created</p>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-slate-200/60">
+                  <p className="text-[10px] font-bold text-slate-400  tracking-widest">Download Links</p>
+                  <div className="space-y-1.5">
+                    <p className="text-[12px] font-bold text-indigo-600 leading-tight">Android: <span className="text-slate-500 underline text-[11px] break-all">{import.meta.env.VITE_ANDROID_APK_URL}</span></p>
+                    <p className="text-[12px] font-bold text-indigo-600 leading-tight">iOS: <span className="text-slate-500 underline text-[11px] break-all">{import.meta.env.VITE_IOS_APP_URL}</span></p>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-slate-200/60">
+                  <p className="text-[10px] font-bold text-slate-400  tracking-widest">Login Credentials</p>
+                  <div className="grid grid-cols-1">
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-400">Emp ID</p>
+                      <p className="text-xs font-bold text-slate-800 break-all">{successData._id || 'Generating...'}</p>
+                    </div>
+                  </div>
+                  <div className="pt-2">
+                    <p className="text-[10px] font-bold text-slate-400">User Identifiers</p>
+                    <p className="text-xs font-bold text-slate-800">{successData.email} / {successData.mobile}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 pt-2">Password</p>
+                    <p className="text-xs font-bold text-slate-800">{successData.password || '12345678'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    const websiteLink = window.location.origin;
+                    const shareText = `*Geo-Attendance HRMS*\n${websiteLink}\n\nHi ${successData.name}\nYour profile has been created successfully.\n\n*Download App:*\nAndroid: ${import.meta.env.VITE_ANDROID_APK_URL}\niOS: ${import.meta.env.VITE_IOS_APP_URL}\n\n*Login Credentials:*\nEmp ID: ${successData._id}\nUser: ${successData.email} / ${successData.mobile}\nPassword: ${successData.password || '12345678'}\n\n_Keep your credentials secure._`;
+                    navigator.clipboard.writeText(shareText);
+                    toast.success('Credentials copied to clipboard');
+                    setShowSuccessModal(false);
+                  }}
+                  className="flex-1 bg-indigo-600 text-white font-bold py-4 rounded-2xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2"
+                >
+                  <Copy size={18} />
+                  Copy Info
+                </button>
+                <button
+                  onClick={() => {
+                    const websiteLink = window.location.origin;
+                    const shareText = `*Geo-Attendance HRMS*\n${websiteLink}\n\nHi ${successData.name}\nYour profile has been created successfully.\n\n*Download App:*\nAndroid: ${import.meta.env.VITE_ANDROID_APK_URL}\niOS: ${import.meta.env.VITE_IOS_APP_URL}\n\n*Login Credentials:*\nEmp ID: ${successData._id}\nUser: ${successData.email} / ${successData.mobile}\nPassword: ${successData.password || '12345678'}\n\n_Keep your credentials secure._`;
+                    if (navigator.share) {
+                      navigator.share({
+                        title: 'Employee Credentials - Geo HRMS',
+                        text: shareText
+                      }).catch(() => { });
+                    } else {
+                      window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
+                    }
+                    setShowSuccessModal(false);
+                  }}
+                  className="flex-1 bg-emerald-600 text-white font-bold py-4 rounded-2xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 flex items-center justify-center gap-2"
+                >
+                  <Share2 size={18} />
+                  Share
+                </button>
               </div>
             </motion.div>
           </div>

@@ -23,6 +23,7 @@
     "expo-location": "~19.0.8",
     "expo-notifications": "~0.32.17",
     "expo-status-bar": "~3.0.9",
+    "expo-task-manager": "^55.0.16",
     "lucide-react-native": "^1.14.0",
     "nativewind": "^4.2.3",
     "postcss": "^8.5.14",

@@ -121,9 +121,25 @@ const Shifts = () => {
       setLoading(false);
     }
   };
+  
+  const employeesMap = useMemo(() => {
+    const map = {};
+    employees.forEach(e => map[e._id] = e);
+    return map;
+  }, [employees]);
+
+  const employeesByShift = useMemo(() => {
+    const map = {};
+    shifts.forEach(s => map[s._id] = []);
+    employees.forEach(emp => {
+      const sId = typeof emp.shift === 'string' ? emp.shift : emp.shift?._id;
+      if (sId && map[sId]) map[sId].push(emp);
+    });
+    return map;
+  }, [shifts, employees]);
 
   const getEmployeesByShift = (shiftId) => {
-    return employees.filter(emp => emp.shift?._id === shiftId || emp.shift === shiftId);
+    return employeesByShift[shiftId] || [];
   };
 
   const to12Hour = (time24) => {
@@ -553,9 +569,8 @@ const Shifts = () => {
                     const emp = att.user;
                     if (!emp) return null;
                     const status = att.status;
-
-                    // Find full employee data to get profile image if missing in attendance record
-                    const fullEmp = employees.find(e => e._id === (emp._id || emp));
+                    const empId = emp._id || emp;
+                    const fullEmp = employeesMap[empId];
                     const profileImageUrl = getFullImageUrl(fullEmp?.profileImage || emp.profileImage);
 
                     // Resolve shift details if emp.shift is just an ID

@@ -187,6 +187,9 @@ const ProfileScreen = ({ navigation }) => {
             </View>
 
             <Text className="text-2xl font-bold text-slate-800 text-center mt-4">{user?.name || 'User'}</Text>
+            <View className="bg-slate-100 px-3 rounded-lg">
+              <Text className="text-[10px] font-bold text-slate-500 tracking-widest">Emp ID: {user?._id?.slice(-8)}</Text>
+            </View>
             <Text className="text-slate-500 font-bold text-sm mt-1">
               {user?.department} , {user?.designation}
             </Text>
@@ -255,6 +258,12 @@ const ProfileScreen = ({ navigation }) => {
             <LogOut size={24} color="#e11d48" />
             <Text className="text-rose-600 font-bold text-lg ml-3">Sign Out Account</Text>
           </TouchableOpacity>
+
+          {/* App Metadata Footer */}
+          <View className="mt-8 items-center opacity-40">
+            <Text className="text-[10px] font-bold text-slate-500 tracking-widest">Geo-Track HRMS System</Text>
+            <Text className="text-[9px] font-bold text-slate-400 mt-1">Version 1.0.0 • Production Stable</Text>
+          </View>
         </View>
       </ScrollView>
 

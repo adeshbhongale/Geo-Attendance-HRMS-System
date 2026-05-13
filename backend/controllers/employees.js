@@ -287,7 +287,7 @@ exports.exportEmployees = async (req, res, next) => {
         const employees = await User.find({ role: 'employee' }).populate('shift').select('+password');
         
         const data = employees.map(emp => ({
-            'Staff ID': emp._id.toString(),
+            'Emp ID': emp._id.toString().slice(-8),
             'Name': emp.name,
             'Email': emp.email,
             'Mobile': emp.mobile,

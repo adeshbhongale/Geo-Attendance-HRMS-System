@@ -25,7 +25,7 @@ import CalendarPicker from '../components/CalendarPicker';
 
 const getFullImageUrl = (path) => {
   if (!path) return null;
-  if (path.startsWith('http')) return path;
+  if (path.startsWith('http') || path.startsWith('data:')) return path;
   return `${IMAGE_BASE_URL}/${path.replace(/\\/g, '/')}`;
 };
 
@@ -471,9 +471,13 @@ const EmployeeDetails = () => {
               <SummaryCard label="Current Distance" value={`${(todayRecord?.distance || 0).toFixed(2)} km`} colorClass="text-indigo-600" />
 
               {/* Row 3: Present, Absent, Leave, Late & Half Day */}
-              <SummaryCard label="Present Count" value={summary.presentDays || 0} colorClass="text-emerald-600" />
+              <SummaryCard label="Present Only" value={summary.presentDays || 0} colorClass="text-emerald-600" />
+              <SummaryCard label="Late Days" value={summary.lateDays || 0} colorClass="text-amber-600" />
+              <SummaryCard label="Half Day Count" value={summary.halfDayCount || 0} colorClass="text-orange-600" />
               <SummaryCard label="Absent Days" value={`${summary.absentDays || 0} days`} colorClass="text-rose-600" />
-              <SummaryCard label="Leave Days" value={`${summary.leaveDays || 0} days`} colorClass="text-amber-600" />
+              
+              {/* Row 4: Leave, Unpaid Leave */}
+              <SummaryCard label="Leave Days" value={`${summary.leaveDays || 0} days`} colorClass="text-indigo-600" />
               <SummaryCard label="Unpaid Leave" value={`${summary.unpaidLeaveDays || 0} days`} colorClass="text-slate-600" />
             </div>
 
@@ -580,8 +584,8 @@ const EmployeeDetails = () => {
                     <td className="px-6 py-4 border-r border-slate-50 text-center">
                       <div className="flex flex-col items-center gap-1">
                         {log.punchIn?.selfie ? (
-                          <div className="relative group/img inline-block cursor-pointer" onClick={() => setSelectedSelfie(log.punchIn.selfie)}>
-                            <img src={log.punchIn.selfie} className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-sm" />
+                          <div className="relative group/img inline-block cursor-pointer" onClick={() => setSelectedSelfie(getFullImageUrl(log.punchIn.selfie))}>
+                            <img src={getFullImageUrl(log.punchIn.selfie)} className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-sm" />
                             <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity rounded-xl flex items-center justify-center">
                               <Eye size={12} className="text-white" />
                             </div>
@@ -607,8 +611,8 @@ const EmployeeDetails = () => {
                     <td className="px-6 py-4 border-r border-slate-50 text-center">
                       <div className="flex flex-col items-center gap-1">
                         {log.punchOut?.selfie ? (
-                          <div className="relative group/img inline-block cursor-pointer" onClick={() => setSelectedSelfie(log.punchOut.selfie)}>
-                            <img src={log.punchOut.selfie} className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-sm" />
+                          <div className="relative group/img inline-block cursor-pointer" onClick={() => setSelectedSelfie(getFullImageUrl(log.punchOut.selfie))}>
+                            <img src={getFullImageUrl(log.punchOut.selfie)} className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-sm" />
                             <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity rounded-xl flex items-center justify-center">
                               <Eye size={12} className="text-white" />
                             </div>
@@ -632,7 +636,7 @@ const EmployeeDetails = () => {
 
                     <td className="px-6 py-4 text-center border-r border-slate-50">
                       <span className="text-[11px] font-bold text-indigo-600">
-                        {formatDuration((log.breaks?.reduce((acc, b) => acc + (b.duration || 0), 0) || 0) / 60)} ({log.breaks?.length || 0})
+                        {formatDuration((log.totalBreakTime || log.breaks?.reduce((acc, b) => acc + (b.duration || 0), 0) || 0) / 60)} ({log.breaks?.length || 0})
                       </span>
                     </td>
 

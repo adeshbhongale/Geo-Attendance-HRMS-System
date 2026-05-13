@@ -168,12 +168,30 @@ const getAggregatedStats = (records, user, approvedLeaves = [], customStart = nu
     if (!isSunday) {
       if (isOnLeave(curr)) {
         leaveDaysCount++;
-      } else if (!isToday) {
-        if (!hasRecord) {
-          absentDays++;
-        } else {
-          const rec = records.find((r) => new Date(r.date).toDateString() === dateStr);
-          if (rec && rec.status === 'Absent') absentDays++;
+      } else {
+        // Updated logic for absent counting:
+        // 1. If it's a past day, count as absent if no record
+        // 2. If it's today, count as absent ONLY if shift has ended
+        let shouldCheckAbsent = !isToday;
+        if (isToday && user.shift) {
+          const [eH, eM] = user.shift.endTime.split(':').map(Number);
+          const shiftEnd = new Date();
+          shiftEnd.setHours(eH, eM, 0, 0);
+          if (now > shiftEnd) {
+            // Also ensure they weren't created today (avoid counting new employees as absent on day 1)
+            const userCreated = new Date(user.createdAt);
+            userCreated.setHours(0, 0, 0, 0);
+            if (userCreated < today) shouldCheckAbsent = true;
+          }
+        }
+
+        if (shouldCheckAbsent) {
+          if (!hasRecord) {
+            absentDays++;
+          } else {
+            const rec = records.find((r) => new Date(r.date).toDateString() === dateStr);
+            if (rec && rec.status === 'Absent') absentDays++;
+          }
         }
       }
     }

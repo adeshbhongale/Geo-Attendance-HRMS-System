@@ -799,6 +799,39 @@ Geo-Attendance-HRMS-System/
 
 - **Files**: `backend/scripts/seed_comprehensive.js`, `backend/scripts/simulateMovement.js`, `backend/server.js`, `mobile-app/src/screens/AttendanceScreen.js`
 
+### 12. Production Stability & Identification Tracking (May 13, 2026)
+
+**Changed**: Standardized system identification, refined attendance reporting logic, and implemented rich-media onboarding features.
+
+- **Files**: `backend/services/employeeStatsService.js`, `backend/controllers/reports.js`, `admin-panel/src/pages/Employees.jsx`, `mobile-app/src/screens/DashboardScreen.js`, `admin-panel/index.html`
+
+#### Administrative Onboarding & Sharing:
+- **Credentials Success Modal**: Added a high-fidelity modal in `Employees.jsx` that appears immediately after creating a new staff member.
+- **Native Sharing Integration**: 
+  - Implemented **Web Share API** support for "Share" (WhatsApp/Email) and **Clipboard API** for "Copy Info".
+  - Shared messages now include formatted Markdown for better readability in chat apps.
+- **Rich Link Previews (OG Tags)**: 
+  - Integrated **Open Graph (OG) Meta Tags** in the admin portal to provide professional logo thumbnails and metadata in chats.
+  - Optimized message structure by placing the website URL first to ensure reliable link previews.
+
+#### Identification Architecture:
+- **System ID Standardization**: Completely removed the legacy random 8-digit `staffId` in favor of a consistent **Emp ID**.
+- **Full vs. Truncated IDs**: 
+  - General UI (Lists, Mobile Profile) uses the **last 8 characters** of the MongoDB `_id` for readability.
+  - Official records and the creation modal display the **Full 24-character ID** for absolute precision.
+- **Cross-System Synchronization**: Updated Excel/PDF exports, Backend reporting controllers, and Mobile Profile screens to use this standardized identifier.
+
+#### Attendance & Reporting Logic Refinement:
+- **Join Date Integrity**: Modified `employeeStatsService.js` to strictly ignore all dates before an employee's `createdAt` timestamp, preventing false "Absent" counts for new hires.
+- **Dynamic Absent Today Logic**: 
+  - Updated the "Absent Today" trigger to only activate **after the employee's shift has ended**.
+  - Employees without a punch-in remain "Blank" during their shift and only transition to "Absent" (+1) once their assigned work hours have passed.
+- **Reporting Consistency**: Fixed historical daily reports in `reports.js` to only count employees who were active as of the specific report date.
+
+#### Mobile Presence & UX:
+- **Online Status Indicator**: Implemented an `AppState` listener in the mobile dashboard that displays a 2-second "Employee is Online" status toast whenever the app is resumed from the background.
+- **Login Persistence**: Verified and hardened mobile session persistence to prevent unexpected logouts.
+
 #### Movement Scale & Visibility:
 - **Substantial Telemetry**: Refactored the movement simulation logic to ensure every tracking log entry reflects a meaningful distance. 
   - **Local Trips**: Expanded to a ~100m - 200m radius with a minimum jump of 50m per segment.

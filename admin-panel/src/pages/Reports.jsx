@@ -21,7 +21,7 @@ import api, { IMAGE_BASE_URL } from '../api/axios';
 
 const getFullImageUrl = (path) => {
   if (!path) return null;
-  if (path.startsWith('http')) return path;
+  if (path.startsWith('http') || path.startsWith('data:')) return path;
   return `${IMAGE_BASE_URL}/${path.replace(/\\/g, '/')}`;
 };
 import CalendarPicker from '../components/CalendarPicker';
@@ -533,23 +533,20 @@ const Reports = () => {
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+                <tbody className="divide-y divide-slate-50">
                 {currentData.map((row, idx) => (
                   <tr key={row.id} className="hover:bg-slate-50/50 transition-colors group">
                     <td className="px-2 py-4 text-[9px] font-bold text-slate-800 whitespace-nowrap border-r border-slate-100 last:border-r-0 text-center">{formatFullDate(row.date)}</td>
                     <td className="px-2 py-4 border-r border-slate-100 last:border-r-0">
-                      <div className="flex flex-col items-center gap-1.5 text-center">
-                        <div
-                          onClick={() => navigate(`/employee/${row.userId}`)}
-                          className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 border-2 border-white shadow-sm overflow-hidden cursor-pointer hover:scale-110 transition-transform"
-                        >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-indigo-50 border border-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0">
                           {row.profileImage ? (
                             <img src={getFullImageUrl(row.profileImage)} alt="" className="w-full h-full object-cover" />
                           ) : (
-                            <span className="font-bold text-indigo-600 text-sm">{row.name.charAt(0)}</span>
+                            <span className="text-[10px] font-bold text-indigo-600">{row.name.charAt(0)}</span>
                           )}
                         </div>
-                        <div className="flex flex-col items-center">
+                        <div className="flex flex-col items-start">
                           <p onClick={() => navigate(`/employee/${row.userId}`)} className="text-[10px] font-extrabold text-blue-600 cursor-pointer hover:text-blue-700 transition-colors leading-tight">{row.name}</p>
                           <p className="text-[8px] font-bold text-slate-400 tracking-tight">{row.designation}</p>
                         </div>

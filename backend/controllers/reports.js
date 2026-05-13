@@ -79,6 +79,9 @@ exports.getStats = async (req, res) => {
     const endOfTargetDate = new Date(targetDate);
     endOfTargetDate.setUTCHours(23, 59, 59, 999);
 
+    const now = new Date();
+    const isTargetToday = targetDate.toISOString().split('T')[0] === now.toISOString().split('T')[0];
+
     const sDate = startDate ? parseUTCDate(startDate) : new Date(targetDate.getTime() - 6 * 24 * 60 * 60 * 1000);
     const eDate = endDate ? parseUTCDate(endDate) : targetDate;
     const diffDays = Math.min(31, Math.ceil((eDate - sDate) / (1000 * 60 * 60 * 24)) + 1);
@@ -138,8 +141,45 @@ exports.getStats = async (req, res) => {
       endDate: { $gte: targetDate }
     });
 
-    const isTargetToday = targetDate.toISOString().split('T')[0] === todayUTC().toISOString().split('T')[0];
-    const absentToday = isTargetToday ? 0 : Math.max(0, totalEmployees - presentToday - onLeaveToday);
+    // Enhanced logic: Count as absent today only if their shift has ended and they aren't new today
+    let absentToday = 0;
+    if (isTargetToday) {
+      const allEmployees = await User.find({ role: 'employee' }).populate('shift');
+      const presentUserIds = await Attendance.find(dateQuery).distinct('user');
+      const presentUserIdsSet = new Set(presentUserIds.map(id => id.toString()));
+      
+      const onLeaveUsers = await Leave.find({
+        status: 'Approved',
+        startDate: { $lte: targetDate },
+        endDate: { $gte: targetDate }
+      }).distinct('user');
+      const onLeaveUserIdsSet = new Set(onLeaveUsers.map(id => id.toString()));
+
+      const realAbsentees = allEmployees.filter(user => {
+        const empId = user._id.toString();
+        if (presentUserIdsSet.has(empId) || onLeaveUserIdsSet.has(empId)) return false;
+
+        const userCreated = new Date(user.createdAt);
+        userCreated.setUTCHours(0, 0, 0, 0);
+        if (userCreated.getTime() === targetDate.getTime()) return false;
+
+        if (user.shift) {
+          const [eH, eM] = user.shift.endTime.split(':').map(Number);
+          const shiftEnd = new Date();
+          shiftEnd.setHours(eH, eM, 0, 0);
+          if (now < shiftEnd) return false;
+        }
+        return true;
+      });
+      absentToday = realAbsentees.length;
+    } else {
+      // For past dates, only count employees who existed on that date
+      const activeEmployeesOnDate = await User.countDocuments({
+        role: 'employee',
+        createdAt: { $lte: endOfTargetDate }
+      });
+      absentToday = Math.max(0, activeEmployeesOnDate - presentToday - onLeaveToday);
+    }
 
     // Map trend data into the expected format for the last X days
     const attendanceTrend = [];
@@ -183,15 +223,12 @@ exports.getStats = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// GET /api/reports/my-stats   (employee mobile app)
-// SINGLE SOURCE OF TRUTH — uses employeeStatsService
+// GET /api/reports/my-stats
 // ─────────────────────────────────────────────────────────────
 exports.getEmployeeStats = async (req, res) => {
   try {
     const userId = req.user.id;
     const { startDate, endDate } = req.query;
-
-    // Default: current month
     const now = new Date();
     const defaultStart = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
     const defaultEnd   = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59));
@@ -202,16 +239,13 @@ exports.getEmployeeStats = async (req, res) => {
       endDate   || defaultEnd
     );
 
-    // Standardized response DTO consumed by BOTH mobile app & admin
     res.json({
       success: true,
       data: {
         ...result.stats,
-        // Current-day fields (live values from backend)
         currentWorkingHours: result.currentWorkingHours,
         currentBreakMinutes: result.currentBreakMinutes,
         currentDistanceKm:   result.currentDistanceKm,
-        // Shift info
         currentShift: result.user?.shift?.name || 'Not Assigned',
       }
     });
@@ -221,30 +255,13 @@ exports.getEmployeeStats = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// GET /api/reports/employee-stats/:userId   (admin — same service)
-// SINGLE SOURCE OF TRUTH — identical service as mobile endpoint
+// GET /api/reports/employee-stats/:userId
 // ─────────────────────────────────────────────────────────────
 exports.getAdminEmployeeStats = async (req, res) => {
   try {
     const { userId }            = req.params;
     const { startDate, endDate } = req.query;
-
     const result = await statsService.getEmployeeFullStats(userId, startDate, endDate);
-
-    // Validation check: compare with a fresh all-time calculation
-    if (startDate && endDate) {
-      const fullResult = await statsService.getEmployeeFullStats(userId);
-      const fullStats  = fullResult.stats;
-      const rangeStats = result.stats;
-
-      if (rangeStats.workingDays > fullStats.workingDays) {
-        console.warn(
-          `[Reports] ⚠ Consistency alert for user ${userId}: ` +
-          `range workingDays(${rangeStats.workingDays}) > alltime workingDays(${fullStats.workingDays})`
-        );
-      }
-    }
-
     res.json({
       success: true,
       data: {
@@ -261,14 +278,14 @@ exports.getAdminEmployeeStats = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// GET /api/reports/tracking   (admin tracking dashboard)
+// GET /api/reports/tracking
 // ─────────────────────────────────────────────────────────────
 exports.getTrackingStats = async (req, res) => {
   try {
     const targetDate     = req.query.date ? parseUTCDate(req.query.date) : todayUTC();
     const totalEmployees = await User.countDocuments({ role: 'employee' });
     const attendance     = await Attendance.find({ date: targetDate })
-      .populate('user', 'name email department mobile designation profileImage isOnline');
+      .populate('user', 'name email department mobile designation profileImage isOnline createdAt shift');
 
     const presentCount = attendance.length;
     const onLeaveCount = await Leave.countDocuments({
@@ -276,8 +293,32 @@ exports.getTrackingStats = async (req, res) => {
       startDate: { $lte: targetDate },
       endDate:   { $gte: targetDate }
     });
-    const isTargetToday = targetDate.toISOString().split('T')[0] === todayUTC().toISOString().split('T')[0];
-    const absentCount = isTargetToday ? 0 : Math.max(0, totalEmployees - presentCount - onLeaveCount);
+
+    // Absent count for tracking overview (using same refined logic)
+    const now = new Date();
+    const isToday = targetDate.toISOString().split('T')[0] === now.toISOString().split('T')[0];
+    let absentCount = 0;
+    if (isToday) {
+      const allEmployees = await User.find({ role: 'employee' }).populate('shift');
+      const presentUserIds = new Set(attendance.map(a => a.user?._id?.toString()));
+      const realAbsentees = allEmployees.filter(user => {
+        const empId = user._id.toString();
+        if (presentUserIds.has(empId)) return false;
+        const userCreated = new Date(user.createdAt);
+        userCreated.setUTCHours(0, 0, 0, 0);
+        if (userCreated.getTime() === targetDate.getTime()) return false;
+        if (user.shift) {
+          const [eH, eM] = user.shift.endTime.split(':').map(Number);
+          const shiftEnd = new Date();
+          shiftEnd.setHours(eH, eM, 0, 0);
+          if (now < shiftEnd) return false;
+        }
+        return true;
+      });
+      absentCount = Math.max(0, realAbsentees.length - onLeaveCount);
+    } else {
+      absentCount = Math.max(0, totalEmployees - presentCount - onLeaveCount);
+    }
 
     const onlineCount  = await User.countDocuments({ role: 'employee', isOnline: true });
     const offlineCount = Math.max(0, totalEmployees - onlineCount);
@@ -306,7 +347,6 @@ exports.getTrackingStats = async (req, res) => {
             latitude:  att.punchIn?.location?.latitude,
             longitude: att.punchIn?.location?.longitude
           },
-          // Standardized field: prioritize totalDistance (live) then distance (final)
           distance: parseFloat((att.totalDistance || att.distance || 0).toFixed(2)),
           workingHours:     statsService.calculateWorkingHours(att),
           status:           att.user.isOnline ? 'online' : 'offline',
@@ -328,13 +368,12 @@ exports.getTrackingStats = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('getTrackingStats Error:', err);
     res.status(400).json({ success: false, message: err.message });
   }
 };
 
 // ─────────────────────────────────────────────────────────────
-// GET /api/reports/attendance-dashboard   (admin detail view)
+// GET /api/reports/attendance-dashboard
 // ─────────────────────────────────────────────────────────────
 exports.getAttendanceDashboard = async (req, res) => {
   try {
@@ -343,22 +382,19 @@ exports.getAttendanceDashboard = async (req, res) => {
     let targetDate;
     if (startDate && endDate) {
       dateQuery = { date: { $gte: parseUTCDate(startDate), $lte: parseUTCDate(endDate) } };
-      targetDate = parseUTCDate(endDate); // Use end date for leave checking if range
+      targetDate = parseUTCDate(endDate);
     } else {
       targetDate = date ? parseUTCDate(date) : todayUTC();
       dateQuery = { date: targetDate };
     }
 
     const totalEmployees = await User.countDocuments({ role: 'employee' });
-    
-    // Calculate number of days for range-based total scaling
     const sDate = startDate ? parseUTCDate(startDate) : (date ? parseUTCDate(date) : todayUTC());
     const eDate = endDate ? parseUTCDate(endDate) : sDate;
     const diffDays = Math.ceil((eDate - sDate) / (1000 * 60 * 60 * 24)) + 1;
     const totalExpectedAttendance = totalEmployees * diffDays;
 
-    const attendance = await Attendance.find(dateQuery)
-      .populate('user', 'name department');
+    const attendance = await Attendance.find(dateQuery).populate('user', 'name department createdAt shift');
 
     const onLeaveCount = await Leave.countDocuments({
       status: 'Approved',
@@ -369,8 +405,32 @@ exports.getAttendanceDashboard = async (req, res) => {
 
     const presentRecords = attendance.filter(a => ['Present', 'Late', 'Half Day'].includes(a.status));
     const presentCount   = presentRecords.length;
-    const isTargetToday = targetDate.toISOString().split('T')[0] === todayUTC().toISOString().split('T')[0];
-    const absentCount    = isTargetToday ? 0 : Math.max(0, totalExpectedAttendance - presentCount - onLeaveCount);
+    
+    const now = new Date();
+    const isToday = targetDate.toISOString().split('T')[0] === now.toISOString().split('T')[0];
+    
+    let absentCount = 0;
+    if (!isToday || diffDays > 1) {
+      absentCount = Math.max(0, totalExpectedAttendance - presentCount - onLeaveCount);
+    } else {
+      const allEmployees = await User.find({ role: 'employee' }).populate('shift');
+      const presentUserIds = new Set(attendance.map(a => a.user?._id?.toString()));
+      const realAbsentees = allEmployees.filter(user => {
+        const empId = user._id.toString();
+        if (presentUserIds.has(empId)) return false;
+        const userCreated = new Date(user.createdAt);
+        userCreated.setUTCHours(0, 0, 0, 0);
+        if (userCreated.getTime() === targetDate.getTime()) return false;
+        if (user.shift) {
+          const [eH, eM] = user.shift.endTime.split(':').map(Number);
+          const shiftEnd = new Date();
+          shiftEnd.setHours(eH, eM, 0, 0);
+          if (now < shiftEnd) return false;
+        }
+        return true;
+      });
+      absentCount = Math.max(0, realAbsentees.length - onLeaveCount);
+    }
 
     const getStatsByField = async (field, isRef = false) => {
       let groups;
@@ -385,7 +445,7 @@ exports.getAttendanceDashboard = async (req, res) => {
       return Promise.all(groups.map(async (group) => {
         const query = { role: 'employee' };
         query[field] = group._id;
-        const groupEmployees   = await User.find(query);
+        const groupEmployees   = await User.find(query).populate('shift');
         const groupEmployeeIds = groupEmployees.map(e => e._id.toString());
         const groupAttendance  = attendance.filter(a => groupEmployeeIds.includes(a.user?._id?.toString()));
         const groupPresent     = groupAttendance.filter(a => ['Present', 'Late', 'Half Day'].includes(a.status)).length;
@@ -400,11 +460,28 @@ exports.getAttendanceDashboard = async (req, res) => {
           ]
         });
 
+        const groupAbsent = isToday 
+          ? groupEmployees.filter(emp => {
+              const empId = emp._id.toString();
+              if (groupAttendance.some(a => a.user?._id?.toString() === empId)) return false;
+              const userCreated = new Date(emp.createdAt);
+              userCreated.setUTCHours(0, 0, 0, 0);
+              if (userCreated.getTime() === targetDate.getTime()) return false;
+              if (emp.shift) {
+                const [eH, eM] = emp.shift.endTime.split(':').map(Number);
+                const shiftEnd = new Date();
+                shiftEnd.setHours(eH, eM, 0, 0);
+                if (now < shiftEnd) return false;
+              }
+              return true;
+            }).length - groupOnLeave
+          : Math.max(0, (groupEmployees.length * diffDays) - groupPresent - groupOnLeave);
+
         return {
           name:          group.name,
           total:         groupEmployees.length * diffDays,
           present:       groupPresent,
-          absent:        Math.max(0, (groupEmployees.length * diffDays) - groupPresent - groupOnLeave),
+          absent:        Math.max(0, groupAbsent),
           onLeave:       groupOnLeave,
           upcomingShift: 0,
           lateComers:    groupLate,
@@ -420,19 +497,10 @@ exports.getAttendanceDashboard = async (req, res) => {
     const departmentStats = await getStatsByField('department');
     const shiftStats      = await getStatsByField('shift', true);
 
-    const totalUpcoming = departmentStats.reduce((acc, curr) => acc + curr.upcomingShift, 0);
-    const finalAbsent = Math.max(0, totalEmployees - presentCount - onLeaveCount - totalUpcoming);
-
     res.json({
       success: true,
       data: {
-        attendanceDetails: { 
-          present: presentCount, 
-          absent: absentCount, 
-          onLeave: onLeaveCount, 
-          upcomingShift: 0, 
-          total: totalExpectedAttendance 
-        },
+        attendanceDetails: { present: presentCount, absent: absentCount, onLeave: onLeaveCount, upcomingShift: 0, total: totalExpectedAttendance },
         departmentStats,
         shiftStats
       }
@@ -443,12 +511,11 @@ exports.getAttendanceDashboard = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// GET /api/reports/employee-reports   (admin timesheet/present table)
+// GET /api/reports/employee-reports
 // ─────────────────────────────────────────────────────────────
 exports.getEmployeeReports = async (req, res) => {
   try {
     const { date, startDate, endDate, search = '' } = req.query;
-    
     let dateQuery = {};
     if (startDate && endDate) {
       dateQuery = { date: { $gte: parseUTCDate(startDate), $lte: parseUTCDate(endDate) } };
@@ -460,242 +527,105 @@ exports.getEmployeeReports = async (req, res) => {
     const attendance = await Attendance.find(dateQuery).populate({
       path: 'user',
       select: 'name email mobile department designation shift profileImage',
-      populate: {
-        path: 'shift',
-        select: 'name startTime endTime'
-      }
+      populate: { path: 'shift', select: 'name startTime endTime' }
     });
 
     let reportData = attendance.map(a => {
-      const emp = a.user;
-      if (!emp) return null;
-
-      const totalBreakTime = statsService.calculateBreakMinutes(a);
-      const computedWorkingHours = statsService.calculateWorkingHours(a);
-      const dayWorkingHours = computedWorkingHours > 0 ? computedWorkingHours : (a.workingHours || 0);
-      const computedDistKm = parseFloat((a.distance || a.totalDistance || 0).toFixed(2));
-
+      if (!a.user) return null;
+      const hrs = statsService.calculateWorkingHours(a);
+      const breakMins = statsService.calculateBreakMinutes(a);
       return {
-        id: a._id,
-        userId: emp._id,
-        name: emp.name,
-        mobile: emp.mobile,
-        department: emp.department,
-        designation: emp.designation,
-        shift: emp.shift ? `${emp.shift.name} (${emp.shift.startTime} - ${emp.shift.endTime})` : 'NA',
-        date: a.date,
-        timeIn: a.punchIn?.time,
-        timeInLocation: a.punchIn?.location?.address,
+        id: a._id, userId: a.user._id, name: a.user.name, mobile: a.user.mobile,
+        profileImage: a.user.profileImage,
+        department: a.user.department, designation: a.user.designation,
+        shift: a.user.shift ? `${a.user.shift.name} (${a.user.shift.startTime} - ${a.user.shift.endTime})` : 'NA',
+        date: a.date, timeIn: a.punchIn?.time, timeInLocation: a.punchIn?.location?.address,
         timeInSelfie: a.punchIn?.selfie,
-        timeInOutside: a.punchIn?.isOutside,
-        timeOut: a.punchOut?.time,
-        timeOutLocation: a.punchOut?.location?.address,
+        timeOut: a.punchOut?.time, timeOutLocation: a.punchOut?.location?.address,
         timeOutSelfie: a.punchOut?.selfie,
-        timeOutOutside: a.punchOut?.isOutside,
-        totalHoursWorked: dayWorkingHours,
-        breaksTaken: a.breaks?.length || 0,
-        totalBreakTime: totalBreakTime,
+        totalHoursWorked: hrs, status: a.status,
         breaks: a.breaks || [],
-        totalDistance: computedDistKm,
-        profileImage: emp.profileImage,
-        status: a.status
+        breaksTaken: a.breaks?.length || 0,
+        totalBreakTime: breakMins
       };
     }).filter(item => item !== null);
 
-    // Apply search filter
     if (search) {
       reportData = reportData.filter(item =>
-        item.name.toLowerCase().includes(search.toLowerCase()) ||
-        (item.mobile || '').includes(search)
+        item.name.toLowerCase().includes(search.toLowerCase()) || (item.mobile || '').includes(search)
       );
     }
-
-    res.json({
-      success: true,
-      count: reportData.length,
-      data: reportData,
-      generatedOn: new Date().toISOString()
-    });
+    res.json({ success: true, count: reportData.length, data: reportData });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
 };
 
 // ─────────────────────────────────────────────────────────────
-// GET /api/reports/employee-details/:userId   (admin employee detail page)
-// SINGLE SOURCE OF TRUTH — uses employeeStatsService
+// GET /api/reports/employee-details/:userId
 // ─────────────────────────────────────────────────────────────
 exports.getEmployeePersonalDetails = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     const { userId }             = req.params;
-
     const result = await statsService.getEmployeeFullStats(userId, startDate, endDate);
-    const { user, stats, todayRecord } = result;
-
-    // Build attendance history items using canonical working-hours formula
-    let records = await require('../models/Attendance').find({ user: userId }).sort({ date: -1 });
-
+    const { user, stats } = result;
+    let records = await Attendance.find({ user: userId }).sort({ date: -1 });
     if (startDate && endDate) {
       records = records.filter(r => {
         const d = new Date(r.date);
         return d >= new Date(startDate) && d <= new Date(endDate);
       });
     }
-
     const attendanceDetails = records
       .filter(r => r.status !== 'Absent')
       .map(a => {
-        const computedHrs  = statsService.calculateWorkingHours(a);
-        const hrs = computedHrs > 0 ? computedHrs : (a.workingHours || 0);
-        
-        const computedDist = parseFloat((a.distance || a.totalDistance || 0).toFixed(2));
-        const dist = computedDist > 0 ? computedDist : (a.distance || a.totalDistance || 0);
-
+        const hrs = statsService.calculateWorkingHours(a);
+        const dist = parseFloat((a.distance || a.totalDistance || 0).toFixed(2));
+        const breakMins = statsService.calculateBreakMinutes(a);
         return {
-          id:           a._id,
-          date:         a.date,
-          status:       a.status,
-          punchIn:      a.punchIn,
-          punchOut:     a.punchOut,
-          isOutside:    a.isOutside,
-          breaks:       a.breaks,
-          // ── Hour aliases ──
-          workingHours:    hrs,
-          loggedHours:     hrs,     // CSV alias
-          totalHoursWorked: hrs,    // UI alias
-          lateTime:        a.lateTime || 0,
-          // ── Distance aliases ──
-          distance:        dist,
-          totalDistance:   dist,    // UI/CSV alias
+          id: a._id, date: a.date, status: a.status, punchIn: a.punchIn, punchOut: a.punchOut,
+          workingHours: hrs, totalHoursWorked: hrs, distance: dist, totalDistance: dist,
+          breaks: a.breaks || [], totalBreakTime: breakMins
         };
       });
 
-    // Consistency validation
-    const historyTotal = attendanceDetails.reduce((acc, r) => acc + r.workingHours, 0);
-    if (stats.totalWorkedHours > 0 && Math.abs(historyTotal - stats.totalWorkedHours) > 1) {
-      console.warn(
-        `[Reports] ⚠ WorkedHours mismatch for user ${userId}: ` +
-        `stats=${stats.totalWorkedHours} historySum=${historyTotal.toFixed(2)}`
-      );
-    }
-
-    res.json({
-      success: true,
-      data: {
-        employee:          user,
-        summary:           {
-          ...stats,
-          // Current-day extras for admin detail view
-          currentWorkingHours: result.currentWorkingHours,
-          currentBreakMinutes: result.currentBreakMinutes,
-          currentDistanceKm:   result.currentDistanceKm,
-        },
-        attendanceDetails,
-      }
-    });
+    res.json({ success: true, data: { employee: user, summary: { ...stats, currentWorkingHours: result.currentWorkingHours, currentBreakMinutes: result.currentBreakMinutes, currentDistanceKm: result.currentDistanceKm }, attendanceDetails } });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
 // ─────────────────────────────────────────────────────────────
-// GET /api/reports/track-details/:userId   (admin track route)
+// GET /api/reports/track-details/:userId
 // ─────────────────────────────────────────────────────────────
 exports.getEmployeeTrackDetails = async (req, res) => {
   try {
     const { date }   = req.query;
     const targetDate = date ? parseUTCDate(date) : todayUTC();
-
-    const attendance = await Attendance.findOne({
-      user: req.params.userId,
-      date: targetDate
-    }).populate({
+    const attendance = await Attendance.findOne({ user: req.params.userId, date: targetDate }).populate({
       path: 'user',
       select: 'name department designation shift battery signalStatus mobile profileImage',
       populate: { path: 'shift', select: 'name' }
     });
-
-    if (!attendance) {
-      return res.json({ success: true, data: { exists: false, message: 'No tracking data for this date' } });
-    }
-
-    const { calculateDistance } = require('../utils/geofence');
-    const logs = (attendance.trackingLogs || []).map((log, index) => {
-      let distanceFromPrevious = 0;
-      if (index > 0) {
-        const prev = attendance.trackingLogs[index - 1];
-        distanceFromPrevious = calculateDistance(log.latitude, log.longitude, prev.latitude, prev.longitude) * 1000;
-      } else if (attendance.punchIn?.location) {
-        distanceFromPrevious = calculateDistance(
-          log.latitude, log.longitude,
-          attendance.punchIn.location.latitude, attendance.punchIn.location.longitude
-        ) * 1000;
-      }
-      return {
-        ...(log.toObject ? log.toObject() : log),
-        distanceFromPrevious: log.distanceFromPrevious || distanceFromPrevious
-      };
-    });
-
-    res.json({
-      success: true,
-      data: {
-        exists:   true,
-        employee: attendance.user,
-        summary: {
-          // Standardized field: `totalDistance` (km)
-          // Robust Fallback: If summary field is 0, sum up the logs in KM
-          totalDistance: (attendance.totalDistance || attendance.distance) 
-            ? parseFloat((attendance.totalDistance || attendance.distance).toFixed(4))
-            : parseFloat((logs.reduce((acc, l) => acc + (l.distanceFromPrevious || 0), 0) / 1000).toFixed(4)),
-          workingHours: statsService.calculateWorkingHours(attendance),
-          lastKnownLocation: attendance.trackingLogs?.length > 0
-            ? attendance.trackingLogs[attendance.trackingLogs.length - 1]
-            : attendance.punchIn?.location
-        },
-        logs,
-        punchIn:  attendance.punchIn,
-        punchOut: attendance.punchOut
-      }
-    });
+    if (!attendance) return res.json({ success: true, data: { exists: false, message: 'No tracking data' } });
+    res.json({ success: true, data: { exists: true, employee: attendance.user, summary: { totalDistance: attendance.totalDistance || 0, workingHours: statsService.calculateWorkingHours(attendance), lastKnownLocation: attendance.trackingLogs?.length > 0 ? attendance.trackingLogs[attendance.trackingLogs.length - 1] : attendance.punchIn?.location }, logs: attendance.trackingLogs || [], punchIn: attendance.punchIn, punchOut: attendance.punchOut } });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
 };
 
 // ─────────────────────────────────────────────────────────────
-// GET /api/reports/track-details-me   (mobile — own track route)
+// GET /api/reports/track-details-me
 // ─────────────────────────────────────────────────────────────
 exports.getEmployeeTrackDetailsMe = async (req, res) => {
   try {
     const { date }   = req.query;
     const targetDate = date ? parseUTCDate(date) : todayUTC();
-
-    const attendance = await Attendance.findOne({
-      user: req.user.id,
-      date: targetDate
-    });
-
-    if (!attendance) {
-      return res.json({ success: true, data: { exists: false, message: 'No tracking data' } });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        exists: true,
-        summary: {
-          totalDistance: attendance.totalDistance || 0,
-          workingHours: 0
-        },
-        logs: attendance.trackingLogs || [],
-        punchIn: attendance.punchIn,
-        punchOut: attendance.punchOut
-      }
-    });
+    const attendance = await Attendance.findOne({ user: req.user.id, date: targetDate });
+    if (!attendance) return res.json({ success: true, data: { exists: false, message: 'No tracking data' } });
+    res.json({ success: true, data: { exists: true, summary: { totalDistance: attendance.totalDistance || 0, workingHours: 0 }, logs: attendance.trackingLogs || [], punchIn: attendance.punchIn, punchOut: attendance.punchOut } });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
-
