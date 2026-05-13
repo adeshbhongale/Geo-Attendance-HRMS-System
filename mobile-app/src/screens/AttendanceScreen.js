@@ -238,10 +238,28 @@ const AttendanceScreen = ({ navigation }) => {
         setIsTracking(true);
         const loc = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.High,
-          timeout: 10000 // Increased timeout
+          timeout: 8000 
         });
 
         const { latitude, longitude, accuracy, speed, altitude, heading } = loc.coords;
+
+        // --- 50m JUMP FILTER ---
+        if (lastSentLocation) {
+          const distFromLast = calculateDistance(
+            lastSentLocation.lat,
+            lastSentLocation.lng,
+            latitude,
+            longitude
+          );
+
+          // If moved > 50m in 10s (unrealistic for normal movement), discard and retry fast
+          if (distFromLast > 50) {
+            console.warn(`[TRACKING] Jump detected: ${distFromLast.toFixed(1)}m. Discarding point.`);
+            // Rapid retry in 2 seconds to get a stable point
+            setTimeout(() => trackCurrentLocation(true), 2000);
+            return;
+          }
+        }
 
         // Fetch address for the point
         let trackAddr = 'Tracking...';
@@ -279,17 +297,10 @@ const AttendanceScreen = ({ navigation }) => {
         // Update user stats (total distance etc)
         fetchUser();
       } catch (err) {
-        // Silently ignore 404 (No active session) or 401 (Unauthorized) to avoid UI spam
+        // Silently ignore errors to avoid UI spam
         if (err.response?.status === 404 || err.response?.status === 401) {
           if (trackingInterval) clearInterval(trackingInterval);
           return;
-        }
-
-        // Detailed error logging for diagnostics
-        if (err.message === 'Network Error') {
-          console.error('[TRACKING] Network Error: Backend unreachable.');
-        } else {
-          console.error('[TRACKING] Error:', err.message);
         }
       } finally {
         if (!isRetry) setIsTracking(false);

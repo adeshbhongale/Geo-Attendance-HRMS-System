@@ -1,12 +1,16 @@
 {
   "users": [
     {
-      "name": "Super Admin",
-      "email": "admin@gmail.com",
-      "mobile": "1234567890",
-      "role": "admin",
-      "department": "Management",
-      "shift": "Morning Shift"
+      "name": "Adesh Bhongale",
+      "email": "adesh@example.com",
+      "mobile": "1000000000",
+      "role": "employee",
+      "department": "IT",
+      "designation": "Sr. Software Engineer",
+      "shift": "Morning Shift",
+      "status": "active",
+      "leaveBalance": 3,
+      "monthlyLeaveLimit": 3
     },
     {
       "name": "It User",
@@ -15,7 +19,10 @@
       "role": "employee",
       "department": "IT",
       "designation": "Manager",
-      "shift": "Morning Shift"
+      "shift": "Morning Shift",
+      "status": "active",
+      "leaveBalance": 3,
+      "monthlyLeaveLimit": 3
     },
     {
       "name": "It Staff 1",
@@ -24,7 +31,10 @@
       "role": "employee",
       "department": "IT",
       "designation": "Executive",
-      "shift": "Morning Shift"
+      "shift": "Morning Shift",
+      "status": "active",
+      "leaveBalance": 3,
+      "monthlyLeaveLimit": 3
     },
     {
       "name": "It Staff 2",
@@ -33,7 +43,10 @@
       "role": "employee",
       "department": "IT",
       "designation": "Executive",
-      "shift": "Morning Shift"
+      "shift": "Morning Shift",
+      "status": "active",
+      "leaveBalance": 3,
+      "monthlyLeaveLimit": 3
     },
     {
       "name": "It Staff 3",
@@ -42,7 +55,10 @@
       "role": "employee",
       "department": "IT",
       "designation": "Support",
-      "shift": "Morning Shift"
+      "shift": "Morning Shift",
+      "status": "active",
+      "leaveBalance": 3,
+      "monthlyLeaveLimit": 3
     },
     {
       "name": "It Staff 4",
@@ -51,7 +67,10 @@
       "role": "employee",
       "department": "IT",
       "designation": "Support",
-      "shift": "Morning Shift"
+      "shift": "Morning Shift",
+      "status": "active",
+      "leaveBalance": 3,
+      "monthlyLeaveLimit": 3
     },
     {
       "name": "Exec 1",
@@ -60,7 +79,10 @@
       "role": "employee",
       "department": "Office Executive",
       "designation": "Senior Exec",
-      "shift": "Morning Shift"
+      "shift": "Morning Shift",
+      "status": "active",
+      "leaveBalance": 3,
+      "monthlyLeaveLimit": 3
     },
     {
       "name": "Sales 1",
@@ -69,7 +91,10 @@
       "role": "employee",
       "department": "sales",
       "designation": "Executive",
-      "shift": "Morning Shift"
+      "shift": "Morning Shift",
+      "status": "active",
+      "leaveBalance": 3,
+      "monthlyLeaveLimit": 3
     },
     {
       "name": "Sales 2",
@@ -78,7 +103,10 @@
       "role": "employee",
       "department": "sales",
       "designation": "Executive",
-      "shift": "Morning Shift"
+      "shift": "Morning Shift",
+      "status": "active",
+      "leaveBalance": 3,
+      "monthlyLeaveLimit": 3
     },
     {
       "name": "Sales 3",
@@ -87,7 +115,10 @@
       "role": "employee",
       "department": "sales",
       "designation": "Lead",
-      "shift": "Morning Shift"
+      "shift": "Morning Shift",
+      "status": "active",
+      "leaveBalance": 3,
+      "monthlyLeaveLimit": 3
     },
     {
       "name": "S&S 1",
@@ -96,7 +127,10 @@
       "role": "employee",
       "department": "sales And service",
       "designation": "Field Eng",
-      "shift": "Morning Shift"
+      "shift": "Morning Shift",
+      "status": "active",
+      "leaveBalance": 3,
+      "monthlyLeaveLimit": 3
     },
     {
       "name": "S&S 2",
@@ -105,7 +139,10 @@
       "role": "employee",
       "department": "sales And service",
       "designation": "Support",
-      "shift": "Morning Shift"
+      "shift": "Morning Shift",
+      "status": "active",
+      "leaveBalance": 3,
+      "monthlyLeaveLimit": 3
     },
     {
       "name": "Service 1",
@@ -114,7 +151,10 @@
       "role": "employee",
       "department": "Service",
       "designation": "Technician",
-      "shift": "Morning Shift"
+      "shift": "Morning Shift",
+      "status": "active",
+      "leaveBalance": 3,
+      "monthlyLeaveLimit": 3
     },
     {
       "name": "Service 2",
@@ -123,79 +163,10 @@
       "role": "employee",
       "department": "Service",
       "designation": "Technician",
-      "shift": "Morning Shift"
-    },
-    {
-      "name": "Service 3",
-      "email": "srv3@example.com",
-      "mobile": "9400000003",
-      "role": "employee",
-      "department": "Service",
-      "designation": "Eng",
-      "shift": "Morning Shift"
-    },
-    {
-      "name": "Service 4",
-      "email": "srv4@example.com",
-      "mobile": "9400000004",
-      "role": "employee",
-      "department": "Service",
-      "designation": "Eng",
-      "shift": "Morning Shift"
-    },
-    {
-      "name": "Service 5",
-      "email": "srv5@example.com",
-      "mobile": "9400000005",
-      "role": "employee",
-      "department": "Service",
-      "designation": "Eng",
-      "shift": "Morning Shift"
-    },
-    {
-      "name": "Service 6",
-      "email": "srv6@example.com",
-      "mobile": "9400000006",
-      "role": "employee",
-      "department": "Service",
-      "designation": "Support",
-      "shift": "Morning Shift"
-    },
-    {
-      "name": "Service 7",
-      "email": "srv7@example.com",
-      "mobile": "9400000007",
-      "role": "employee",
-      "department": "Service",
-      "designation": "Support",
-      "shift": "Morning Shift"
-    },
-    {
-      "name": "Service 8",
-      "email": "srv8@example.com",
-      "mobile": "9400000008",
-      "role": "employee",
-      "department": "Service",
-      "designation": "Field",
-      "shift": "Morning Shift"
-    },
-    {
-      "name": "Service 9",
-      "email": "srv9@example.com",
-      "mobile": "9400000009",
-      "role": "employee",
-      "department": "Service",
-      "designation": "Field",
-      "shift": "Morning Shift"
-    },
-    {
-      "name": "Service 10",
-      "email": "srv10@example.com",
-      "mobile": "9400000010",
-      "role": "employee",
-      "department": "Service",
-      "designation": "Manager",
-      "shift": "Morning Shift"
+      "shift": "Morning Shift",
+      "status": "active",
+      "leaveBalance": 3,
+      "monthlyLeaveLimit": 3
     },
     {
       "name": "Store 1",
@@ -204,34 +175,10 @@
       "role": "employee",
       "department": "Stores",
       "designation": "Keeper",
-      "shift": "Morning Shift"
-    },
-    {
-      "name": "Store 2",
-      "email": "str2@example.com",
-      "mobile": "9500000002",
-      "role": "employee",
-      "department": "Stores",
-      "designation": "Asst",
-      "shift": "Morning Shift"
-    },
-    {
-      "name": "Store 3",
-      "email": "str3@example.com",
-      "mobile": "9500000003",
-      "role": "employee",
-      "department": "Stores",
-      "designation": "Helper",
-      "shift": "Morning Shift"
-    },
-    {
-      "name": "Store 4",
-      "email": "str4@example.com",
-      "mobile": "9500000004",
-      "role": "employee",
-      "department": "Stores",
-      "designation": "Helper",
-      "shift": "Morning Shift"
+      "shift": "Morning Shift",
+      "status": "active",
+      "leaveBalance": 3,
+      "monthlyLeaveLimit": 3
     }
   ],
   "shifts": [
@@ -276,7 +223,8 @@
     "name": "Office Jawaharnagar",
     "latitude": 16.704151,
     "longitude": 74.450258,
-    "radius": 200
+    "radius": 200,
+    "address": "Jawaharnagar, Ichalkaranji, Maharashtra, India"
   },
   "attendance": [
     {

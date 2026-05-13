@@ -96,9 +96,15 @@ const EmployeeTrackData = () => {
   };
 
 
-  const filteredLogs = data?.logs?.filter(log =>
-    log.address?.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  const filteredLogs = (data?.logs || [])
+    .filter(log => log.address?.toLowerCase().includes(searchTerm.toLowerCase()))
+    .filter((log, index, self) => {
+      // 10-second gap filter: compare with the next log (which is older in time as we prepend)
+      if (index === self.length - 1) return true;
+      const nextLog = self[index + 1];
+      const timeDiff = Math.abs(new Date(log.time).getTime() - new Date(nextLog.time).getTime());
+      return timeDiff >= 10000;
+    });
 
   // Pagination logic
   const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);

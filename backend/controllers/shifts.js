@@ -5,11 +5,23 @@ const Shift = require('../models/Shift');
 // @access  Private
 exports.getShifts = async (req, res, next) => {
   try {
-    let shifts = await Shift.find();
+    const shifts = await Shift.find();
     const User = require('../models/User');
-    const shiftsWithStats = await Promise.all(shifts.map(async (shift) => {
-      const userCount = await User.countDocuments({ shift: shift._id });
-      return { ...shift.toObject(), assignedEmployees: userCount };
+
+    // Efficiently aggregate user counts per shift in a single query
+    const stats = await User.aggregate([
+      { $match: { role: 'employee' } },
+      { $group: { _id: '$shift', count: { $sum: 1 } } }
+    ]);
+
+    const statsMap = stats.reduce((acc, curr) => {
+      if (curr._id) acc[curr._id.toString()] = curr.count;
+      return acc;
+    }, {});
+
+    const shiftsWithStats = shifts.map(shift => ({
+      ...shift.toObject(),
+      assignedEmployees: statsMap[shift._id.toString()] || 0
     }));
 
     res.status(200).json({

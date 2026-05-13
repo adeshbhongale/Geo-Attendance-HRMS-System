@@ -20,7 +20,7 @@ const seedData = async () => {
     const { clearCloudinaryStorage } = require('../utils/cloudinary');
     // 1. Clear existing data
     await Promise.all([
-      User.deleteMany(),
+      User.deleteMany({ role: { $ne: 'admin' } }),
       Attendance.deleteMany(),
       Leave.deleteMany(),
       Shift.deleteMany(),
@@ -31,37 +31,45 @@ const seedData = async () => {
 
     // 2. Create Shifts
     const shifts = await Shift.insertMany([
-      { name: 'Morning Shift', startTime: '08:00', endTime: '16:00', gracePeriod: 15, halfDayAfter: '9:00', workingHours: 8 },
-      { name: 'Evening Shift', startTime: '16:00', endTime: '00:00', gracePeriod: 15, halfDayAfter: '17:00', workingHours: 8 },
-      { name: 'Night Shift', startTime: '00:00', endTime: '08:00', gracePeriod: 15, halfDayAfter: '01:00', workingHours: 8, isNightShift: true }
+      {
+        name: 'Morning Shift',
+        startTime: '08:00',
+        endTime: '16:00',
+        gracePeriod: 15,
+        halfDayAfter: '12:00', // Adjusted to 12:00
+        workingHours: 8
+      },
+      {
+        name: 'Evening Shift',
+        startTime: '16:00',
+        endTime: '00:00',
+        gracePeriod: 15,
+        halfDayAfter: '20:00',
+        workingHours: 8
+      },
+      {
+        name: 'Night Shift',
+        startTime: '00:00',
+        endTime: '08:00',
+        gracePeriod: 15,
+        halfDayAfter: '04:00',
+        workingHours: 8,
+        isNightShift: true
+      }
     ]);
     console.log(`Created ${shifts.length} Shifts.`);
 
     // 3. Create Office Location
     const office = await Location.create({
       name: 'Office Main HQ',
-      latitude: 16.701,
-      longitude: 74.4496,
+      latitude: 16.703559,
+      longitude: 74.450000,
       radius: 200,
       address: 'Jawaharnagar, Ichalkaranji, Maharashtra, India'
     });
     console.log('Created Office Location.');
 
-    // 4. Create Admin
-    const salt = await bcrypt.genSalt(10);
-    const adminPassword = await bcrypt.hash('admin123', salt);
-
-    await User.create({
-      name: 'Global Admin',
-      email: 'admin@example.com',
-      mobile: '9000000000',
-      password: adminPassword,
-      role: 'admin',
-      department: 'Management'
-    });
-    console.log('Created Admin User (admin@example.com / admin123).');
-
-    // 5. Create Employees
+    // 4. Create Employees
     const departments = ['IT', 'Sales', 'HR', 'Support', 'Logistics'];
     const employeeData = [];
     const empCount = 14;
@@ -258,19 +266,20 @@ const seedData = async () => {
         let lastLat = office.latitude;
         let lastLng = office.longitude;
 
-        // --- ULTRA-DENSE MICRO-TRACKING (1-10m increments) ---
-        const totalLogCount = 40;
+        // --- ULTRA-DENSE MICRO-TRACKING (Exactly 50 points, 1-10m increments) ---
+        const totalLogCount = 50;
         for (let i = 0; i < totalLogCount; i++) {
           // Small random jump between 1m (0.000009 deg) and 10m (0.00009 deg)
           const angle = Math.random() * Math.PI * 2;
-          const jumpDeg = 0.00001 + (Math.random() * 0.00008); 
-          
+          const distanceMeters = 1 + (Math.random() * 9);
+          const jumpDeg = distanceMeters * 0.000009;
+
           const currentLat = lastLat + (jumpDeg * Math.cos(angle));
           const currentLng = lastLng + (jumpDeg * Math.sin(angle));
 
           const segmentDist = geoService.calculateDistance(lastLat, lastLng, currentLat, currentLng);
           totalDistanceKm += segmentDist;
-          
+
           // Increment time incrementally across the shift
           currentTime = new Date(currentTime.getTime() + (durationMs / (totalLogCount + 5)));
 
@@ -280,7 +289,7 @@ const seedData = async () => {
             time: new Date(currentTime),
             latitude: currentLat,
             longitude: currentLng,
-            address: `Internal Road Lane ${Math.floor(i/5) + 1}, ${currentLat.toFixed(5)}, ${currentLng.toFixed(5)}`,
+            address: `Internal Road Lane ${Math.floor(i / 5) + 1}, ${currentLat.toFixed(5)}, ${currentLng.toFixed(5)}`,
             isOutside: isPointOutside,
             distanceFromPrevious: parseFloat((segmentDist * 1000).toFixed(2))
           });
@@ -330,8 +339,8 @@ const seedData = async () => {
         });
       }
     }
-    
-    // Enhanced leaves seeding (Past, Current, Future, Half-Day, All Statuses)
+
+    // 5.Enhanced leaves seeding (Past, Current, Future, Half-Day, All Statuses)
     const leaveTypes = ['Sick Leave', 'Casual Leave', 'Paid Leave', 'Unpaid Leave'];
     const statuses = ['Pending', 'Approved', 'Rejected', 'Cancelled'];
     const durations = ['Full Day', 'Half Day'];

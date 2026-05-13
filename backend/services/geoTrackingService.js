@@ -80,13 +80,13 @@ exports.validateLocation = (lastPoint, newPoint) => {
     };
   }
 
-  // Jump detection: > 500m in 10s is suspicious
-  if (timeDiff <= 15 && distance > 0.5) {
+  // Jump detection: > 50m (0.05km) in 10-15s is suspicious for normal field movement
+  if (timeDiff <= 15 && distance > 0.05) {
     return {
       isValid: false,
       isSuspicious: true,
       distance,
-      reason: 'Large jump in short interval'
+      reason: 'Sudden jump detected (> 50m)'
     };
   }
 

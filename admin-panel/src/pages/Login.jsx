@@ -54,11 +54,11 @@ const Login = () => {
       <div className="w-full max-w-[440px] animate-fade-up">
         <div className="bg-white rounded-[2.5rem] p-10 md:p-14 border border-slate-100 shadow-2xl shadow-slate-200/60">
           <div className="text-center mb-12">
-            <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-indigo-100 transform -rotate-3 hover:rotate-0 transition-transform duration-500">
-              <ShieldCheck className="text-white" size={40} />
+            <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-indigo-100 transform -rotate-3 hover:rotate-0 transition-transform duration-500 overflow-hidden border border-slate-100 p-3">
+              <img src="/favicon.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
             <h2 className="text-3xl font-bold text-slate-900 tracking-tight mb-2">Admin Portal</h2>
-            <p className="text-slate-400 text-[13px] font-medium">Secure access to HRMS dashboard</p>
+            <p className="text-slate-400 text-[13px] font-medium">Secure access to Geo-Track HRMS</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-8">

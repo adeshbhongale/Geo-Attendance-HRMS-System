@@ -120,47 +120,36 @@ async function simulate() {
     await new Promise(r => setTimeout(r, 1000));
   }
 
-  // Phase 2: DENSE MOVEMENT (20 points total)
-  console.log('--- Phase 2: High Activity Tracking (20 points) ---');
-  // Small, granular jumps: ~10m - 50m
-  const jumps = [
-    { lat: 0.0001, lng: 0.0001, addr: 'Starting Out' },
-    { lat: 0.0002, lng: 0.0002, addr: 'Moving North' },
-    { lat: 0.0003, lng: 0.0004, addr: 'Passing Park' },
-    { lat: 0.0005, lng: 0.0006, addr: 'Main Street' },
-    { lat: 0.0007, lng: 0.0008, addr: 'Near Station' },
-    { lat: 0.0009, lng: 0.0010, addr: 'Market Area' },
-    { lat: 0.0011, lng: 0.0012, addr: 'Client Zone A' },
-    { lat: 0.0013, lng: 0.0014, addr: 'Client Office' },
-    { lat: 0.0014, lng: 0.0015, addr: 'Meeting Room' },
-    { lat: 0.0013, lng: 0.0014, addr: 'Lunch Break' },
-    { lat: 0.0011, lng: 0.0012, addr: 'Heading Back' },
-    { lat: 0.0009, lng: 0.0010, addr: 'Returning Path' },
-    { lat: 0.0007, lng: 0.0008, addr: 'City Gate' },
-    { lat: 0.0004, lng: 0.0005, addr: 'Approach HQ' },
-    { lat: 0.0000, lng: 0.0000, addr: 'Office Gate' }
-  ];
+  // DENSE MOVEMENT (Exactly 50 points, 1-10m jumps)
+  console.log('--- Phase 2: High Activity Tracking (50 points, 1-10m jumps) ---');
+  
+  let currentLat = OFFICE_LAT;
+  let currentLng = OFFICE_LNG;
 
-  let finalLat = OFFICE_LAT;
-  let finalLng = OFFICE_LNG;
+  for (let i = 0; i < 50; i++) {
+    // Generate 1-10m jump (approx 0.00001 to 0.00009 degrees)
+    const angle = Math.random() * Math.PI * 2;
+    const distanceMeters = 1 + (Math.random() * 9);
+    const jumpDeg = distanceMeters * 0.000009; // 1m is roughly 0.000009 deg
+    
+    currentLat += (jumpDeg * Math.cos(angle));
+    currentLng += (jumpDeg * Math.sin(angle));
 
-  for (const jump of jumps) {
-    finalLat = OFFICE_LAT + jump.lat;
-    finalLng = OFFICE_LNG + jump.lng;
-    await updateLocation(finalLat, finalLng, jump.addr);
-    await new Promise(r => setTimeout(r, 1000));
+    await updateLocation(currentLat, currentLng, `Simulated Path Point ${i + 1}`);
+    // Fast simulation
+    await new Promise(r => setTimeout(r, 200)); 
   }
 
   // Update last tracked location specifically
   attendance.lastTrackedLocation = {
-    latitude: finalLat,
-    longitude: finalLng,
-    address: 'Final Simulated Location',
+    latitude: currentLat,
+    longitude: currentLng,
+    address: 'Final Simulated Point',
     time: new Date()
   };
   await attendance.save();
 
-  console.log('Simulation complete! Total points: 20');
+  console.log('Simulation complete! Total points: 50');
 
 
   socket.disconnect();

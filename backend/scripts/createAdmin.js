@@ -17,7 +17,8 @@ const createAdmin = async () => {
     await User.create({
       name: 'Super Admin',
       email: process.env.ADMIN_EMAIL,
-      mobile: process.env.ADMIN_MOBILE || '0000000000',
+      password: process.env.ADMIN_PASSWORD,
+      mobile: process.env.ADMIN_MOBILE,
       role: 'admin',
       department: 'Management'
     });

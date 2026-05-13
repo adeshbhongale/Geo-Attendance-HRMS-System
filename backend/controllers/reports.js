@@ -74,30 +74,53 @@ exports.getStats = async (req, res) => {
       dateQuery = { date: targetDate };
     }
 
-    const totalEmployees = await User.countDocuments({ role: 'employee' });
-    const presentToday  = await Attendance.countDocuments(dateQuery);
-    
-    // Calculate On Leave for the specific target date (this remains startDate/endDate as it shows office presence)
-    const onLeaveToday = await Leave.countDocuments({
-      status: 'Approved',
-      startDate: { $lte: targetDate },
-      endDate: { $gte: targetDate }
-    });
-
-    const startOfTargetDate = new Date(targetDate);
-    startOfTargetDate.setHours(0, 0, 0, 0);
-    const endOfTargetDate = new Date(targetDate);
-    endOfTargetDate.setHours(23, 59, 59, 999);
-
-    // BREAK POINTS: Counts based on CreatedAt (as requested)
-    const leavesAppliedToday = await Leave.countDocuments({
-      createdAt: { $gte: startOfTargetDate, $lte: endOfTargetDate }
-    });
-
-    const approvedToday = await Leave.countDocuments({
-      status: 'Approved',
-      createdAt: { $gte: startOfTargetDate, $lte: endOfTargetDate }
-    });
+    const [
+      totalEmployees,
+      presentToday,
+      onLeaveToday,
+      leavesAppliedToday,
+      approvedToday,
+      pendingLeaves,
+      departmentStats,
+      trendData
+    ] = await Promise.all([
+      User.countDocuments({ role: 'employee' }),
+      Attendance.countDocuments(dateQuery),
+      Leave.countDocuments({
+        status: 'Approved',
+        startDate: { $lte: targetDate },
+        endDate: { $gte: targetDate }
+      }),
+      Leave.countDocuments({
+        createdAt: { $gte: startOfTargetDate, $lte: endOfTargetDate }
+      }),
+      Leave.countDocuments({
+        status: 'Approved',
+        createdAt: { $gte: startOfTargetDate, $lte: endOfTargetDate }
+      }),
+      Leave.countDocuments({ status: 'Pending' }),
+      Attendance.aggregate([
+        { $match: dateQuery },
+        { $lookup: { from: 'users', localField: 'user', foreignField: '_id', as: 'userInfo' } },
+        { $unwind: '$userInfo' },
+        { $group: { _id: '$userInfo.department', value: { $sum: 1 } } },
+        { $project: { name: '$_id', value: 1, _id: 0 } }
+      ]),
+      Attendance.aggregate([
+        {
+          $match: {
+            date: { $gte: sDate, $lte: eDate }
+          }
+        },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+            count: { $sum: 1 }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ])
+    ]);
 
     const unpaidLeavesToday = await Leave.countDocuments({
       status: 'Approved',
@@ -106,40 +129,24 @@ exports.getStats = async (req, res) => {
       endDate: { $gte: targetDate }
     });
 
-    const pendingLeaves = await Leave.countDocuments({ status: 'Pending' });
     const absentToday = Math.max(0, totalEmployees - presentToday - onLeaveToday);
 
-    // Department attendance breakdown
-    const departmentStats = await Attendance.aggregate([
-      { $match: dateQuery },
-      { $lookup: { from: 'users', localField: 'user', foreignField: '_id', as: 'userInfo' } },
-      { $unwind: '$userInfo' },
-      { $group: { _id: '$userInfo.department', value: { $sum: 1 } } },
-      { $project: { name: '$_id', value: 1, _id: 0 } }
-    ]);
-
-    // Dynamic trend calculation
+    // Map trend data into the expected format for the last X days
     const attendanceTrend = [];
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    
-    // Determine number of days to show in trend (max 31)
-    const sDate = startDate ? parseUTCDate(startDate) : new Date(targetDate.getTime() - 6 * 24 * 60 * 60 * 1000);
-    const eDate = endDate ? parseUTCDate(endDate) : targetDate;
-    const diffDays = Math.min(31, Math.ceil((eDate - sDate) / (1000 * 60 * 60 * 24)) + 1);
+    const trendMap = trendData.reduce((acc, curr) => {
+      acc[curr._id] = curr.count;
+      return acc;
+    }, {});
 
     for (let i = diffDays - 1; i >= 0; i--) {
       const date = new Date(eDate);
       date.setUTCDate(date.getUTCDate() - i);
-      const startOfDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-      const endOfDay   = new Date(startOfDay);
-      endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
-
-      const dayAttendance = await Attendance.countDocuments({
-        date: { $gte: startOfDay, $lt: endOfDay }
-      });
-      attendanceTrend.push({ 
-        name: diffDays > 7 ? `${date.getUTCDate()}/${date.getUTCMonth() + 1}` : dayNames[date.getUTCDay()], 
-        attendance: dayAttendance 
+      const dateStr = date.toISOString().split('T')[0];
+      
+      attendanceTrend.push({
+        name: diffDays > 7 ? `${date.getUTCDate()}/${date.getUTCMonth() + 1}` : dayNames[date.getUTCDay()],
+        attendance: trendMap[dateStr] || 0
       });
     }
 

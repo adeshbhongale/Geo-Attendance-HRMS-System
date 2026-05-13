@@ -12,32 +12,33 @@ exports.getEmployees = async (req, res, next) => {
         // Sort by createdAt descending so new employees show at the top
         const employees = await User.find({ role: 'employee' }).populate('shift').sort('-createdAt');
 
-        // Check online status based on today's active sessions (punched in but not out)
         const now = new Date();
         const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
         const todayEnd = new Date(todayStart);
         todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
 
-        const todayAttendance = await Attendance.find({
-            date: { $gte: todayStart, $lt: todayEnd },
-            "punchIn.time": { $exists: true },
-            "punchOut.time": { $exists: false }
-        });
+        const [todayAttendance, leaveStats] = await Promise.all([
+            Attendance.find({
+                date: { $gte: todayStart, $lt: todayEnd },
+                "punchIn.time": { $exists: true },
+                "punchOut.time": { $exists: false }
+            }),
+            Leave.aggregate([
+                { $match: { status: 'Approved' } },
+                { $group: { _id: '$user', count: { $sum: 1 } } }
+            ])
+        ]);
 
-        const onlineUserIds = todayAttendance.map(a => a.user.toString());
+        const onlineUserIds = new Set(todayAttendance.map(a => a.user.toString()));
+        const leaveMap = leaveStats.reduce((acc, curr) => {
+            acc[curr._id.toString()] = curr.count;
+            return acc;
+        }, {});
 
-        // Calculate approved leaves for each employee for consistent data reporting
-        const employeesWithStatus = await Promise.all(employees.map(async (emp) => {
-            const approvedLeaves = await Leave.countDocuments({
-                user: emp._id,
-                status: 'Approved'
-            });
-
-            return {
-                ...emp._doc,
-                isOnline: onlineUserIds.includes(emp._id.toString()),
-                approvedLeaves
-            };
+        const employeesWithStatus = employees.map(emp => ({
+            ...emp._doc,
+            isOnline: onlineUserIds.has(emp._id.toString()),
+            approvedLeaves: leaveMap[emp._id.toString()] || 0
         }));
 
         res.status(200).json({

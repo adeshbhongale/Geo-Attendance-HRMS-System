@@ -90,27 +90,14 @@ exports.login = async (req, res, next) => {
 
     // Check credentials
     if (password) {
-      // ADMIN PASSWORD LOGIN (Highly Secure Environment-Driven)
-      if (user.role === 'admin') {
-        const adminPass = process.env.ADMIN_PASSWORD;
-        if (!adminPass) {
-          return res.status(500).json({ success: false, message: 'Server Configuration Error: Admin password not set.' });
-        }
-        
-        // Match against environment variable
-        if (password !== adminPass) {
-          return res.status(401).json({ success: false, message: 'Invalid Admin Credentials' });
-        }
-      } else {
-        // Regular Employee Mobile App login (uses hashed DB password)
-        if (!user.password) {
-          return res.status(401).json({ success: false, message: 'Password not set for this account. Please contact admin.' });
-        }
+      // Regular login logic
+      if (!user.password) {
+        return res.status(401).json({ success: false, message: 'Password not set for this account. Please contact admin.' });
+      }
 
-        const isMatch = await user.matchPassword(password);
-        if (!isMatch) {
-          return res.status(401).json({ success: false, message: 'Invalid credentials' });
-        }
+      const isMatch = await user.matchPassword(password);
+      if (!isMatch) {
+        return res.status(401).json({ success: false, message: 'Invalid credentials' });
       }
 
       return await sendTokenResponse(user, 200, res);
@@ -230,13 +217,14 @@ exports.getMe = async (req, res, next) => {
 // @access  Private
 exports.updateDetails = async (req, res, next) => {
   try {
-    const { name, email, mobile, shift, profileImage } = req.body;
+    const { name, email, mobile, shift, profileImage, designation } = req.body;
 
     const fieldsToUpdate = {
       name,
       email,
       mobile,
       shift,
+      designation
     };
 
     // Upload profile image if provided

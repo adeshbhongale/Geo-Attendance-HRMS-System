@@ -194,7 +194,16 @@ const ProfileScreen = ({ navigation }) => {
             <Text className="text-slate-400 font-bold text-xs">{user?.mobile}</Text>
 
             <TouchableOpacity
-              onPress={() => setEditModalVisible(true)}
+              onPress={() => {
+                setForm({
+                  name: user?.name || '',
+                  email: user?.email || '',
+                  mobile: user?.mobile || '',
+                  designation: user?.designation || '',
+                  profileImage: null,
+                });
+                setEditModalVisible(true);
+              }}
               className="absolute top-4 right-4 bg-slate-50 p-2.5 rounded-xl border border-slate-100 shadow-sm"
             >
               <Pencil size={18} color="#4f46e5" />

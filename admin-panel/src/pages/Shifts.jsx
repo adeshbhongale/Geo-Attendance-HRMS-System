@@ -16,7 +16,7 @@ import {
   Users,
   X
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import api, { IMAGE_BASE_URL } from '../api/axios';
@@ -90,6 +90,19 @@ const Shifts = () => {
   useEffect(() => {
     fetchData();
   }, [selectedDate]);
+
+  const filteredAttendance = useMemo(() => {
+    return attendance
+      .filter(att => att.punchIn?.time || att.status === 'Absent')
+      .filter(att => filterStatus === 'All' || att.status === filterStatus)
+      .filter(att => filterShift === 'All' || (typeof att.user?.shift === 'string' ? att.user.shift === filterShift : att.user?.shift?._id === filterShift))
+      .filter(att => !overviewSearch || att.user?.name?.toLowerCase().includes(overviewSearch.toLowerCase()))
+      .sort((a, b) => {
+        if (a.status === 'Absent' && b.status !== 'Absent') return 1;
+        if (a.status !== 'Absent' && b.status === 'Absent') return -1;
+        return new Date(b.punchIn?.time || 0) - new Date(a.punchIn?.time || 0);
+      });
+  }, [attendance, filterStatus, filterShift, overviewSearch]);
 
   const fetchData = async () => {
     try {
@@ -226,6 +239,10 @@ const Shifts = () => {
   const handleAssignSubmit = async () => {
     try {
       setSaving(true);
+      if (!assignModal.shift?._id) {
+        toast.error('No shift selected');
+        return;
+      }
       await api.post('/shifts/assign', {
         shiftId: assignModal.shift._id,
         userIds: assignData.selectedEmployees,
@@ -350,7 +367,6 @@ const Shifts = () => {
                         <span className="text-red-500 text-[11px] font-bold tracking-tight ">Late Rules</span>
                       </div>
                       <div className="flex flex-col items-end gap-1">
-                        {shift.isNightShift && <span className="bg-slate-900 text-white text-[8px] px-1.5 py-0.5 rounded tracking-tighter">Night Shift</span>}
                         <span className="text-[9px] font-bold text-slate-400">Grace: {shift.gracePeriod}m</span>
                       </div>
                     </div>
@@ -465,7 +481,7 @@ const Shifts = () => {
                     <th className="px-6 py-5 text-[10px] font-extrabold text-blue-600 tracking-widest  border-b border-slate-50 text-center">Employee</th>
                     <th className="px-6 py-5 border-b border-slate-50 text-center">
                       <div className="relative flex items-center justify-center gap-2 cursor-pointer group" ref={shiftDropdownRef} onClick={() => setShowShiftDropdown(!showShiftDropdown)}>
-                        <span className="text-[10px] font-extrabold text-blue-600 tracking-widest">Assigned Shift</span>
+                        <span className="text-[10px] font-extrabold text-blue-600 tracking-widest uppercase">Assigned Shift</span>
                         <ChevronDown size={12} className={`text-blue-400 transition-transform ${showShiftDropdown ? 'rotate-180' : ''}`} />
                         <AnimatePresence>
                           {showShiftDropdown && (
@@ -498,7 +514,7 @@ const Shifts = () => {
                     </th>
                     <th className="px-6 py-5 border-b border-slate-50 text-center">
                       <div className="relative flex items-center justify-center gap-2 cursor-pointer group" ref={statusDropdownRef} onClick={() => setShowStatusDropdown(!showStatusDropdown)}>
-                        <span className="text-[10px] font-extrabold text-blue-600 tracking-widest">Status</span>
+                        <span className="text-[10px] font-extrabold text-blue-600 tracking-widest uppercase">Status</span>
                         <ChevronDown size={12} className={`text-blue-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
                         <AnimatePresence>
                           {showStatusDropdown && (
@@ -533,17 +549,7 @@ const Shifts = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {attendance
-                    .filter(att => att.punchIn?.time || att.status === 'Absent')
-                    .filter(att => filterStatus === 'All' || att.status === filterStatus)
-                    .filter(att => filterShift === 'All' || att.user?.shift?._id === filterShift || att.user?.shift === filterShift)
-                    .filter(att => !overviewSearch || att.user?.name?.toLowerCase().includes(overviewSearch.toLowerCase()))
-                    .sort((a, b) => {
-                      if (a.status === 'Absent' && b.status !== 'Absent') return 1;
-                      if (a.status !== 'Absent' && b.status === 'Absent') return -1;
-                      return new Date(b.punchIn?.time || 0) - new Date(a.punchIn?.time || 0);
-                    })
-                    .map((att) => {
+                  {filteredAttendance.map((att) => {
                       const emp = att.user;
                       if (!emp) return null;
                       const status = att.status;

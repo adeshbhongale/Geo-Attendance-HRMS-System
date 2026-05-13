@@ -29,7 +29,7 @@ const seedData = async () => {
 
     // Clear existing data
     await Promise.all([
-      User.deleteMany({}),
+      User.deleteMany({ role: { $ne: 'admin' } }),
       Shift.deleteMany({}),
       Location.deleteMany({}),
       Attendance.deleteMany({}),

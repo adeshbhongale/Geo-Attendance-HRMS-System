@@ -89,10 +89,34 @@ const EmployeeTrackRoute = () => {
 
   const path = useMemo(() => {
     if (!data?.logs) return [];
-    return data.logs.map(log => ({
-      lat: log.latitude,
-      lng: log.longitude
-    }));
+    
+    const filteredLogs = [];
+    let lastValidPoint = null;
+
+    data.logs.forEach((log) => {
+      const currentPoint = { lat: log.latitude, lng: log.longitude };
+      
+      if (!lastValidPoint) {
+        filteredLogs.push(currentPoint);
+        lastValidPoint = currentPoint;
+      } else {
+        // Calculate distance between points
+        const dist = window.google?.maps?.geometry?.spherical?.computeDistanceBetween(
+          new window.google.maps.LatLng(lastValidPoint.lat, lastValidPoint.lng),
+          new window.google.maps.LatLng(currentPoint.lat, currentPoint.lng)
+        );
+
+        // If distance is within 50m, it's valid
+        if (dist <= 50) {
+          filteredLogs.push(currentPoint);
+          lastValidPoint = currentPoint;
+        } else {
+          console.warn(`[MAP] Skipping glitch point: distance ${dist.toFixed(1)}m > 50m`);
+        }
+      }
+    });
+
+    return filteredLogs;
   }, [data]);
 
 

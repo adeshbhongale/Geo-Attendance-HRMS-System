@@ -6,7 +6,7 @@ const getUserFromStorage = () => {
     // Guard against 'undefined' or 'null' strings which cause JSON.parse to fail
     if (!user || user === 'undefined' || user === 'null') return null;
     return JSON.parse(user);
-  } catch (e) {
+  } catch (_) {
     return null;
   }
 };
