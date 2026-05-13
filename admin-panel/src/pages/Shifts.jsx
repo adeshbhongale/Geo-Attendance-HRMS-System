@@ -481,7 +481,7 @@ const Shifts = () => {
                     <th className="px-6 py-5 text-[10px] font-extrabold text-blue-600 tracking-widest  border-b border-slate-50 text-center">Employee</th>
                     <th className="px-6 py-5 border-b border-slate-50 text-center">
                       <div className="relative flex items-center justify-center gap-2 cursor-pointer group" ref={shiftDropdownRef} onClick={() => setShowShiftDropdown(!showShiftDropdown)}>
-                        <span className="text-[10px] font-extrabold text-blue-600 tracking-widest uppercase">Assigned Shift</span>
+                        <span className="text-[10px] font-extrabold text-blue-600 tracking-widest">Assigned Shift</span>
                         <ChevronDown size={12} className={`text-blue-400 transition-transform ${showShiftDropdown ? 'rotate-180' : ''}`} />
                         <AnimatePresence>
                           {showShiftDropdown && (
@@ -514,7 +514,7 @@ const Shifts = () => {
                     </th>
                     <th className="px-6 py-5 border-b border-slate-50 text-center">
                       <div className="relative flex items-center justify-center gap-2 cursor-pointer group" ref={statusDropdownRef} onClick={() => setShowStatusDropdown(!showStatusDropdown)}>
-                        <span className="text-[10px] font-extrabold text-blue-600 tracking-widest uppercase">Status</span>
+                        <span className="text-[10px] font-extrabold text-blue-600 tracking-widest">Status</span>
                         <ChevronDown size={12} className={`text-blue-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
                         <AnimatePresence>
                           {showStatusDropdown && (
@@ -550,82 +550,82 @@ const Shifts = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {filteredAttendance.map((att) => {
-                      const emp = att.user;
-                      if (!emp) return null;
-                      const status = att.status;
+                    const emp = att.user;
+                    if (!emp) return null;
+                    const status = att.status;
 
-                      // Find full employee data to get profile image if missing in attendance record
-                      const fullEmp = employees.find(e => e._id === (emp._id || emp));
-                      const profileImageUrl = getFullImageUrl(fullEmp?.profileImage || emp.profileImage);
+                    // Find full employee data to get profile image if missing in attendance record
+                    const fullEmp = employees.find(e => e._id === (emp._id || emp));
+                    const profileImageUrl = getFullImageUrl(fullEmp?.profileImage || emp.profileImage);
 
-                      // Resolve shift details if emp.shift is just an ID
-                      const shiftData = typeof emp.shift === 'string'
-                        ? shifts.find(s => s._id === emp.shift)
-                        : (emp.shift || fullEmp?.shift);
+                    // Resolve shift details if emp.shift is just an ID
+                    const shiftData = typeof emp.shift === 'string'
+                      ? shifts.find(s => s._id === emp.shift)
+                      : (emp.shift || fullEmp?.shift);
 
-                      return (
-                        <tr key={att._id} className="hover:bg-slate-50/50 transition-colors group">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-4">
-                              <div
-                                onClick={() => navigate(`/employee/${emp._id}`)}
-                                className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors cursor-pointer overflow-hidden border border-slate-100 shadow-sm"
-                              >
-                                {profileImageUrl ? (
-                                  <img src={profileImageUrl} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                  <div className="w-full h-full bg-indigo-500 flex items-center justify-center text-white text-sm font-bold">
-                                    {(emp.name || fullEmp?.name || '?').charAt(0)}
-                                  </div>
-                                )}
-                              </div>
-                              <div>
-                                <p onClick={() => navigate(`/employee/${emp._id}`)} className="text-sm text-center font-bold text-slate-900 cursor-pointer hover:text-indigo-600 transition-colors">{emp.name}</p>
-                                <p className="text-[10px] font-bold text-slate-500 tracking-wider text-center">{emp.department}</p>
-                              </div>
+                    return (
+                      <tr key={att._id} className="hover:bg-slate-50/50 transition-colors group">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-4">
+                            <div
+                              onClick={() => navigate(`/employee/${emp._id}`)}
+                              className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors cursor-pointer overflow-hidden border border-slate-100 shadow-sm"
+                            >
+                              {profileImageUrl ? (
+                                <img src={profileImageUrl} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full bg-indigo-500 flex items-center justify-center text-white text-sm font-bold">
+                                  {(emp.name || fullEmp?.name || '?').charAt(0)}
+                                </div>
+                              )}
                             </div>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <div className="flex flex-col items-center gap-1">
-                              <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-bold border border-indigo-100">
-                                {shiftData?.name || 'No Shift'}
-                              </span>
-                              {shiftData?.isNightShift && <span className="text-[8px] font-bold text-indigo-400 ">Night Shift</span>}
+                            <div>
+                              <p onClick={() => navigate(`/employee/${emp._id}`)} className="text-sm text-center font-bold text-slate-900 cursor-pointer hover:text-indigo-600 transition-colors">{emp.name}</p>
+                              <p className="text-[10px] font-bold text-slate-500 tracking-wider text-center">{emp.department}</p>
                             </div>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-wider border ${status === 'Present' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                              status === 'Late' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                                status === 'Half Day' ? 'bg-orange-50 text-orange-600 border-orange-100' :
-                                  status === 'Absent' ? 'bg-rose-50 text-rose-600 border-rose-100' :
-                                    'bg-slate-50 text-slate-400 border-slate-100'
-                              }`}>
-                              {status}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-bold border border-indigo-100">
+                              {shiftData?.name || 'No Shift'}
                             </span>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <div className="flex flex-col items-center gap-1">
-                              <p className="text-[11px] font-bold text-slate-800">
-                                {att.punchIn?.time ? to12Hour(new Date(att.punchIn.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })) : 'NA'}
-                              </p>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <div className="flex flex-col items-center gap-1">
-                              <p className="text-[11px] font-bold text-slate-800">
-                                {att.punchOut?.time ? to12Hour(new Date(att.punchOut.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })) : (status === 'Absent' ? 'NA' : 'Working...')}
-                              </p>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <div className="flex flex-col items-center gap-1">
-                              <span className="text-xs font-bold text-slate-800">{att.workingHours ? `${att.workingHours.toFixed(1)}h` : '—'}</span>
-                              {att.overtime > 0 && <span className="text-[9px] font-bold text-indigo-500">+{att.overtime.toFixed(1)}h OT</span>}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                            {shiftData?.isNightShift && <span className="text-[8px] font-bold text-indigo-400 ">Night Shift</span>}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-wider border ${status === 'Present' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                            status === 'Late' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                              status === 'Half Day' ? 'bg-orange-50 text-orange-600 border-orange-100' :
+                                status === 'Absent' ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                                  'bg-slate-50 text-slate-400 border-slate-100'
+                            }`}>
+                            {status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <p className="text-[11px] font-bold text-slate-800">
+                              {att.punchIn?.time ? to12Hour(new Date(att.punchIn.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })) : 'NA'}
+                            </p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <p className="text-[11px] font-bold text-slate-800">
+                              {att.punchOut?.time ? to12Hour(new Date(att.punchOut.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })) : (status === 'Absent' ? 'NA' : 'Working...')}
+                            </p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-xs font-bold text-slate-800">{att.workingHours ? `${att.workingHours.toFixed(1)}h` : '—'}</span>
+                            {att.overtime > 0 && <span className="text-[9px] font-bold text-indigo-500">+{att.overtime.toFixed(1)}h OT</span>}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

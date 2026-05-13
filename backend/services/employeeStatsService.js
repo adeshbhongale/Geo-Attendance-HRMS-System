@@ -128,9 +128,7 @@ const getAggregatedStats = (records, user, approvedLeaves = [], customStart = nu
   const workingDays = presentOnly + lateDays + halfDayCount;
 
   // ── 3. Leave count (already filtered by caller or global) ─────────
-  const leaveCount = approvedLeaves.length;
-
-  // ── 4. Absent days (business-day logic, excluding Sundays & leaves) ─
+  // ── 3. Absent days (business-day logic, excluding Sundays & leaves) ─
   const joinDate = new Date(user.createdAt || new Date());
   const joinDay = new Date(joinDate.getFullYear(), joinDate.getMonth(), joinDate.getDate());
 
@@ -143,9 +141,6 @@ const getAggregatedStats = (records, user, approvedLeaves = [], customStart = nu
   const actualStart = rangeStart < joinDay ? joinDay : rangeStart;
   actualStart.setHours(0, 0, 0, 0);
   rangeEnd.setHours(0, 0, 0, 0);
-
-  const shiftCutoff = user.shift?.punchInCutoff || '14:00';
-  const [cutoffHour, cutoffMin] = shiftCutoff.split(':').map(Number);
 
   const recordDates = new Set(filteredRecords.map((r) => new Date(r.date).toDateString()));
 
@@ -160,6 +155,7 @@ const getAggregatedStats = (records, user, approvedLeaves = [], customStart = nu
       return d >= start && d <= end;
     });
 
+  let leaveDaysCount = 0;
   let absentDays = 0;
   let curr = new Date(actualStart);
 
@@ -170,16 +166,12 @@ const getAggregatedStats = (records, user, approvedLeaves = [], customStart = nu
     const isToday = dateStr === today.toDateString();
 
     if (!isSunday) {
-      if (isToday) {
+      if (isOnLeave(curr)) {
+        leaveDaysCount++;
+      } else if (!isToday) {
         if (!hasRecord) {
-          const cutoffTime = new Date(now);
-          cutoffTime.setHours(cutoffHour, cutoffMin, 0, 0);
-          if (now > cutoffTime && !isOnLeave(curr)) absentDays++;
-        }
-      } else {
-        if (!hasRecord && !isOnLeave(curr)) {
           absentDays++;
-        } else if (hasRecord) {
+        } else {
           const rec = records.find((r) => new Date(r.date).toDateString() === dateStr);
           if (rec && rec.status === 'Absent') absentDays++;
         }
@@ -224,7 +216,7 @@ const getAggregatedStats = (records, user, approvedLeaves = [], customStart = nu
     lateDays: lateDays,
     halfDayCount: halfDayCount,
     absentDays: absentDays,
-    leaveDays: leaveCount,
+    leaveDays: leaveDaysCount,
     unpaidLeaveDays: approvedLeaves.filter(l => l.leaveType === 'Unpaid Leave').length,
     // Leave meta
     leaveBalance: user.leaveBalance ?? 0,

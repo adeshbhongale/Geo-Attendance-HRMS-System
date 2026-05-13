@@ -4,6 +4,7 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -24,6 +25,7 @@ const LoginScreen = ({ navigation }) => {
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
 
   const handleLogin = async () => {
+    Keyboard.dismiss();
     const trimmedId = identifier.trim();
     const trimmedPass = password.trim();
 

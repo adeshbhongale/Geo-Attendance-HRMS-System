@@ -38,8 +38,17 @@ exports.applyLeave = async (req, res, next) => {
       });
     }
 
-    req.body.user = userId;
-    const leave = await Leave.create(req.body);
+    const { leaveType, startDate, endDate, reason, duration } = req.body;
+    
+    const leave = await Leave.create({
+      user: userId,
+      leaveType,
+      startDate,
+      endDate,
+      reason,
+      duration,
+      status: 'Pending' // Force pending on application
+    });
 
     res.status(201).json({
       success: true,
@@ -141,8 +150,11 @@ exports.updateLeaveStatus = async (req, res, next) => {
     }
 
     const oldStatus = leave.status;
-    leave.status = req.body.status;
-    leave.adminNote = req.body.adminNote;
+    const { status, adminNote } = req.body;
+    
+    if (status) leave.status = status;
+    if (adminNote) leave.adminNote = adminNote;
+    
     await leave.save();
 
     // If newly approved, decrement user's leave balance
@@ -214,7 +226,15 @@ exports.updateLeave = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Can only update pending requests' });
     }
 
-    const updated = await Leave.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    const { leaveType, startDate, endDate, reason, duration } = req.body;
+    const updateData = {};
+    if (leaveType) updateData.leaveType = leaveType;
+    if (startDate) updateData.startDate = startDate;
+    if (endDate) updateData.endDate = endDate;
+    if (reason) updateData.reason = reason;
+    if (duration) updateData.duration = duration;
+
+    const updated = await Leave.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
     res.status(200).json({ success: true, data: updated });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });

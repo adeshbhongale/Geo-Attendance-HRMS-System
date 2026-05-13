@@ -153,7 +153,7 @@ const ShiftManagementScreen = ({ navigation }) => {
                   <View className="mb-3">
                     <View className="flex-row items-center mb-1">
                       <Info size={12} color="#fecaca" />
-                      <Text className="text-red-200 text-[9px] font-bold uppercase tracking-wider ml-1">Late Rules</Text>
+                      <Text className="text-red-200 text-[9px] font-bold tracking-wider ml-1">Late Rules</Text>
                     </View>
                     <Text className="text-white text-[11px] leading-relaxed">{userData.shift.lateRules}</Text>
                   </View>
@@ -162,7 +162,7 @@ const ShiftManagementScreen = ({ navigation }) => {
                   <View>
                     <View className="flex-row items-center mb-1">
                       <Clock size={12} color="#fed7aa" />
-                      <Text className="text-orange-200 text-[9px] font-bold uppercase tracking-wider ml-1">Half Day Rules</Text>
+                      <Text className="text-orange-200 text-[9px] font-bold tracking-wider ml-1">Half Day Rules</Text>
                     </View>
                     <Text className="text-white text-[11px] leading-relaxed">{userData.shift.halfDayRules}</Text>
                   </View>

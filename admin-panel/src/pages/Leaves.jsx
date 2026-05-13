@@ -68,7 +68,10 @@ const Leaves = () => {
     if (!dateStr) return '--/--/----';
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) return '--/--/----';
-    return date.toLocaleDateString();
+    const d = String(date.getDate()).padStart(2, '0');
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const y = date.getFullYear();
+    return `${d}-${m}-${y}`;
   };
 
   const handleAction = (id, status) => {
@@ -369,7 +372,8 @@ const Leaves = () => {
             <thead>
               <tr className="bg-slate-50/50">
                 <th className="px-8 py-5 text-center text-[12px] font-bold text-slate-800  tracking-[0.15em]">Employee</th>
-                <th className="px-6 py-5 text-center text-[12px] font-bold text-slate-800  tracking-[0.15em]">Type</th>
+                <th className="px-4 py-5 text-center text-[12px] font-bold text-slate-800  tracking-[0.15em]">Applied On</th>
+                <th className="px-4 py-5 text-center text-[12px] font-bold text-slate-800  tracking-[0.15em]">Type</th>
                 <th className="px-6 py-5 text-center text-[12px] font-bold text-slate-800  tracking-[0.15em]">Duration</th>
                 <th className="px-6 py-5 text-center text-[12px] font-bold text-slate-800  tracking-[0.15em]">Reason</th>
                 <th className="px-6 py-5 text-center text-[12px] font-bold text-slate-800  tracking-[0.15em]">Status</th>
@@ -394,7 +398,12 @@ const Leaves = () => {
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-5">
+                  <td className="px-4 py-5 text-center">
+                    <span className="text-[10px] font-bold text-slate-500 whitespace-nowrap">
+                      {formatDate(req.appliedOn || req.createdAt)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-5">
                     <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-bold tracking-widest ">
                       {req.leaveType}
                     </span>
@@ -403,11 +412,8 @@ const Leaves = () => {
                     <div className="space-y-1">
                       <p className="text-xs font-bold text-slate-800">{formatDate(req.startDate)} {req.duration === 'Full Day' && `- ${formatDate(req.endDate)}`}</p>
                       <div className="flex items-center gap-2">
-                        <p className="text-[11px] text-indigo-600 font-bold tracking-widest bg-indigo-50 px-2 py-0.5 rounded-md inline-block">
+                        <p className="text-[10px] text-indigo-600 font-bold tracking-widest bg-indigo-50 px-2 py-0.5 rounded-md inline-block">
                           {req.duration === 'Half Day' ? '0.5' : Math.ceil((new Date(req.endDate) - new Date(req.startDate)) / (1000 * 60 * 60 * 24)) + 1} DAYS
-                        </p>
-                        <p className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${req.duration === 'Half Day' ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                          {(req.duration || 'Full Day').toUpperCase()}
                         </p>
                       </div>
                     </div>

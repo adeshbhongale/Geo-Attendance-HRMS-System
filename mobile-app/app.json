@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Geo-Track HRMS System",
-    "slug": "geo-track-hrms-system",
+    "slug": "mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/splash.png",
@@ -39,6 +39,7 @@
       "eas": {
         "projectId": "ba5d0c3a-dd80-43df-939b-498d3193c840"
       }
-    }
+    },
+    "owner": "adesh07"
   }
 }

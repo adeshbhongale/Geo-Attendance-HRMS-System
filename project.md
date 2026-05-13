@@ -1155,8 +1155,40 @@ eas submit --platform android --latest
 - **Splash Screen**: Integrated `assets/splash.png` as the primary app launch image, configured via `app.json`.
 - **Branding Sync**: Replaced legacy shield icons with the corporate `favicon.png` across the Admin login and portal headers for visual consistency.
 
+### 18. HRMS Logic & Production Stability (May 13, 2026)
+
+**Changed**: Refactored core attendance policy to allow permissive punch-ins, implemented deferred absence marking, and resolved SPA routing issues.
+
+#### 🕒 Permissive Attendance Policy:
+- **Punch-In Flexibility**: Removed shift-end timing restrictions in `backend/controllers/attendance.js`. Employees can now punch in at any time during their scheduled day, even after the shift has technically ended.
+- **Deferred Absence Marking**: 
+  - **Logic**: Updated `backend/services/employeeStatsService.js` to skip marking employees as "Absent" for the current day. 
+  - **Requirement**: Absence is now only calculated once a day is fully complete (End-of-Day processing).
+  - **Dashboard Synchronization**: Updated all summary statistics in `backend/controllers/reports.js` to reflect 0 absences for the current day.
+
+#### 🛠️ Infrastructure & UI:
+- **Routing Stability (404 Fix)**: Added `admin-panel/vercel.json` to handle SPA routing. This resolves `404 NOT_FOUND` errors that occurred when administrators refreshed the page on deeper routes.
+- **Leave Management Refinement**: Standardized the date display format to `DD-MM-YYYY` across the Admin Panel and added a dedicated "Applied On" column to the Leave Requests table.
+- **Mobile UX**: Implemented `Keyboard.dismiss()` on login button press to ensure immediate visibility of success messages and loading states.
+
+### 19. Production Security Hardening & Real-Time Controls (May 13, 2026)
+
+**Changed**: Implemented comprehensive security hardening, transitioned to hashed-only password storage, and added real-time access revocation.
+
+#### 🔐 Advanced Security Hardening:
+- **Hashed-Only Passwords**: Completely eliminated `plainPassword` storage from the database. Passwords are now exclusively stored as secure Bcrypt hashes.
+- **Administrative Overwrite Model**: Admin password management transitioned to a "Reset Only" flow. When editing an employee, the password field is blank by default; typing a new password overwrites the old one, while leaving it blank preserves the existing hashed credential.
+- **Middleware Infrastructure**: Enabled `express-mongo-sanitize` for NoSQL injection protection and `xss-clean` for cross-site scripting prevention.
+- **Rate Limiting & CORS**: Hardened API rate limits to 200 requests per 10 minutes and restricted CORS to specific `CLIENT_URL` origins.
+- **Mass Assignment Protection**: Implemented strict field white-listing across all critical controllers (Employees, Leaves, Profiles) to prevent unauthorized privilege escalation.
+
+#### ⚡ Real-Time Force Logout:
+- **Socket.io Trigger**: Implemented a `forceLogout` event in the backend `deleteEmployee` controller.
+- **Instant Revocation**: Added a global listener in the mobile app (`socket.js`) that instantly clears local session data and redirects the user to the login screen as soon as their account is deleted by an administrator.
+
 ---
 
 **Last Updated**: May 13, 2026
-**Version**: 1.8.0
-**Status**: Production Hardened (High Performance & Stable)
+**Version**: 1.8.2
+**Status**: Production Hardened & Secure (High Performance & Fully Decoupled)
+

@@ -10,7 +10,9 @@ const { uploadProfileImage } = require('../utils/cloudinary');
 exports.getEmployees = async (req, res, next) => {
     try {
         // Sort by createdAt descending so new employees show at the top
-        const employees = await User.find({ role: 'employee' }).populate('shift').sort('-createdAt');
+        const employees = await User.find({ role: 'employee' })
+            .populate('shift')
+            .sort('-createdAt');
 
         const now = new Date();
         const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -35,11 +37,14 @@ exports.getEmployees = async (req, res, next) => {
             return acc;
         }, {});
 
-        const employeesWithStatus = employees.map(emp => ({
-            ...emp._doc,
-            isOnline: onlineUserIds.has(emp._id.toString()),
-            approvedLeaves: leaveMap[emp._id.toString()] || 0
-        }));
+        const employeesWithStatus = employees.map(emp => {
+            const empObj = emp.toObject();
+            return {
+                ...empObj,
+                isOnline: onlineUserIds.has(emp._id.toString()),
+                approvedLeaves: leaveMap[emp._id.toString()] || 0
+            };
+        });
 
         res.status(200).json({
             success: true,
@@ -64,10 +69,24 @@ exports.addEmployee = async (req, res, next) => {
       return res.status(400).json({ success: false, message: `${field} already exists in our records.` });
     }
 
-    const employee = await User.create({
-      ...req.body,
-      role: 'employee',
-    });
+    const { name, department, designation, shift, status, password } = req.body;
+
+    const employeeData = {
+      name,
+      email,
+      mobile,
+      department,
+      designation,
+      shift,
+      status: status || 'active',
+      role: 'employee'
+    };
+
+    if (password) {
+      employeeData.password = password;
+    }
+
+    const employee = await User.create(employeeData);
 
         if (req.file) {
             const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
@@ -105,7 +124,11 @@ exports.updateEmployee = async (req, res, next) => {
             return res.status(400).json({ success: false, message: `${field} already belongs to another staff member.` });
         }
 
-        let updateData = { ...req.body };
+        const allowedFields = ['name', 'email', 'mobile', 'department', 'designation', 'shift', 'status'];
+        let updateData = {};
+        allowedFields.forEach(field => {
+            if (req.body[field] !== undefined) updateData[field] = req.body[field];
+        });
 
         // Handle profile image upload
         if (req.file) {
@@ -116,23 +139,15 @@ exports.updateEmployee = async (req, res, next) => {
             }
         }
 
-        let employee;
+        let employee = await User.findById(req.params.id);
+        if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
+
         if (password) {
-            // Must use save() to trigger password hashing pre-save hook
-            employee = await User.findById(req.params.id);
-            if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
-            
-            Object.assign(employee, updateData);
-            await employee.save();
-        } else {
-            // If no password, remove it from updateData to prevent overwriting with blank/null
-            delete updateData.password;
-            
-            employee = await User.findByIdAndUpdate(req.params.id, updateData, {
-                new: true,
-                runValidators: true,
-            });
+            employee.password = password;
         }
+
+        Object.assign(employee, updateData);
+        await employee.save();
 
         if (!employee) {
             return res.status(404).json({ success: false, message: 'Employee not found' });
@@ -152,10 +167,17 @@ exports.updateEmployee = async (req, res, next) => {
 // @access  Private/Admin
 exports.deleteEmployee = async (req, res, next) => {
     try {
-        const employee = await User.findByIdAndDelete(req.params.id);
+        const employeeId = req.params.id;
+        const employee = await User.findByIdAndDelete(employeeId);
 
         if (!employee) {
             return res.status(404).json({ success: false, message: 'Employee not found' });
+        }
+
+        // Force logout via Socket.io
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('forceLogout', employeeId);
         }
 
         res.status(200).json({
@@ -219,6 +241,9 @@ exports.bulkUpload = async (req, res, next) => {
                 status = 'active';
             }
 
+            const passwordVal = findVal(['password']);
+            const finalPassword = (passwordVal === 'NA' || !passwordVal) ? null : String(passwordVal);
+
             formattedData.push({
                 name: name,
                 email: email,
@@ -227,7 +252,7 @@ exports.bulkUpload = async (req, res, next) => {
                 designation: findVal(['designation', 'role', 'post']),
                 shift: matchedShift ? matchedShift._id : shifts[0]?._id,
                 status: status,
-                password: findVal(['password']) === 'NA' ? 'password123' : String(findVal(['password'])),
+                password: finalPassword,
                 role: 'employee'
             });
         }

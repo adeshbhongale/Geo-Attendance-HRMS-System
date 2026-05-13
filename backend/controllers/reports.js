@@ -138,7 +138,8 @@ exports.getStats = async (req, res) => {
       endDate: { $gte: targetDate }
     });
 
-    const absentToday = Math.max(0, totalEmployees - presentToday - onLeaveToday);
+    const isTargetToday = targetDate.toISOString().split('T')[0] === todayUTC().toISOString().split('T')[0];
+    const absentToday = isTargetToday ? 0 : Math.max(0, totalEmployees - presentToday - onLeaveToday);
 
     // Map trend data into the expected format for the last X days
     const attendanceTrend = [];
@@ -275,7 +276,8 @@ exports.getTrackingStats = async (req, res) => {
       startDate: { $lte: targetDate },
       endDate:   { $gte: targetDate }
     });
-    const absentCount = Math.max(0, totalEmployees - presentCount - onLeaveCount);
+    const isTargetToday = targetDate.toISOString().split('T')[0] === todayUTC().toISOString().split('T')[0];
+    const absentCount = isTargetToday ? 0 : Math.max(0, totalEmployees - presentCount - onLeaveCount);
 
     const onlineCount  = await User.countDocuments({ role: 'employee', isOnline: true });
     const offlineCount = Math.max(0, totalEmployees - onlineCount);
@@ -367,7 +369,8 @@ exports.getAttendanceDashboard = async (req, res) => {
 
     const presentRecords = attendance.filter(a => ['Present', 'Late', 'Half Day'].includes(a.status));
     const presentCount   = presentRecords.length;
-    const absentCount    = Math.max(0, totalExpectedAttendance - presentCount - onLeaveCount);
+    const isTargetToday = targetDate.toISOString().split('T')[0] === todayUTC().toISOString().split('T')[0];
+    const absentCount    = isTargetToday ? 0 : Math.max(0, totalExpectedAttendance - presentCount - onLeaveCount);
 
     const getStatsByField = async (field, isRef = false) => {
       let groups;

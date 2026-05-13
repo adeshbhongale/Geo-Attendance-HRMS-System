@@ -25,7 +25,7 @@ app.set('trust proxy', 1);
 
 // Enable CORS (Must be at the very top)
 app.use(cors({
-  origin: true,
+  origin: process.env.CLIENT_URL || 'http://localhost:5173',
   credentials: true,
 }));
 
@@ -55,18 +55,18 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Sanitize data
-// app.use(mongoSanitize());
+app.use(mongoSanitize());
 
 // Set security headers
 app.use(helmet());
 
 // Prevent XSS attacks
-// app.use(xss());
+app.use(xss());
 
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 mins
-  max: 1000, // Increased from 100
+  max: 500, // Reduced from 1000 for better security
 });
 app.use(limiter);
 
@@ -108,7 +108,7 @@ io.on('connection', (socket) => {
       socket.userId = userId;
       await User.findByIdAndUpdate(userId, { isOnline: true });
       io.emit('userStatusChanged', { userId, status: 'online' });
-    } catch (err) {}
+    } catch (err) { }
   });
 
   socket.on('updateLocation', (data) => {
@@ -122,7 +122,7 @@ io.on('connection', (socket) => {
         await User.findByIdAndUpdate(socket.userId, { isOnline: false });
         io.emit('userStatusChanged', { userId: socket.userId, status: 'offline' });
       }
-    } catch (err) {}
+    } catch (err) { }
   });
 });
 

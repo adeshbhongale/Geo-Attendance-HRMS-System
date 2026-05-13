@@ -96,12 +96,15 @@ exports.punchIn = async (req, res, next) => {
         cutoffTime.setDate(cutoffTime.getDate() + 1);
       }
 
+      // Removed shift end cutoff to allow punch in after shift ends
+      /*
       if (now > cutoffTime) {
         return res.status(400).json({ 
           success: false, 
           message: `Shift ended. You cannot punch in after ${user.shift.endTime}.` 
         });
       }
+      */
 
       // Calculate Half Day Status
       if (user.shift.halfDayAfter) {

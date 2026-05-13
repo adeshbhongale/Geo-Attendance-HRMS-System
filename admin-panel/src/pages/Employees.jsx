@@ -167,7 +167,7 @@ const Employees = () => {
       setFormData({
         name: emp.name,
         email: emp.email,
-        mobile: emp.mobile,
+        mobile: emp.mobile || '',
         password: '',
         department: emp.department || '',
         designation: emp.designation || '',
@@ -787,12 +787,12 @@ const Employees = () => {
                   {/* Custom Dropdowns Section */}
                   <div className="space-y-3">
                     <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Department</label>
-                    <input 
-                      type="text" 
-                      value={formData.department} 
-                      onChange={(e) => setFormData({ ...formData, department: e.target.value })} 
-                      className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800" 
-                      placeholder="e.g., IT, Sales, HR" 
+                    <input
+                      type="text"
+                      value={formData.department}
+                      onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                      className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800"
+                      placeholder="e.g., IT, Sales, HR"
                     />
                   </div>
 

@@ -24,56 +24,14 @@ exports.register = async (req, res, next) => {
   }
 };
 
-// @desc    Send OTP to email/mobile
-// @route   POST /api/auth/send-otp
-// @access  Public
-exports.sendOTP = async (req, res, next) => {
-  try {
-    const { identifier } = req.body; // Can be email or mobile
 
-    const user = await User.findOne({
-      $or: [{ email: identifier }, { mobile: identifier }]
-    });
-
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    // Only admins can request OTP for web login
-    if (user.role !== 'admin') {
-      return res.status(401).json({ success: false, message: 'Access denied. Employees cannot login to the admin panel.' });
-    }
-
-    // Generate 7-digit OTP
-    const otp = Math.floor(1000000 + Math.random() * 9000000).toString();
-    user.otp = otp;
-    user.otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
-    await user.save();
-
-    // Console log OTP for testing as requested
-    console.log(`
-______________
-
-otp :    ${otp}
-
-______________
-      `);
-
-    res.status(200).json({
-      success: true,
-      message: 'OTP sent successfully',
-    });
-  } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
-  }
-};
 
 // @desc    Login user
 // @route   POST /api/auth/login
 // @access  Public
 exports.login = async (req, res, next) => {
   try {
-    const { identifier, otp, password } = req.body;
+    const { identifier, password } = req.body;
 
     if (!identifier) {
       return res.status(400).json({ success: false, message: 'Please provide email or mobile' });
@@ -89,37 +47,21 @@ exports.login = async (req, res, next) => {
     }
 
     // Check credentials
-    if (password) {
-      // Regular login logic
-      if (!user.password) {
-        return res.status(401).json({ success: false, message: 'Password not set for this account. Please contact admin.' });
-      }
-
-      const isMatch = await user.matchPassword(password);
-      if (!isMatch) {
-        return res.status(401).json({ success: false, message: 'Invalid credentials' });
-      }
-
-      return await sendTokenResponse(user, 200, res);
-    } else if (otp) {
-      // Legacy OTP login logic (Optional, kept for backward compatibility if needed)
-      if (user.role !== 'admin') {
-        return res.status(401).json({ success: false, message: 'Access denied. Employees must login via the Mobile App.' });
-      }
-
-      if (String(user.otp) !== String(otp) || user.otpExpires < Date.now()) {
-        return res.status(401).json({ success: false, message: 'Invalid or expired OTP' });
-      }
-
-      // Clear OTP
-      user.otp = undefined;
-      user.otpExpires = undefined;
-      await user.save();
-
-      return await sendTokenResponse(user, 200, res);
-    } else {
-      return res.status(400).json({ success: false, message: 'Please provide password or OTP' });
+    if (!password) {
+      return res.status(400).json({ success: false, message: 'Please provide a password' });
     }
+
+    // Regular login logic
+    if (!user.password) {
+      return res.status(401).json({ success: false, message: 'Password not set for this account. Please contact admin.' });
+    }
+
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    return await sendTokenResponse(user, 200, res);
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
