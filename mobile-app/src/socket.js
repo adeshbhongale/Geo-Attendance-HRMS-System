@@ -3,7 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { navigationRef } from './utils/navigation';
 import { Alert } from 'react-native';
 
-const SOCKET_URL = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '');
+const rawApiUrl = process.env.EXPO_PUBLIC_API_URL || '';
+const cleanApiUrl = rawApiUrl.trim().replace(/^["']|["']$/g, '').replace(/\/+$/, '');
+const SOCKET_URL = cleanApiUrl.replace('/api', '');
 
 const socket = io(SOCKET_URL, {
   autoConnect: true,
