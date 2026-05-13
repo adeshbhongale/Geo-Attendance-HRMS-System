@@ -74,6 +74,15 @@ exports.getStats = async (req, res) => {
       dateQuery = { date: targetDate };
     }
 
+    const startOfTargetDate = new Date(targetDate);
+    startOfTargetDate.setUTCHours(0, 0, 0, 0);
+    const endOfTargetDate = new Date(targetDate);
+    endOfTargetDate.setUTCHours(23, 59, 59, 999);
+
+    const sDate = startDate ? parseUTCDate(startDate) : new Date(targetDate.getTime() - 6 * 24 * 60 * 60 * 1000);
+    const eDate = endDate ? parseUTCDate(endDate) : targetDate;
+    const diffDays = Math.min(31, Math.ceil((eDate - sDate) / (1000 * 60 * 60 * 24)) + 1);
+
     const [
       totalEmployees,
       presentToday,
