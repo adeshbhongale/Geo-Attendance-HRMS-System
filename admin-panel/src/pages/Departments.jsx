@@ -114,7 +114,7 @@ const Departments = () => {
 
   const filteredDepartments = useMemo(() => {
     return departments.filter(d =>
-      d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (d.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       d.description?.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [departments, searchQuery]);
@@ -146,6 +146,7 @@ const Departments = () => {
   const paginatedData = filteredDepartments.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
+    <>
     <div className="space-y-6 md:space-y-8 animate-fade-up">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -281,17 +282,17 @@ const Departments = () => {
         )}
 
       </div>
-
+    </div>
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-0 sm:p-4 overflow-y-auto">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.98, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.98, y: 20 }}
-              className="bg-white w-full max-w-7xl h-full sm:h-[95vh] sm:rounded-[3rem] shadow-2xl overflow-hidden flex flex-col"
+              className="bg-white w-full max-w-4xl max-h-[95vh] overflow-y-auto rounded-2xl shadow-2xl flex flex-col"
             >
-              <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center">
+              <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10 shrink-0">
                 <div>
                   <h3 className="text-xl font-bold text-slate-900 tracking-tighter m-0">
                     {editingDept ? 'Edit Department' : 'Add New Department'}
@@ -305,7 +306,8 @@ const Departments = () => {
                 </button>
               </div>
 
-              <div className="p-8 overflow-y-auto"><form onSubmit={handleSubmit} className="space-y-6">
+              <div className="p-8 overflow-y-auto">
+                <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-2">
                   <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Department Name</label>
                   <input
@@ -357,7 +359,7 @@ const Departments = () => {
 
       <AnimatePresence>
         {deleteConfirm.show && (
-          <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 flex flex-col items-center text-center">
               <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-4">
@@ -379,7 +381,7 @@ const Departments = () => {
           </div>
         )}
       </AnimatePresence>
-    </div>
+    </>
   );
 };
 

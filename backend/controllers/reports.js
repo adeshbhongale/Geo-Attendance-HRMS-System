@@ -143,7 +143,14 @@ exports.getStats = async (req, res) => {
 
     // Enhanced logic: Count as absent today only if their shift has ended and they aren't new today
     let absentToday = 0;
-    if (isTargetToday) {
+    const Holiday = require('../models/Holiday');
+    const targetDateStart = new Date(targetDate); targetDateStart.setUTCHours(0,0,0,0);
+    const targetDateEnd = new Date(targetDate); targetDateEnd.setUTCHours(23,59,59,999);
+    const isHoliday = await Holiday.findOne({ holiday_date: { $gte: targetDateStart, $lte: targetDateEnd }, status: 'active' });
+
+    if (targetDate.getUTCDay() === 0 || isHoliday) {
+      absentToday = 0;
+    } else if (isTargetToday) {
       const allEmployees = await User.find({ role: 'employee' }).populate('shift');
       const presentUserIds = await Attendance.find(dateQuery).distinct('user');
       const presentUserIdsSet = new Set(presentUserIds.map(id => id.toString()));
@@ -152,12 +159,25 @@ exports.getStats = async (req, res) => {
         status: 'Approved',
         startDate: { $lte: targetDate },
         endDate: { $gte: targetDate }
-      }).distinct('user');
-      const onLeaveUserIdsSet = new Set(onLeaveUsers.map(id => id.toString()));
+      }).populate('user');
+      const onLeaveUserIdsSet = new Set(
+        onLeaveUsers
+          .filter(leave => {
+            if (!leave.user) return false;
+            const joined = new Date(leave.user.joiningDate || leave.user.createdAt);
+            joined.setUTCHours(0, 0, 0, 0);
+            return joined <= targetDate;
+          })
+          .map(leave => leave.user._id.toString())
+      );
 
       const realAbsentees = allEmployees.filter(user => {
         const empId = user._id.toString();
         if (presentUserIdsSet.has(empId) || onLeaveUserIdsSet.has(empId)) return false;
+
+        const joined = new Date(user.joiningDate || user.createdAt);
+        joined.setUTCHours(0, 0, 0, 0);
+        if (joined > targetDate) return false; // Skip if they haven't joined yet
 
         const userCreated = new Date(user.createdAt);
         userCreated.setUTCHours(0, 0, 0, 0);
@@ -174,11 +194,11 @@ exports.getStats = async (req, res) => {
       absentToday = realAbsentees.length;
     } else {
       // For past dates, only count employees who existed on that date
-      const activeEmployeesOnDate = await User.countDocuments({
+      const activeEmployeesOnDate = await User.find({
         role: 'employee',
-        createdAt: { $lte: endOfTargetDate }
+        joiningDate: { $lte: endOfTargetDate }
       });
-      absentToday = Math.max(0, activeEmployeesOnDate - presentToday - onLeaveToday);
+      absentToday = Math.max(0, activeEmployeesOnDate.length - presentToday - onLeaveToday);
     }
 
     // Map trend data into the expected format for the last X days
@@ -285,6 +305,7 @@ exports.getTrackingStats = async (req, res) => {
     const targetDate     = req.query.date ? parseUTCDate(req.query.date) : todayUTC();
     const totalEmployees = await User.countDocuments({ role: 'employee' });
     const attendance     = await Attendance.find({ date: targetDate })
+      .select({ trackingLogs: { $slice: -1 } })
       .populate('user', 'name email department mobile designation profileImage isOnline createdAt shift');
 
     const presentCount = attendance.length;
@@ -298,12 +319,24 @@ exports.getTrackingStats = async (req, res) => {
     const now = new Date();
     const isToday = targetDate.toISOString().split('T')[0] === now.toISOString().split('T')[0];
     let absentCount = 0;
-    if (isToday) {
+    const Holiday = require('../models/Holiday');
+    const targetDateStart = new Date(targetDate); targetDateStart.setUTCHours(0,0,0,0);
+    const targetDateEnd = new Date(targetDate); targetDateEnd.setUTCHours(23,59,59,999);
+    const isHoliday = await Holiday.findOne({ holiday_date: { $gte: targetDateStart, $lte: targetDateEnd }, status: 'active' });
+
+    if (targetDate.getUTCDay() === 0 || isHoliday) {
+      absentCount = 0;
+    } else if (isToday) {
       const allEmployees = await User.find({ role: 'employee' }).populate('shift');
       const presentUserIds = new Set(attendance.map(a => a.user?._id?.toString()));
       const realAbsentees = allEmployees.filter(user => {
         const empId = user._id.toString();
         if (presentUserIds.has(empId)) return false;
+
+        const joined = new Date(user.joiningDate || user.createdAt);
+        joined.setUTCHours(0, 0, 0, 0);
+        if (joined > targetDate) return false; // Skip if they haven't joined yet
+
         const userCreated = new Date(user.createdAt);
         userCreated.setUTCHours(0, 0, 0, 0);
         if (userCreated.getTime() === targetDate.getTime()) return false;
@@ -317,7 +350,11 @@ exports.getTrackingStats = async (req, res) => {
       });
       absentCount = Math.max(0, realAbsentees.length - onLeaveCount);
     } else {
-      absentCount = Math.max(0, totalEmployees - presentCount - onLeaveCount);
+      const activeEmployeesOnDate = await User.countDocuments({
+        role: 'employee',
+        joiningDate: { $lte: targetDate }
+      });
+      absentCount = Math.max(0, activeEmployeesOnDate - presentCount - onLeaveCount);
     }
 
     const onlineCount  = await User.countDocuments({ role: 'employee', isOnline: true });
@@ -388,20 +425,81 @@ exports.getAttendanceDashboard = async (req, res) => {
       dateQuery = { date: targetDate };
     }
 
-    const totalEmployees = await User.countDocuments({ role: 'employee' });
+    const Holiday = require('../models/Holiday');
+    const holidays = await Holiday.find({ status: 'active' });
+    const holidayDatesSet = new Set(
+      holidays.map(h => new Date(h.holiday_date).toISOString().split('T')[0])
+    );
+
     const sDate = startDate ? parseUTCDate(startDate) : (date ? parseUTCDate(date) : todayUTC());
     const eDate = endDate ? parseUTCDate(endDate) : sDate;
     const diffDays = Math.ceil((eDate - sDate) / (1000 * 60 * 60 * 24)) + 1;
-    const totalExpectedAttendance = totalEmployees * diffDays;
+
+    let totalExpectedAttendance = 0;
+    let tempDate = new Date(sDate);
+    const allEmployees = await User.find({ role: 'employee' }).populate('shift');
+
+    while (tempDate <= eDate) {
+      const dateStr = tempDate.toISOString().split('T')[0];
+      const isSunday = tempDate.getUTCDay() === 0;
+      const isHoliday = holidayDatesSet.has(dateStr);
+
+      if (!isSunday && !isHoliday) {
+        const dayMidnight = new Date(tempDate);
+        dayMidnight.setUTCHours(23, 59, 59, 999);
+
+        const activeCount = allEmployees.filter(emp => {
+          const joined = new Date(emp.joiningDate || emp.createdAt);
+          joined.setUTCHours(0, 0, 0, 0);
+          return joined <= dayMidnight;
+        }).length;
+
+        totalExpectedAttendance += activeCount;
+      }
+      tempDate.setUTCDate(tempDate.getUTCDate() + 1);
+    }
 
     const attendance = await Attendance.find(dateQuery).populate('user', 'name department createdAt shift');
 
-    const onLeaveCount = await Leave.countDocuments({
+    // Count leaves only for employees who have joined and on non-Sunday, non-Holiday days
+    const approvedLeaves = await Leave.find({
       status: 'Approved',
       $or: [
         { startDate: { $lte: targetDate }, endDate: { $gte: parseUTCDate(startDate) || targetDate } }
       ]
-    });
+    }).populate('user');
+
+    let onLeaveCount = 0;
+    let tempLeaveDate = new Date(sDate);
+    while (tempLeaveDate <= eDate) {
+      const dateStr = tempLeaveDate.toISOString().split('T')[0];
+      const isSunday = tempLeaveDate.getUTCDay() === 0;
+      const isHoliday = holidayDatesSet.has(dateStr);
+
+      if (!isSunday && !isHoliday) {
+        const dayMidnight = new Date(tempLeaveDate);
+        dayMidnight.setUTCHours(23, 59, 59, 999);
+        const dayStart = new Date(tempLeaveDate);
+        dayStart.setUTCHours(0, 0, 0, 0);
+
+        const activeLeaves = approvedLeaves.filter(leave => {
+          if (!leave.user) return false;
+          const joined = new Date(leave.user.joiningDate || leave.user.createdAt);
+          joined.setUTCHours(0, 0, 0, 0);
+          if (joined > dayMidnight) return false;
+
+          const leaveStart = new Date(leave.startDate);
+          leaveStart.setUTCHours(0, 0, 0, 0);
+          const leaveEnd = new Date(leave.endDate);
+          leaveEnd.setUTCHours(23, 59, 59, 999);
+
+          return dayStart >= leaveStart && dayMidnight <= leaveEnd;
+        });
+
+        onLeaveCount += activeLeaves.length;
+      }
+      tempLeaveDate.setUTCDate(tempLeaveDate.getUTCDate() + 1);
+    }
 
     const presentRecords = attendance.filter(a => ['Present', 'Late', 'Half Day'].includes(a.status));
     const presentCount   = presentRecords.length;
@@ -413,11 +511,15 @@ exports.getAttendanceDashboard = async (req, res) => {
     if (!isToday || diffDays > 1) {
       absentCount = Math.max(0, totalExpectedAttendance - presentCount - onLeaveCount);
     } else {
-      const allEmployees = await User.find({ role: 'employee' }).populate('shift');
       const presentUserIds = new Set(attendance.map(a => a.user?._id?.toString()));
       const realAbsentees = allEmployees.filter(user => {
         const empId = user._id.toString();
         if (presentUserIds.has(empId)) return false;
+
+        const joined = new Date(user.joiningDate || user.createdAt);
+        joined.setUTCHours(0, 0, 0, 0);
+        if (joined > targetDate) return false;
+
         const userCreated = new Date(user.createdAt);
         userCreated.setUTCHours(0, 0, 0, 0);
         if (userCreated.getTime() === targetDate.getTime()) return false;
@@ -452,18 +554,70 @@ exports.getAttendanceDashboard = async (req, res) => {
         const groupLate        = groupAttendance.filter(a => a.status === 'Late').length;
         const groupDeviators   = groupAttendance.filter(a => a.isOutside).length;
 
-        const groupOnLeave = await Leave.countDocuments({
-          user: { $in: groupEmployees.map(e => e._id) },
-          status: 'Approved',
-          $or: [
-            { startDate: { $lte: targetDate }, endDate: { $gte: parseUTCDate(startDate) || targetDate } }
-          ]
+        let groupExpectedAttendance = 0;
+        let tempDate = new Date(sDate);
+        while (tempDate <= eDate) {
+          const dateStr = tempDate.toISOString().split('T')[0];
+          const isSunday = tempDate.getUTCDay() === 0;
+          const isHoliday = holidayDatesSet.has(dateStr);
+
+          if (!isSunday && !isHoliday) {
+            const dayMidnight = new Date(tempDate);
+            dayMidnight.setUTCHours(23, 59, 59, 999);
+            const activeCount = groupEmployees.filter(emp => {
+              const joined = new Date(emp.joiningDate || emp.createdAt);
+              joined.setUTCHours(0, 0, 0, 0);
+              return joined <= dayMidnight;
+            }).length;
+            groupExpectedAttendance += activeCount;
+          }
+          tempDate.setUTCDate(tempDate.getUTCDate() + 1);
+        }
+
+        let groupOnLeave = 0;
+        groupEmployees.forEach(emp => {
+          const empLeaves = approvedLeaves.filter(leave => leave.user?._id?.toString() === emp._id.toString());
+          empLeaves.forEach(leave => {
+            let tempL = new Date(sDate);
+            while (tempL <= eDate) {
+              const dateStr = tempL.toISOString().split('T')[0];
+              const isSunday = tempL.getUTCDay() === 0;
+              const isHoliday = holidayDatesSet.has(dateStr);
+
+              if (!isSunday && !isHoliday) {
+                const dayMidnight = new Date(tempL);
+                dayMidnight.setUTCHours(23, 59, 59, 999);
+                const dayStart = new Date(tempL);
+                dayStart.setUTCHours(0, 0, 0, 0);
+
+                const joined = new Date(emp.joiningDate || emp.createdAt);
+                joined.setUTCHours(0, 0, 0, 0);
+
+                if (joined <= dayMidnight) {
+                  const leaveStart = new Date(leave.startDate);
+                  leaveStart.setUTCHours(0, 0, 0, 0);
+                  const leaveEnd = new Date(leave.endDate);
+                  leaveEnd.setUTCHours(23, 59, 59, 999);
+
+                  if (dayStart >= leaveStart && dayMidnight <= leaveEnd) {
+                    groupOnLeave++;
+                  }
+                }
+              }
+              tempL.setUTCDate(tempL.getUTCDate() + 1);
+            }
+          });
         });
 
         const groupAbsent = isToday 
           ? groupEmployees.filter(emp => {
               const empId = emp._id.toString();
               if (groupAttendance.some(a => a.user?._id?.toString() === empId)) return false;
+
+              const joined = new Date(emp.joiningDate || emp.createdAt);
+              joined.setUTCHours(0, 0, 0, 0);
+              if (joined > targetDate) return false;
+
               const userCreated = new Date(emp.createdAt);
               userCreated.setUTCHours(0, 0, 0, 0);
               if (userCreated.getTime() === targetDate.getTime()) return false;
@@ -475,11 +629,11 @@ exports.getAttendanceDashboard = async (req, res) => {
               }
               return true;
             }).length - groupOnLeave
-          : Math.max(0, (groupEmployees.length * diffDays) - groupPresent - groupOnLeave);
+          : Math.max(0, groupExpectedAttendance - groupPresent - groupOnLeave);
 
         return {
           name:          group.name,
-          total:         groupEmployees.length * diffDays,
+          total:         groupExpectedAttendance,
           present:       groupPresent,
           absent:        Math.max(0, groupAbsent),
           onLeave:       groupOnLeave,

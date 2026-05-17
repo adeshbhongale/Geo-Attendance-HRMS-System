@@ -12,8 +12,8 @@ import {
   Edit2,
   Eye,
   EyeOff,
-  FileText,
   FileSpreadsheet,
+  FileText,
   Loader2,
   Save,
   Search,
@@ -21,6 +21,7 @@ import {
   Trash2,
   Upload,
   UserPlus,
+  Users,
   X
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -101,9 +102,9 @@ const Employees = () => {
 
   const filteredEmployees = employees.filter(emp => {
     const matchesSearch =
-      emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.mobile.includes(searchTerm) ||
+      (emp.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (emp.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (emp.mobile || '').includes(searchTerm) ||
       (emp.department && emp.department.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchesStatus = filters.status === 'all' ||
@@ -156,9 +157,9 @@ const Employees = () => {
     designation: '',
     shift: '',
     workingPlace: '',
-    gender: 'Male',
-    role: 'employee',
-    status: 'active',
+    gender: '',
+    role: '',
+    status: '',
     joiningDate: new Date().toISOString().split('T')[0]
   });
 
@@ -194,7 +195,7 @@ const Employees = () => {
         api.get('/holidays')
       ]);
       setEmployees(empRes.data.data);
-      setShifts(shiftRes.data.data);
+      setShifts(shiftRes.data.data.filter(s => s.status !== 'inactive'));
       setLocations(locRes.data.data);
       setDepartments(deptRes.data.data);
       setDesignations(desigRes.data.data);
@@ -531,7 +532,7 @@ const Employees = () => {
           <input
             type="file"
             ref={fileInputRef}
-            className="hidden" z
+            className="hidden"
             accept=".xlsx"
             onChange={handleBulkUpload}
           />
@@ -543,23 +544,26 @@ const Employees = () => {
             {isUploading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
             Upload Excel
           </button>
-
-          <button
-            onClick={handleExport}
-            disabled={isExporting}
-            className="flex items-center justify-center gap-2 bg-white text-slate-600 border border-slate-200 px-4 py-3 rounded-2xl font-bold text-sm hover:bg-slate-50 transition-all active:scale-95 shadow-sm disabled:opacity-50"
-          >
-            {isExporting ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
-            Excel
-          </button>
-          <button
-            onClick={handleExportPDF}
-            disabled={isExporting}
-            className="flex items-center justify-center gap-2 bg-white text-slate-600 border border-slate-200 px-4 py-3 rounded-2xl font-bold text-sm hover:bg-slate-50 transition-all active:scale-95 shadow-sm disabled:opacity-50"
-          >
-            {isExporting ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
-            PDF
-          </button>
+          <div className="relative group/export">
+            <button
+              className="flex items-center gap-2 bg-white text-slate-700 border border-slate-200 px-5 py-3 rounded-2xl font-bold text-xs shadow-sm hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
+              disabled={isExporting}
+            >
+              {isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+              Export Data
+              <ChevronDown size={14} className="text-slate-400 group-hover/export:rotate-180 transition-transform" />
+            </button>
+            <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl z-[150] p-2 opacity-0 invisible group-hover/export:opacity-100 group-hover/export:visible transition-all">
+              <button onClick={handleExport} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-600 transition-all text-xs font-bold">
+                <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600"><Download size={14} /></div>
+                Excel Export
+              </button>
+              <button onClick={handleExportPDF} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-rose-50 text-slate-700 hover:text-rose-600 transition-all text-xs font-bold">
+                <div className="p-2 bg-rose-100 rounded-lg text-rose-600"><FileText size={14} /></div>
+                PDF Export
+              </button>
+            </div>
+          </div>
           <button
             className="flex flex-1 md:flex-none items-center justify-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
             onClick={() => handleOpenModal()}
@@ -619,8 +623,10 @@ const Employees = () => {
           <table className="w-full text-left border-collapse border border-slate-200">
             <thead>
               <tr className="bg-slate-50/50">
-                <th className="px-6 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest border border-slate-200">Employee Details</th>
-                <th className="px-6 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest border border-slate-200">Contact</th>
+                <th className="px-6 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest text-center border border-slate-200">Employee Details</th>
+                <th className="px-6 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest text-center border border-slate-200">Contact</th>
+                <th className="px-4 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest text-center border border-slate-200">Dept / Designation</th>
+                <th className="px-4 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest text-center border border-slate-200">Shift</th>
                 <th className="px-4 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest text-center border border-slate-200">Location</th>
                 <th className="px-4 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest text-center border border-slate-200">Joined</th>
                 <th className="px-4 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest text-center border border-slate-200">Status</th>
@@ -630,12 +636,12 @@ const Employees = () => {
             <tbody className="divide-y divide-slate-50">
               {filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="py-20 text-center">
+                  <td colSpan="8" className="py-20 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300">
                         <Users size={24} />
                       </div>
-                      <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">No staff members found</p>
+                      <p className="text-slate-400 font-bold text-sm  tracking-widest">No staff members found</p>
                     </div>
                   </td>
                 </tr>
@@ -648,12 +654,12 @@ const Employees = () => {
                         <div className="flex items-center gap-4">
                           <div
                             onClick={() => navigate(`/employee/${emp._id}`)}
-                            className="w-11 h-11 rounded-[14px] bg-slate-100 flex items-center justify-center text-slate-400 overflow-hidden border border-slate-200 shadow-sm cursor-pointer hover:border-indigo-300 transition-all"
+                            className="w-11 h-11 rounded-[14px] bg-slate-100 flex items-center justify-center text-slate-400 overflow-hidden border border-slate-200 shadow-sm cursor-pointer hover:border-indigo-300 transition-all flex-shrink-0"
                           >
                             {emp.profileImage ? (
                               <img src={getFullImageUrl(emp.profileImage)} alt="" className="w-full h-full object-cover" />
                             ) : (
-                              <div className="w-full h-full bg-indigo-500 flex items-center justify-center text-white text-sm font-bold uppercase">
+                              <div className="w-full h-full bg-indigo-500 flex items-center justify-center text-white text-sm font-bold ">
                                 {emp.name.charAt(0)}
                               </div>
                             )}
@@ -661,21 +667,35 @@ const Employees = () => {
                           <div className="flex flex-col">
                             <span
                               onClick={() => navigate(`/employee/${emp._id}`)}
-                              className="text-sm font-bold text-slate-900 cursor-pointer hover:text-indigo-600 transition-colors"
+                              className="text-sm font-bold text-slate-900 cursor-pointer hover:text-indigo-600 transition-colors leading-tight"
                             >
                               {emp.name}
                             </span>
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="text-[9px] font-extrabold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded uppercase tracking-tighter border border-indigo-100/50">
-                                  {emp.designation || 'Staff'}
-                                </span>
-                                <span className="text-[9px] font-bold text-slate-400">/ {emp.department || 'N/A'}</span>
-                                <span className="text-[9px] font-bold text-slate-500">
-                                  • {emp.shift?.shiftName || (typeof emp.shift === 'string' ? shifts.find(s => s._id === emp.shift)?.shiftName : null) || 'NA'}
-                                </span>
-                              </div>
+                            <div
+                              className="flex items-center gap-1 mt-0.5 cursor-pointer group/idcopy"
+                              onClick={() => handleCopy(emp._id)}
+                              title="Click to copy ID"
+                            >
+                              <span className="text-[9px] font-mono font-bold text-slate-400 group-hover/idcopy:text-indigo-500 transition-colors">
+                                #{emp._id.slice(-8).toUpperCase()}
+                              </span>
+                              <Copy size={8} className="text-slate-300 group-hover/idcopy:text-indigo-400 transition-colors" />
+                            </div>
                           </div>
                         </div>
+                      </td>
+                      <td className="px-6 py-4 border border-slate-200">
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-[10px] font-extrabold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100/50 tracking-tight">
+                            {emp.designation || 'N/A'}
+                          </span>
+                          <span className="text-[9px] font-bold text-slate-500 text-center">{emp.department || 'N/A'}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-center border border-slate-200">
+                        <span className="text-[10px] font-bold text-slate-700 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
+                          {emp.shift?.name || (typeof emp.shift === 'string' ? shifts.find(s => s._id === emp.shift)?.name : null) || 'NA'}
+                        </span>
                       </td>
                       <td className="px-6 py-4 border border-slate-200">
                         <div className="space-y-1.5">
@@ -775,7 +795,7 @@ const Employees = () => {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white w-full max-w-md rounded-3xl shadow-2xl flex flex-col my-8 overflow-hidden"
+              className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl flex flex-col my-8 overflow-hidden"
             >
               <div className="bg-white px-8 py-6 border-b border-slate-100 flex justify-between items-center">
                 <div>
@@ -1198,7 +1218,7 @@ const Employees = () => {
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-slate-900 tracking-tight">Bulk Upload Format</h3>
-                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Excel / CSV Column Guide</p>
+                    <p className="text-[11px] font-bold text-slate-400  tracking-widest">Excel / CSV Column Guide</p>
                   </div>
                 </div>
                 <button
@@ -1221,9 +1241,9 @@ const Employees = () => {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-slate-50">
-                        <th className="px-4 py-3 text-left text-[11px] font-bold text-slate-400 uppercase tracking-widest">Column Name</th>
-                        <th className="px-4 py-3 text-left text-[11px] font-bold text-slate-400 uppercase tracking-widest">Example</th>
-                        <th className="px-4 py-3 text-left text-[11px] font-bold text-slate-400 uppercase tracking-widest">Description</th>
+                        <th className="px-4 py-3 text-left text-[11px] font-bold text-slate-400  tracking-widest">Column Name</th>
+                        <th className="px-4 py-3 text-left text-[11px] font-bold text-slate-400  tracking-widest">Example</th>
+                        <th className="px-4 py-3 text-left text-[11px] font-bold text-slate-400  tracking-widest">Description</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
@@ -1299,39 +1319,39 @@ const Employees = () => {
                     </thead>
                     <tbody className="text-slate-700 font-bold">
                       <tr>
-                        <td className="py-3 text-indigo-600 border border-slate-200 px-2 uppercase">name</td>
+                        <td className="py-3 text-indigo-600 border border-slate-200 px-2 ">name</td>
                         <td className="py-3 border border-slate-200 px-2 text-xs">John Doe</td>
-                        <td className="py-3 text-[11px] font-medium text-slate-500 border border-slate-200 px-2 italic">Full name of employee</td>
+                        <td className="py-3 text-[11px] font-medium text-slate-500 border border-slate-200 px-2 ">Full name of employee</td>
                       </tr>
                       <tr>
-                        <td className="py-3 text-indigo-600 border border-slate-200 px-2 uppercase">email</td>
+                        <td className="py-3 text-indigo-600 border border-slate-200 px-2 ">email</td>
                         <td className="py-3 border border-slate-200 px-2 text-xs">john@company.com</td>
-                        <td className="py-3 text-[11px] font-medium text-slate-500 border border-slate-200 px-2 italic">Official email address</td>
+                        <td className="py-3 text-[11px] font-medium text-slate-500 border border-slate-200 px-2 ">Official email address</td>
                       </tr>
                       <tr>
-                        <td className="py-3 text-indigo-600 border border-slate-200 px-2 uppercase">mobile</td>
+                        <td className="py-3 text-indigo-600 border border-slate-200 px-2 ">mobile</td>
                         <td className="py-3 border border-slate-200 px-2 text-xs">9876543210</td>
-                        <td className="py-3 text-[11px] font-medium text-slate-500 border border-slate-200 px-2 italic">10-digit mobile number</td>
+                        <td className="py-3 text-[11px] font-medium text-slate-500 border border-slate-200 px-2 ">10-digit mobile number</td>
                       </tr>
                       <tr>
-                        <td className="py-3 text-indigo-600 border border-slate-200 px-2 uppercase">password</td>
+                        <td className="py-3 text-indigo-600 border border-slate-200 px-2 ">password</td>
                         <td className="py-3 border border-slate-200 px-2 text-xs">pass123</td>
-                        <td className="py-3 text-[11px] font-medium text-slate-500 border border-slate-200 px-2 italic">Initial login password</td>
+                        <td className="py-3 text-[11px] font-medium text-slate-500 border border-slate-200 px-2 ">Initial login password</td>
                       </tr>
                       <tr>
-                        <td className="py-3 text-indigo-600 border border-slate-200 px-2 uppercase">department</td>
+                        <td className="py-3 text-indigo-600 border border-slate-200 px-2 ">department</td>
                         <td className="py-3 border border-slate-200 px-2 text-xs">IT</td>
-                        <td className="py-3 text-[11px] font-medium text-slate-500 border border-slate-200 px-2 italic">Assigned department</td>
+                        <td className="py-3 text-[11px] font-medium text-slate-500 border border-slate-200 px-2 ">Assigned department</td>
                       </tr>
                       <tr>
-                        <td className="py-3 text-indigo-600 border border-slate-200 px-2 uppercase">designation</td>
+                        <td className="py-3 text-indigo-600 border border-slate-200 px-2 ">designation</td>
                         <td className="py-3 border border-slate-200 px-2 text-xs">Developer</td>
-                        <td className="py-3 text-[11px] font-medium text-slate-500 border border-slate-200 px-2 italic">Assigned designation</td>
+                        <td className="py-3 text-[11px] font-medium text-slate-500 border border-slate-200 px-2 ">Assigned designation</td>
                       </tr>
                       <tr>
-                        <td className="py-3 text-indigo-600 border border-slate-200 px-2 uppercase">gender</td>
+                        <td className="py-3 text-indigo-600 border border-slate-200 px-2 ">gender</td>
                         <td className="py-3 border border-slate-200 px-2 text-xs">Male</td>
-                        <td className="py-3 text-[11px] font-medium text-slate-500 border border-slate-200 px-2 italic">Male / Female</td>
+                        <td className="py-3 text-[11px] font-medium text-slate-500 border border-slate-200 px-2 ">Male / Female</td>
                       </tr>
                     </tbody>
                   </table>

@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const ShiftSchema = new mongoose.Schema({
-  shiftName: {
+  name: {
     type: String,
     required: [true, 'Please add a shift name'],
     unique: true,
@@ -14,7 +14,7 @@ const ShiftSchema = new mongoose.Schema({
     type: String, // HH:mm format
     required: true,
   },
-  graceMinutes: {
+  gracePeriod: {
     type: Number, // in minutes
     default: 15,
   },
@@ -22,15 +22,11 @@ const ShiftSchema = new mongoose.Schema({
     type: String, // HH:mm format - Punching in after this marks Half Day
     default: "11:00",
   },
-  minHoursFullDay: {
+  workingHours: {
     type: Number, // in hours
-    default: 8,
+    default: 9,
   },
-  minHoursHalfDay: {
-    type: Number, // in hours
-    default: 4,
-  },
-  weeklyOffs: {
+  weeklyOff: {
     type: [String],
     default: ['Sunday'],
     enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -38,6 +34,12 @@ const ShiftSchema = new mongoose.Schema({
   isNightShift: {
     type: Boolean,
     default: false,
+  },
+  lateRules: {
+    type: String,
+  },
+  halfDayRules: {
+    type: String,
   },
   status: {
     type: String,

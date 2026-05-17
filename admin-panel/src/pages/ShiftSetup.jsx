@@ -5,7 +5,6 @@ import {
   ChevronRight,
   Download,
   Edit2,
-  FileSpreadsheet,
   Loader2,
   Plus,
   Save,
@@ -30,22 +29,19 @@ const ShiftSetup = () => {
   const [deleteConfirm, setDeleteConfirm] = useState({ show: false, id: null });
 
   const [formData, setFormData] = useState({
-    shiftName: '',
+    name: '',
+    lateRules: '',
+    halfDayRules: '',
     startTime: '09:00',
     endTime: '18:00',
-    graceMinutes: 15,
+    gracePeriod: 15,
     halfDayAfter: '11:00',
-    minHoursFullDay: 8,
-    minHoursHalfDay: 4,
+
     workingHours: 9,
-    weeklyOffs: ['Sunday'],
+    weeklyOff: ['Sunday'],
     isNightShift: false,
     status: 'active'
   });
-
-  useEffect(() => {
-    fetchData();
-  }, []);
 
   const fetchData = async () => {
     try {
@@ -57,18 +53,39 @@ const ShiftSetup = () => {
       setShifts(shiftsRes.data.data);
       setEmployees(empRes.data.data);
     } catch (err) {
+      console.error(err);
       toast.error('Failed to load data');
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchData();
+  }, []);
+
+  const calculateEndTime = (start, hours) => {
+    if (!start || hours === undefined || hours === null) return '';
+    const [h, m] = start.split(':').map(Number);
+    const hoursToAdd = parseFloat(hours) || 0;
+    const totalMinutes = h * 60 + m + hoursToAdd * 60;
+    const endH = Math.floor(totalMinutes / 60) % 24;
+    const endM = Math.round(totalMinutes % 60);
+    return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+  };
+
   const employeesByShift = useMemo(() => {
     const map = {};
-    shifts.forEach(s => map[s._id] = 0);
+    shifts.forEach(s => {
+      if (s && s._id) map[s._id] = 0;
+    });
     employees.forEach(emp => {
+      if (!emp) return;
       const sId = typeof emp.shift === 'string' ? emp.shift : emp.shift?._id;
-      if (sId && map[sId] !== undefined) map[sId]++;
+      if (sId) {
+        map[sId] = (map[sId] || 0) + 1;
+      }
     });
     return map;
   }, [shifts, employees]);
@@ -86,30 +103,33 @@ const ShiftSetup = () => {
     if (shift) {
       setEditingShift(shift);
       setFormData({
-        shiftName: shift.shiftName,
+        name: shift.name,
+        lateRules: shift.lateRules || '',
+        halfDayRules: shift.halfDayRules || '',
         startTime: shift.startTime,
         endTime: shift.endTime,
-        graceMinutes: shift.graceMinutes,
+        gracePeriod: shift.gracePeriod,
         halfDayAfter: shift.halfDayAfter || '11:00',
-        minHoursFullDay: shift.minHoursFullDay || 8,
-        minHoursHalfDay: shift.minHoursHalfDay || 4,
+
         workingHours: shift.workingHours || 9,
-        weeklyOffs: shift.weeklyOffs || ['Sunday'],
+        weeklyOff: shift.weeklyOffs || ['Sunday'],
         isNightShift: shift.isNightShift || false,
         status: shift.status || 'active'
       });
     } else {
       setEditingShift(null);
       setFormData({
-        shiftName: '',
+        name: '',
+        lateRules: '',
+        halfDayRules: '',
         startTime: '09:00',
         endTime: '18:00',
-        graceMinutes: 15,
+        gracePeriod: 15,
         halfDayAfter: '11:00',
         minHoursFullDay: 8,
         minHoursHalfDay: 4,
         workingHours: 9,
-        weeklyOffs: ['Sunday'],
+        weeklyOff: ['Sunday'],
         isNightShift: false,
         status: 'active'
       });
@@ -153,7 +173,7 @@ const ShiftSetup = () => {
   const exportToCSV = () => {
     const headers = ['Shift Name', 'Start Time', 'End Time', 'Status', 'Employee Count'];
     const data = shifts.map(s => [
-      s.shiftName,
+      s.name,
       to12Hour(s.startTime),
       to12Hour(s.endTime),
       s.status,
@@ -183,6 +203,7 @@ const ShiftSetup = () => {
   const paginatedShifts = shifts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
+    <>
     <div className="space-y-6 md:space-y-8 animate-fade-up">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -213,9 +234,9 @@ const ShiftSetup = () => {
             <thead>
               <tr className="bg-slate-50/50">
                 <th className="px-6 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest border border-slate-200">Id</th>
-                <th className="px-6 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest border border-slate-200">Shift Name</th>
-                <th className="px-6 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest text-center border border-slate-200">Start Time</th>
-                <th className="px-6 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest text-center border border-slate-200">End Time</th>
+                <th className="px-6 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest border border-slate-200">Shift Details</th>
+                <th className="px-6 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest text-center border border-slate-200">Late Rule</th>
+                <th className="px-6 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest text-center border border-slate-200">Half Day Rule</th>
                 <th className="px-6 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest text-center border border-slate-200">Span to next Day</th>
                 <th className="px-6 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest text-center border border-slate-200">Status</th>
                 <th className="px-6 py-4 text-[10px] font-extrabold text-indigo-600 tracking-widest text-center border border-slate-200">Employees</th>
@@ -228,9 +249,14 @@ const ShiftSetup = () => {
                   <td className="px-6 py-4 text-xs font-bold text-slate-400 border border-slate-200">
                     {2431 + ((currentPage - 1) * itemsPerPage) + idx}
                   </td>
-                  <td className="px-6 py-4 text-sm font-bold text-slate-900 border border-slate-200">{shift.shiftName}</td>
-                  <td className="px-6 py-4 text-center text-xs font-bold text-slate-600 border border-slate-200">{to12Hour(shift.startTime)}</td>
-                  <td className="px-6 py-4 text-center text-xs font-bold text-slate-600 border border-slate-200">{to12Hour(shift.endTime)}</td>
+                  <td className="px-6 py-4 border border-slate-200">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold text-slate-900">{shift.name}</span>
+                      <span className="text-[10px] font-bold text-slate-500 mt-1">{to12Hour(shift.startTime)} — {to12Hour(shift.endTime)}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-xs font-medium text-slate-600 border border-slate-200 max-w-[200px] truncate" title={shift.lateRules}>{shift.lateRules || '-'}</td>
+                  <td className="px-6 py-4 text-xs font-medium text-slate-600 border border-slate-200 max-w-[200px] truncate" title={shift.halfDayRules}>{shift.halfDayRules || '-'}</td>
                   <td className="px-6 py-4 text-center border border-slate-200">
                     <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-slate-50 border border-slate-100 text-slate-500">
                       {shift.isNightShift ? 'Yes' : 'No'}
@@ -285,69 +311,224 @@ const ShiftSetup = () => {
           </div>
         )}
       </div>
+    </div>
 
-      <AnimatePresence>
+    <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 z-[2000] flex items-start justify-center bg-slate-900/40 backdrop-blur-md p-4 overflow-y-auto">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.98, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white w-full max-w-lg rounded-3xl shadow-2xl flex flex-col my-8 overflow-hidden"
+              className="bg-white w-full max-w-4xl max-h-[95vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
             >
-              <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-white z-10 shrink-0">
-                <h3 className="text-xl font-bold text-slate-900">{editingShift ? 'Edit Shift' : 'Add New Shift'}</h3>
-                <button onClick={() => setShowModal(false)} className="p-2 rounded-xl bg-slate-50 text-slate-400 hover:text-rose-500 transition-colors"><X size={20} /></button>
+              <div className="bg-white px-8 py-6 border-b border-slate-100 flex justify-between items-center z-10 shrink-0 sticky top-0">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900 tracking-tighter m-0">
+                    {editingShift ? 'Edit Shift' : 'Add New Shift'}
+                  </h3>
+                  <p className="text-slate-400 text-[10px] font-bold tracking-widest mt-1">
+                    Configure shift details
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 transition-all active:scale-90"
+                >
+                  <X size={20} />
+                </button>
               </div>
-              <div className="p-8 overflow-y-auto flex-1">
-                <form onSubmit={handleSaveSubmit} className="space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-slate-400 tracking-widest ">Shift Name</label>
-                    <input type="text" value={formData.shiftName} onChange={(e) => setFormData({ ...formData, shiftName: e.target.value })} required
-                      className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none text-sm font-bold" />
+              <form onSubmit={handleSaveSubmit} className="flex-1 overflow-y-auto p-8 space-y-6">
+                <div className="space-y-3">
+                  <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Shift Name</label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g., Morning Shift"
+                    required
+                    className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1 ">Late Rules</label>
+                    <textarea
+                      value={formData.lateRules}
+                      onChange={(e) => setFormData({ ...formData, lateRules: e.target.value })}
+                      placeholder="Describe rules for late arrivals (e.g., 3 late marks = 1 leave)"
+                      className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800 min-h-[80px] resize-none shadow-sm"
+                    />
                   </div>
-                  <div className="grid grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-[11px] font-bold text-slate-400 tracking-widest ">Start Time</label>
-                      <input type="time" value={formData.startTime} onChange={(e) => setFormData({ ...formData, startTime: e.target.value })} required
-                        className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none text-sm font-bold" />
+                  <div className="space-y-3">
+                    <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1 ">Half Day Rules</label>
+                    <textarea
+                      value={formData.halfDayRules}
+                      onChange={(e) => setFormData({ ...formData, halfDayRules: e.target.value })}
+                      placeholder="Describe rules for half days (e.g., Punch after 11:30 AM = Half Day)"
+                      className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800 min-h-[80px] resize-none shadow-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Start Time (12h format)</label>
+                    <div className="relative group">
+                      <input
+                        type="time"
+                        value={formData.startTime}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormData(prev => ({
+                            ...prev,
+                            startTime: val,
+                            endTime: calculateEndTime(val, prev.workingHours)
+                          }));
+                        }}
+                        required
+                        className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-4 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800"
+                      />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-indigo-600 bg-white px-2 py-1 rounded-md shadow-sm border border-indigo-50">
+                        {to12Hour(formData.startTime)}
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[11px] font-bold text-slate-400 tracking-widest ">Target Working Hours</label>
-                      <input type="number" step="0.5" value={formData.workingHours} onChange={(e) => setFormData({ ...formData, workingHours: parseFloat(e.target.value) })} required
-                        className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none text-sm font-bold" />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">End Time (12h format)</label>
+                    <div className="relative group">
+                      <input
+                        type="time"
+                        value={formData.endTime}
+                        onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                        required
+                        readOnly
+                        className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-4 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-400 cursor-not-allowed"
+                      />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-indigo-600 bg-white px-2 py-1 rounded-md shadow-sm border border-indigo-50">
+                        {to12Hour(formData.endTime)}
+                      </div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-[11px] font-bold text-slate-400 tracking-widest ">Min Hours (Full Day)</label>
-                      <input type="number" step="0.5" value={formData.minHoursFullDay} onChange={(e) => setFormData({ ...formData, minHoursFullDay: parseFloat(e.target.value) })} required
-                        className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none text-sm font-bold shadow-sm" />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Half Day After (12h format)</label>
+                    <div className="relative group">
+                      <input
+                        type="time"
+                        value={formData.halfDayAfter}
+                        onChange={(e) => setFormData({ ...formData, halfDayAfter: e.target.value })}
+                        required
+                        className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-4 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800"
+                      />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-indigo-600 bg-white px-2 py-1 rounded-md shadow-sm border border-indigo-50">
+                        {to12Hour(formData.halfDayAfter)}
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-[11px] font-bold text-slate-400 tracking-widest ">Min Hours (Half Day)</label>
-                      <input type="number" step="0.5" value={formData.minHoursHalfDay} onChange={(e) => setFormData({ ...formData, minHoursHalfDay: parseFloat(e.target.value) })} required
-                        className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none text-sm font-bold shadow-sm" />
-                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-slate-400 tracking-widest ">Grace Minutes</label>
-                    <input type="number" value={formData.graceMinutes} onChange={(e) => setFormData({ ...formData, graceMinutes: parseInt(e.target.value) })} required
-                      className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none text-sm font-bold shadow-sm" />
+                  <div className="space-y-3">
+                    <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Target Working Hours</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={formData.workingHours}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setFormData(prev => ({
+                          ...prev,
+                          workingHours: val,
+                          endTime: calculateEndTime(prev.startTime, val)
+                        }));
+                      }}
+                      required
+                      className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800"
+                    />
                   </div>
-                  <div className="flex items-center gap-2 pb-4">
-                    <input type="checkbox" id="isNightShift" checked={formData.isNightShift} onChange={(e) => setFormData({ ...formData, isNightShift: e.target.checked })}
-                      className="w-4 h-4 rounded border-slate-300 text-indigo-600" />
-                    <label htmlFor="isNightShift" className="text-sm font-bold text-slate-600">Span to next Day (Night Shift)</label>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Grace Period (Mins)</label>
+                  <div className="relative group">
+                    <input
+                      type="number"
+                      value={formData.gracePeriod}
+                      onChange={(e) => setFormData({ ...formData, gracePeriod: parseInt(e.target.value) })}
+                      required
+                      className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800"
+                      placeholder="e.g., 15"
+                    />
                   </div>
-                  <div className="pt-2 border-t border-slate-100">
-                    <button type="submit" disabled={saving} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all">
-                      {saving ? <Loader2 className="animate-spin inline mr-2" /> : <Save className="inline mr-2" />}
-                      {editingShift ? 'Update Shift' : 'Create Shift'}
-                    </button>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Weekly Off</label>
+                  <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+                    {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => {
+                          const current = [...formData.weeklyOff];
+                          if (current.includes(day)) {
+                            setFormData({ ...formData, weeklyOff: current.filter(d => d !== day) });
+                          } else {
+                            setFormData({ ...formData, weeklyOff: [...current, day] });
+                          }
+                        }}
+                        className={`flex-1 min-w-[70px] px-3 py-3 rounded-xl text-[10px] font-bold transition-all border ${formData.weeklyOff.includes(day) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-500 border-slate-100 hover:border-indigo-100'}`}
+                      >
+                        {day.slice(0, 3)}
+                      </button>
+                    ))}
                   </div>
-                </form>
-              </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="isNightShift"
+                    checked={formData.isNightShift}
+                    onChange={(e) => setFormData({ ...formData, isNightShift: e.target.checked })}
+                    className="w-5 h-5 rounded-lg border-slate-300 text-indigo-600 focus:ring-indigo-500 transition-all cursor-pointer"
+                  />
+                  <label htmlFor="isNightShift" className="text-[13px] font-bold text-slate-700 cursor-pointer select-none">
+                    Span to next Day (Night Shift)
+                  </label>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1">Status</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800 appearance-none cursor-pointer"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+
+                <div className="flex gap-4 mt-8 pt-6 border-t border-slate-50">
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="flex-1 bg-slate-50 text-slate-500 font-bold py-4 rounded-2xl hover:bg-slate-100 transition-all active:scale-95"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="flex-[2] bg-indigo-600 text-white font-bold py-4 rounded-2xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50"
+                  >
+                    {saving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
+                    {saving ? 'Saving...' : (editingShift ? 'Save Changes' : 'Add Shift')}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}
@@ -355,9 +536,9 @@ const ShiftSetup = () => {
 
       <AnimatePresence>
         {deleteConfirm.show && (
-          <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 flex flex-col items-center text-center">
+              className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col items-center text-center">
               <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-4">
                 <AlertTriangle size={32} />
               </div>
@@ -377,7 +558,7 @@ const ShiftSetup = () => {
           </div>
         )}
       </AnimatePresence>
-    </div>
+    </>
   );
 };
 

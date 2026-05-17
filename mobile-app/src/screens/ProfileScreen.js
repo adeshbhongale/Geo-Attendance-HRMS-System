@@ -165,7 +165,7 @@ const ProfileScreen = ({ navigation }) => {
       <StatusBar barStyle="light-content" />
 
       {/* Top Header Bar (No TruCode) */}
-      <View className="bg-blue-600 pt-12 pb-24 px-6 flex-row items-center justify-between">
+      <View className="bg-blue-600 pt-10 pb-24 px-6 flex-row items-center justify-between">
         <View className="w-6" />
         <Text className="text-white font-bold text-lg">Profile</Text>
         <View className="w-6" />
@@ -186,18 +186,38 @@ const ProfileScreen = ({ navigation }) => {
               )}
             </View>
 
-            <Text className="text-2xl font-bold text-slate-800 text-center mt-4">{user?.name || 'User'}</Text>
+            <Text className="text-2xl font-bold text-slate-800 text-center mt-2">{user?.name || 'User'}</Text>
             <View className="bg-slate-100 px-3 rounded-lg">
               <Text className="text-[10px] font-bold text-slate-500">Emp ID: {user?._id}</Text>
             </View>
-            <Text className="text-slate-500 font-bold text-sm mt-1">
-              {user?.department}
-            </Text>
-            <Text className="text-slate-500 font-bold text-sm mt-1">
-              {user?.designation}
-            </Text>
-            <Text className="text-slate-400 font-bold text-xs mt-1">{user?.email}</Text>
-            <Text className="text-slate-400 font-bold text-xs">{user?.mobile}</Text>
+            {/* Department + Designation */}
+            <View className="flex-row items-center justify-center gap-3 mt-2 flex-wrap">
+              <Text className="text-slate-500 font-bold text-sm">
+                {user?.department}
+              </Text>
+
+              <View className="w-1 h-1 rounded-full bg-slate-400" />
+
+              <Text className="text-slate-500 font-bold text-sm">
+                {user?.designation}
+              </Text>
+            </View>
+
+            {/* Email + Mobile */}
+            <View className="flex-row items-center justify-center gap-3 mt-2 flex-wrap px-4">
+              <Text
+                numberOfLines={1}
+                className="text-slate-600 font-bold text-sm"
+              >
+                {user?.email}
+              </Text>
+
+              <View className="w-1 h-1 rounded-full bg-slate-400" />
+
+              <Text className="text-slate-600 font-bold text-sm">
+                {user?.mobile}
+              </Text>
+            </View>
 
             <TouchableOpacity
               onPress={() => {
@@ -219,35 +239,60 @@ const ProfileScreen = ({ navigation }) => {
 
         {/* Simplified Dashboard (2 boxes) */}
         <View className="px-6 mb-8">
-          <Text className="text-slate-400 font-bold text-[10px] tracking-widest mb-4 ml-1">My Activity</Text>
+          <Text className="text-slate-700 font-bold text-[10px] tracking-widest mb-4 text-center">
+            My Activity
+          </Text>
 
           <View className="flex-row justify-between mb-4">
+
+            {/* Monthly Attendance */}
             <TouchableOpacity
               onPress={() => navigateGlobal('MonthlyViewScreen')}
-              className="bg-white w-[48%] p-6 rounded-3xl shadow-sm border border-slate-100"
+              className="bg-white w-[48%] p-6 rounded-3xl shadow-sm border border-slate-100 items-center"
             >
               <View className="w-12 h-12 bg-indigo-50 rounded-2xl items-center justify-center mb-4">
                 <Calendar size={24} color="#4f46e5" />
               </View>
-              <Text className="text-slate-900 font-bold text-base">Monthly</Text>
-              <Text className="text-slate-900 font-bold text-base">Attendance</Text>
-              <View className="mt-4 flex-row items-center">
-                <Text className="text-indigo-600 font-bold text-xs">VIEW ALL</Text>
+
+              <Text className="text-slate-900 font-bold text-base text-center">
+                Monthly
+              </Text>
+
+              <Text className="text-slate-900 font-bold text-base text-center">
+                Attendance
+              </Text>
+
+              <View className="mt-4 flex-row items-center justify-center">
+                <Text className="text-indigo-600 font-bold text-xs">
+                  VIEW ALL
+                </Text>
+
                 <ChevronRight size={14} color="#4f46e5" />
               </View>
             </TouchableOpacity>
 
+            {/* Track Location */}
             <TouchableOpacity
               onPress={() => navigateGlobal('TrackMyRoute')}
-              className="bg-white w-[48%] p-6 rounded-3xl shadow-sm border border-slate-100"
+              className="bg-white w-[48%] p-6 rounded-3xl shadow-sm border border-slate-100 items-center"
             >
               <View className="w-12 h-12 bg-rose-50 rounded-2xl items-center justify-center mb-4">
                 <MapPin size={24} color="#e11d48" />
               </View>
-              <Text className="text-slate-900 font-bold text-base">Track</Text>
-              <Text className="text-slate-900 font-bold text-base">Location</Text>
-              <View className="mt-4 flex-row items-center">
-                <Text className="text-rose-600 font-bold text-xs">DAY WISE</Text>
+
+              <Text className="text-slate-900 font-bold text-base text-center">
+                Track
+              </Text>
+
+              <Text className="text-slate-900 font-bold text-base text-center">
+                Location
+              </Text>
+
+              <View className="mt-4 flex-row items-center justify-center">
+                <Text className="text-rose-600 font-bold text-xs">
+                  DAY WISE
+                </Text>
+
                 <ChevronRight size={14} color="#e11d48" />
               </View>
             </TouchableOpacity>

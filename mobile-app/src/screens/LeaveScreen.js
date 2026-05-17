@@ -141,11 +141,10 @@ const LeaveScreen = ({ navigation }) => {
       setTimeout(() => setToast(prev => ({ ...prev, show: false })), 2000);
       return;
     }
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const selStart = new Date(form.startDate);
-    selStart.setHours(0, 0, 0, 0);
-    if (selStart < today) {
+    // ── Past date check using local date strings (avoids UTC timezone blocking 'today' in IST) ──
+    const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local timezone
+    const selStartStr = `${form.startDate.getFullYear()}-${String(form.startDate.getMonth() + 1).padStart(2, '0')}-${String(form.startDate.getDate()).padStart(2, '0')}`;
+    if (selStartStr < todayStr) {
       setToast({ show: true, message: 'You cannot apply for leave on past dates.', type: 'error' });
       setTimeout(() => setToast(prev => ({ ...prev, show: false })), 2000);
       return;
@@ -186,12 +185,12 @@ const LeaveScreen = ({ navigation }) => {
       setModalVisible(false);
       setForm({
         id: null,
-        leaveType: fetchedQuotas[0]?.name || '',
+        leaveType: quotas[0]?.name || '',
         startDate: new Date(),
         endDate: new Date(),
-        duration: 'Full Day',
-        startTime: '09:00',
-        endTime: '13:00',
+        duration: 'NA',
+        startTime: 'NA',
+        endTime: 'NA',
         reason: ''
       });
       fetchLeaves();
@@ -234,9 +233,9 @@ const LeaveScreen = ({ navigation }) => {
       leaveType: item.leaveType,
       startDate: new Date(item.startDate),
       endDate: new Date(item.endDate),
-      duration: item.duration || 'Full Day',
-      startTime: item.startTime || '09:00',
-      endTime: item.endTime || '13:00',
+      duration: item.duration || 'NA',
+      startTime: item.startTime || 'NA',
+      endTime: item.endTime || 'NA',
       reason: item.reason || '',
     });
     setModalVisible(true);
@@ -246,6 +245,7 @@ const LeaveScreen = ({ navigation }) => {
     switch (status) {
       case 'Approved': return { bg: '#ecfdf5', text: '#059669' };
       case 'Rejected': return { bg: '#fff1f2', text: '#e11d48' };
+      case 'Cancelled': return { bg: '#f4f4f5', text: '#52525b' };
       default: return { bg: '#fffbeb', text: '#d97706' };
     }
   };
@@ -278,7 +278,6 @@ const LeaveScreen = ({ navigation }) => {
           </TouchableOpacity>
           <View>
             <Text className="text-2xl font-extrabold text-slate-900 tracking-tight">Leaves</Text>
-            <Text className="text-slate-400 font-bold text-xs">{selectedQuota ? `${selectedQuota.limitType} Limit: ${selectedQuota.limit}` : 'Loading...'}</Text>
           </View>
         </View>
         <View className="flex-row items-center gap-3">
@@ -300,14 +299,56 @@ const LeaveScreen = ({ navigation }) => {
         </View>
       </View>
 
-      {/* Balance Banner */}
-      <View className="bg-indigo-600 px-6 py-4 flex-row justify-between items-center">
-        <View>
-          <Text className="text-white font-bold text-sm">{form.leaveType} Balance</Text>
-          <Text className="text-indigo-100 text-[10px] mt-0.5">Used: {balance.used} / {balance.limit} ({selectedQuota?.limitType})</Text>
-        </View>
-        <View className="bg-white/20 px-4 py-2 rounded-xl border border-white/20">
-          <Text className="text-white font-bold text-lg">{balance.remaining} Left</Text>
+      {/* Balance Banner — dynamic tabs from backend quotas */}
+      <View style={{ backgroundColor: '#4f46e5' }}>
+        {/* Leave Type Tabs */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, gap: 8, flexDirection: 'row' }}
+        >
+          {quotas.map((q) => {
+            const isActive = selectedQuota?.name === q.name;
+            return (
+              <TouchableOpacity
+                key={q.name}
+                onPress={() => {
+                  setSelectedQuota(q);
+                  setBalance({ used: q.used, limit: q.limit, remaining: q.balance });
+                  setForm(prev => ({ ...prev, leaveType: q.name }));
+                }}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 8,
+                  borderRadius: 20,
+                  backgroundColor: isActive ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.08)',
+                  borderWidth: 1,
+                  borderColor: isActive ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.15)',
+                  marginBottom: 4,
+                }}
+              >
+                <Text style={{ color: isActive ? '#fff' : 'rgba(255,255,255,0.65)', fontWeight: 'bold', fontSize: 11 }}>
+                  {q.name.replace(' Leave', '')}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Balance Row */}
+        <View style={{ paddingHorizontal: 24, paddingVertical: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View>
+            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>
+              {selectedQuota?.name || '—'} Balance
+            </Text>
+            <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 10, marginTop: 2 }}>
+              Used: {balance.used} / {balance.limit}
+              {selectedQuota?.limitType ? `  •  ${selectedQuota.limitType}` : ''}
+            </Text>
+          </View>
+          <View style={{ backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' }}>
+            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18 }}>{balance.remaining} Left</Text>
+          </View>
         </View>
       </View>
 

@@ -97,9 +97,14 @@ const AttendanceDashboard = () => {
     );
   }
 
+  const todayStr = getTodayStr();
+  const isFuture = startDate > todayStr;
+  const isSunday = new Date(startDate).getDay() === 0;
+  const isSingleDay = startDate === endDate;
+  const shouldSkipAbsent = (isSingleDay && isSunday) || isFuture;
   const attendanceDetails = [
     { name: 'Present', value: data?.attendanceDetails?.present || 0, color: '#10b981' },
-    { name: 'Absent', value: data?.attendanceDetails?.absent || 0, color: '#f0180cff' },
+    { name: 'Absent', value: shouldSkipAbsent ? 0 : (data?.attendanceDetails?.absent || 0), color: '#f0180cff' },
     { name: 'OnLeave', value: data?.attendanceDetails?.onLeave || 0, color: '#f59e0b' },
     { name: 'UpcomingShift', value: data?.attendanceDetails?.upcomingShift || 0, color: '#3b82f6' }
   ];
@@ -349,7 +354,7 @@ const AttendanceDashboard = () => {
               </PieChart>
             </ResponsiveContainer>
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span className="text-4xl font-bold text-slate-700">{data?.attendanceDetails?.total || 0}</span>
+              <span className="text-4xl font-bold text-slate-700">{Math.max(0, shouldSkipAbsent ? (data?.attendanceDetails?.total || 0) - (data?.attendanceDetails?.absent || 0) : (data?.attendanceDetails?.total || 0))}</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4 mt-8 px-4">
@@ -454,9 +459,9 @@ const AttendanceDashboard = () => {
                         <span className="text-[11px] font-bold text-indigo-600 hover:underline cursor-pointer">{stat.name}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-center text-[11px] font-bold text-slate-600">{stat.total}</td>
+                    <td className="px-6 py-4 text-center text-[11px] font-bold text-slate-600">{Math.max(0, shouldSkipAbsent ? stat.total - stat.absent : stat.total)}</td>
                     <td className="px-6 py-4 text-center text-[11px] font-bold text-indigo-600">{stat.present}</td>
-                    <td className="px-6 py-4 text-center text-[11px] font-bold text-indigo-400">{stat.absent}</td>
+                    <td className="px-6 py-4 text-center text-[11px] font-bold text-indigo-400">{shouldSkipAbsent ? 0 : stat.absent}</td>
                     <td className="px-6 py-4 text-center text-[11px] font-bold text-indigo-400">{stat.onLeave}</td>
                     <td className="px-6 py-4 text-center text-[11px] font-bold text-slate-400">{stat.upcomingShift}</td>
                     <td className="px-6 py-4 text-center text-[11px] font-bold text-indigo-400">{stat.lateComers}</td>
@@ -467,9 +472,9 @@ const AttendanceDashboard = () => {
               {/* Footer Total Row */}
               <tr className="bg-slate-50/80 font-bold">
                 <td className="px-8 py-5 text-center text-[11px] text-slate-800">Total</td>
-                <td className="px-6 py-5 text-center text-[12px] text-slate-900">{data?.attendanceDetails?.total}</td>
+                <td className="px-6 py-5 text-center text-[12px] text-slate-900">{Math.max(0, shouldSkipAbsent ? (data?.attendanceDetails?.total || 0) - (data?.attendanceDetails?.absent || 0) : (data?.attendanceDetails?.total || 0))}</td>
                 <td className="px-6 py-5 text-center text-[12px] text-slate-900">{data?.attendanceDetails?.present}</td>
-                <td className="px-6 py-5 text-center text-[12px] text-slate-900">{data?.attendanceDetails?.absent}</td>
+                <td className="px-6 py-5 text-center text-[12px] text-slate-900">{shouldSkipAbsent ? 0 : (data?.attendanceDetails?.absent || 0)}</td>
                 <td className="px-6 py-5 text-center text-[12px] text-slate-900">{data?.attendanceDetails?.onLeave}</td>
                 <td className="px-6 py-5 text-center text-[12px] text-slate-900">{data?.attendanceDetails?.upcomingShift}</td>
                 <td className="px-6 py-5 text-center text-[12px] text-slate-900">{activeStats.reduce((acc, curr) => acc + curr.lateComers, 0)}</td>

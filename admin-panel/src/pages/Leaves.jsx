@@ -105,8 +105,8 @@ const Leaves = () => {
 
   const filteredRequests = requests.filter(req => {
     const matchesSearch =
-      req.user?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      req.reason?.toLowerCase().includes(searchQuery.toLowerCase());
+      (req.user?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (req.reason || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatus = filterStatus === 'All' || req.status === filterStatus;
     const matchesType = filterType === 'All' || req.leaveType === filterType;

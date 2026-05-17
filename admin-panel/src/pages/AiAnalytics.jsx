@@ -198,7 +198,7 @@ const AiAnalytics = () => {
 
   // Combined Filtering Logic
   const filteredScores = rawEmployeeScores.filter(e => {
-    const matchesSearch = e.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (e.name || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDept = selectedDept === 'All' || e.department === selectedDept;
     return matchesSearch && matchesDept;
   });

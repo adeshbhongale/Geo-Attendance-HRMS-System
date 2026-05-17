@@ -7,6 +7,7 @@ const LeaveType = require('../models/LeaveType');
 const Location = require('../models/Location');
 const Department = require('../models/Department');
 const Designation = require('../models/Designation');
+const Holiday = require('../models/Holiday');
 const statsService = require('../services/attendanceStatsService');
 const geoService = require('../services/geoTrackingService');
 const dotenv = require('dotenv');
@@ -39,6 +40,7 @@ const seedData = async () => {
       Location.deleteMany(),
       Department.deleteMany(),
       Designation.deleteMany(),
+      Holiday.deleteMany(),
       clearCloudinaryStorage()
     ]);
     console.log('Cleared existing collections and Cloudinary storage.');
@@ -46,15 +48,15 @@ const seedData = async () => {
     // 2. Create Shifts
     const shifts = await Shift.insertMany([
       {
-        shiftName: 'Morning Shift',
+        name: 'Morning Shift',
         startTime: '08:00',
         endTime: '16:00',
         gracePeriod: 15,
-        halfDayAfter: '12:00', // Adjusted to 12:00
+        halfDayAfter: '12:00',
         workingHours: 8
       },
       {
-        shiftName: 'Evening Shift',
+        name: 'Evening Shift',
         startTime: '16:00',
         endTime: '00:00',
         gracePeriod: 15,
@@ -62,7 +64,7 @@ const seedData = async () => {
         workingHours: 8
       },
       {
-        shiftName: 'Night Shift',
+        name: 'Night Shift',
         startTime: '00:00',
         endTime: '08:00',
         gracePeriod: 15,
@@ -85,10 +87,10 @@ const seedData = async () => {
 
     // 3.5 Create Leave Types
     const leaveTypesData = await LeaveType.insertMany([
-      { name: 'Casual Leave', code: 'CL', limit: 12, genderRestriction: 'All', status: 'active' },
-      { name: 'Sick Leave', code: 'SL', limit: 12, genderRestriction: 'All', status: 'active' },
-      { name: 'Paid Leave', code: 'PL', limit: 4, genderRestriction: 'All', status: 'active' },
-      { name: 'Unpaid Leave', code: 'LWP', limit: 30, genderRestriction: 'All', status: 'active' }
+      { name: 'Casual Leave', code: 'CL', limit: 6, genderRestriction: 'All', status: 'active' },
+      { name: 'Sick Leave', code: 'SL', limit: 6, genderRestriction: 'All', status: 'active' },
+      { name: 'Paid Leave', code: 'PL', limit: 6, genderRestriction: 'All', status: 'active' },
+      { name: 'Unpaid Leave', code: 'LWP', limit: 6, genderRestriction: 'All', status: 'active' }
     ]);
     console.log(`Created ${leaveTypesData.length} Leave Types.`);
 
@@ -101,6 +103,16 @@ const seedData = async () => {
       { name: 'Logistics', description: 'Logistics & Supply Chain' }
     ]);
     console.log(`Created ${departmentsData.length} Departments.`);
+
+    // 3.65 Create Holidays
+    const holidaysData = await Holiday.insertMany([
+      { holiday_date: new Date('2026-01-01'), holiday_name: 'New Year Day', holiday_type: 'd', status: 'active' },
+      { holiday_date: new Date('2026-05-01'), holiday_name: 'Labour Day', holiday_type: 'd', status: 'active' },
+      { holiday_date: new Date('2026-08-15'), holiday_name: 'Independence Day', holiday_type: 'd', status: 'active' },
+      { holiday_date: new Date('2026-10-02'), holiday_name: 'Gandhi Jayanti', holiday_type: 'd', status: 'active' },
+      { holiday_date: new Date('2026-12-25'), holiday_name: 'Christmas', holiday_type: 'd', status: 'active' }
+    ]);
+    console.log(`Created ${holidaysData.length} Holidays.`);
 
     // 3.7 Create Designations
     const designationsData = await Designation.insertMany([
@@ -120,12 +132,13 @@ const seedData = async () => {
     const employeeData = [];
     const empCount = 14;
 
+    const hashedPassword = await bcrypt.hash('password123', 10);
+
     for (let i = 1; i <= empCount; i++) {
       const dept = deptNames[i % deptNames.length];
       const shift = shifts[i % shifts.length];
       const desig = desigNames[i % desigNames.length];
       const gender = genders[i % genders.length];
-      const hashedPassword = await bcrypt.hash('password123', 10);
 
       employeeData.push({
         name: `Employee ${i}`,
@@ -144,12 +157,11 @@ const seedData = async () => {
     }
 
     // Add Fresh Test User (Adesh Bhongale)
-    const adeshPassword = await bcrypt.hash('password123', 10);
     employeeData.push({
       name: 'Adesh Bhongale',
       email: 'adesh@example.com',
       mobile: '100000000',
-      password: adeshPassword,
+      password: hashedPassword,
       role: 'employee',
       department: 'Sales',
       designation: 'Sales Engineer',
@@ -189,7 +201,10 @@ const seedData = async () => {
           continue;
         }
 
-        if (isWeekend) continue;
+        const holidayDates = ['2026-01-01', '2026-05-01', '2026-08-15', '2026-10-02', '2026-12-25'];
+        const isHoliday = holidayDates.includes(dateStr);
+
+        if (isWeekend || isHoliday) continue;
 
         const empIndex = employees.indexOf(emp);
 
@@ -264,11 +279,11 @@ const seedData = async () => {
         }
 
         // ── FIX: Ensure 'Today' records are in the past so hours are non-zero ──
-        const now = new Date();
-        if (date.toDateString() === now.toDateString()) {
-          // If punchIn is in the future relative to now, shift it back by 8 hours
-          if (punchIn > now) {
-            punchIn.setTime(now.getTime() - (4 * 60 * 60 * 1000)); // 4 hours ago
+        if (dateStr === todayStr) {
+          // If punchIn is in the future relative to now, shift it back by 4 hours
+          const currentRealTime = new Date();
+          if (punchIn > currentRealTime) {
+            punchIn.setTime(currentRealTime.getTime() - (4 * 60 * 60 * 1000)); // 4 hours ago
           }
         }
 
@@ -517,7 +532,15 @@ const seedData = async () => {
     console.log('Seeding process finished.');
     process.exit();
   } catch (err) {
-    console.error('Seeding error:', err);
+    console.error('Seeding error:', err.message);
+    if (err.name === 'MongooseServerSelectionError') {
+      console.error('\n────────────────────────────────────────────────────────────────────────');
+      console.error('CONNECTION ERROR: Could not reach the configured MongoDB server.');
+      console.error('If your remote Railway database is unreachable, please verify your');
+      console.error('network connection, or set up a local MongoDB URI in your .env file:');
+      console.error('  MONGO_URI="mongodb://127.0.0.1:27017/geo-attendance-hrms"');
+      console.error('────────────────────────────────────────────────────────────────────────\n');
+    }
     process.exit(1);
   }
 };

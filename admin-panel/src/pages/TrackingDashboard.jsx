@@ -34,8 +34,19 @@ const TrackingDashboard = () => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
   // Read date from URL so it survives navigation (back from EmployeeTrackData)
-  const selectedDate = searchParams.get('date') || getTodayStr();
-  const setSelectedDate = (date) => setSearchParams({ date }, { replace: true });
+  const [selectedDate, setSelectedDateState] = useState(searchParams.get('date') || getTodayStr());
+  const setSelectedDate = (date) => {
+    setSelectedDateState(date);
+    setSearchParams({ date }, { replace: true });
+  };
+
+  useEffect(() => {
+    const urlDate = searchParams.get('date');
+    if (urlDate && urlDate !== selectedDate) {
+      setSelectedDateState(urlDate);
+    }
+  }, [searchParams]);
+
   const [showCalendar, setShowCalendar] = useState(false);
   const calendarRef = useRef(null);
 
@@ -102,9 +113,13 @@ const TrackingDashboard = () => {
     { name: 'Offline', value: data?.stats?.connectivity?.offline || 0, color: '#cbd5e1' }
   ];
 
+  const todayStr = getTodayStr();
+  const isFuture = selectedDate > todayStr;
+  const isSunday = new Date(selectedDate).getDay() === 0;
+  const shouldSkipAbsent = isSunday || isFuture;
   const presenceChartData = [
     { name: 'Present', value: data?.stats?.presence?.present || 0, color: '#10b981' },
-    { name: 'Absent', value: data?.stats?.presence?.absent || 0, color: '#f43f5e' },
+    { name: 'Absent', value: shouldSkipAbsent ? 0 : (data?.stats?.presence?.absent || 0), color: '#f43f5e' },
     { name: 'On Leave', value: data?.stats?.presence?.onLeave || 0, color: '#f59e0b' },
     { name: 'Neutral', value: data?.stats?.presence?.neutral || 0, color: '#6366f1' }
   ];
@@ -154,7 +169,7 @@ const TrackingDashboard = () => {
   );
 
   const filteredEmployees = data?.employees?.filter(emp =>
-    emp.user?.name?.toLowerCase().includes(searchTerm.toLowerCase()) &&
+    (emp.user?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) &&
     emp.attendanceStatus !== 'Absent'
   ) || [];
 
@@ -210,7 +225,7 @@ const TrackingDashboard = () => {
         <DonutChart
           title="Staff Presence"
           chartData={presenceChartData}
-          total={data?.stats?.total || 0}
+          total={shouldSkipAbsent ? (data?.stats?.total || 0) - (data?.stats?.presence?.absent || 0) : (data?.stats?.total || 0)}
         />
         <DonutChart
           title="Inside/Outside Geofence"

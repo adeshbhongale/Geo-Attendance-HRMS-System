@@ -44,13 +44,14 @@ exports.login = async (req, res, next) => {
     }).select('+password');
 
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      return res.status(401).json({ success: false, message: 'Invalid credentials. Please check your email/mobile and password.' });
     }
 
     // Check credentials
     if (!password) {
       return res.status(400).json({ success: false, message: 'Please provide a password' });
     }
+
 
     // Regular login logic
     if (!user.password) {
@@ -59,7 +60,7 @@ exports.login = async (req, res, next) => {
 
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      return res.status(401).json({ success: false, message: 'Invalid credentials. Please check your email/mobile and password.' });
     }
 
     return await sendTokenResponse(user, 200, res);
@@ -230,6 +231,25 @@ const sendTokenResponse = async (user, statusCode, res) => {
     options.secure = true;
   }
 
+  // Return a clean safe user object (never expose password hash)
+  const safeUser = {
+    _id: user._id,
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    mobile: user.mobile,
+    department: user.department,
+    designation: user.designation,
+    role: user.role,
+    status: user.status,
+    profileImage: user.profileImage,
+    shift: user.shift,
+    workingPlace: user.workingPlace,
+    gender: user.gender,
+    joiningDate: user.joiningDate,
+    isOnline: true,
+  };
+
   res
     .status(statusCode)
     .cookie('token', token, options)
@@ -237,14 +257,7 @@ const sendTokenResponse = async (user, statusCode, res) => {
       success: true,
       token,
       refreshToken,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        mobile: user.mobile,
-        department: user.department,
-        profileImage: user.profileImage,
-        role: user.role,
-      },
+      user: safeUser,
     });
 };
+

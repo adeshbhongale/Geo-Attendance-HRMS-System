@@ -310,7 +310,7 @@ const DashboardScreen = ({ navigation }) => {
         setOffice(results[3].value.data.data);
       }
       if (results[4].status === 'fulfilled') {
-        setMyLeaves(results[4].value.data.data.data || []);
+        setMyLeaves(results[4].value.data.data || []);
       }
 
       if (results[2].status === 'fulfilled') {
@@ -424,7 +424,18 @@ const DashboardScreen = ({ navigation }) => {
               </View>
             </View>
 
-            {isPunchOut || countdown?.isMissed || countdown?.isOver ? (
+            {/* Sunday or Approved Full-Day Leave — hide punch buttons */}
+            {countdown?.isHoliday ? (
+              <View className="h-16 rounded-2xl bg-indigo-50 flex-row justify-center items-center border border-indigo-100 shadow-sm">
+                <Calendar size={22} color="#4f46e5" />
+                <View className="ml-3">
+                  <Text className="font-bold text-base text-indigo-700 tracking-tight">
+                    {countdown.label}
+                  </Text>
+                  <Text className="text-[10px] text-indigo-400 font-bold">{countdown.time}</Text>
+                </View>
+              </View>
+            ) : isPunchOut || countdown?.isMissed || countdown?.isOver ? (
               <View className="h-16 rounded-2xl bg-slate-50 flex-row justify-center items-center border border-slate-100 shadow-sm">
                 <CircleCheck size={24} color="#10b981" />
                 <View className="ml-3">

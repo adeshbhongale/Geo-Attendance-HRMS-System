@@ -16,7 +16,7 @@ import {
   Users,
   X
 } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { logout } from '../store/authSlice';
@@ -25,9 +25,15 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
   const dispatch = useDispatch();
   const location = useLocation();
   const { user } = useSelector((state) => state.auth);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(
-    ['/shift-setup', '/departments', '/designations', '/working-places', '/week-offs', '/leave-types', '/holidays'].some(path => location.pathname === path)
-  );
+
+  const SETUP_PATHS = ['/shift-setup', '/departments', '/designations', '/working-places', '/week-offs', '/leave-types', '/holidays'];
+  const isOnSetupPage = useCallback(() => SETUP_PATHS.some(p => location.pathname === p), [location.pathname]);
+
+  const [isSettingsOpen, setIsSettingsOpen] = useState(isOnSetupPage);
+
+  useEffect(() => {
+    if (isOnSetupPage()) setIsSettingsOpen(true);
+  }, [location.pathname]);
 
   const navItems = [
     { name: 'Dashboard', icon: <LayoutDashboard size={18} />, path: '/' },

@@ -112,8 +112,8 @@ const LeaveTypes = () => {
 
   const filteredLeaveTypes = useMemo(() => {
     return leaveTypes.filter(lt =>
-      lt.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lt.code.toLowerCase().includes(searchQuery.toLowerCase())
+      (lt.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (lt.code || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [leaveTypes, searchQuery]);
 
@@ -144,6 +144,7 @@ const LeaveTypes = () => {
   const paginatedData = filteredLeaveTypes.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
+    <>
     <div className="space-y-6 md:space-y-8 animate-fade-up">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -284,17 +285,17 @@ const LeaveTypes = () => {
         )}
       
       </div>
-
+    </div>
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-0 sm:p-4 overflow-y-auto">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white w-full max-w-7xl h-full sm:h-[95vh] sm:rounded-[3rem] shadow-2xl overflow-hidden flex flex-col"
+              className="bg-white w-full max-w-4xl max-h-[95vh] overflow-y-auto rounded-2xl shadow-2xl flex flex-col"
             >
-              <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-white z-10 shrink-0 sticky top-0">
                 <div>
                   <h3 className="text-xl font-bold text-slate-900 tracking-tighter m-0">
                     {editingType ? 'Edit Leave Type' : 'Add New Leave Type'}
@@ -465,7 +466,7 @@ const LeaveTypes = () => {
     
       <AnimatePresence>
         {deleteConfirm.show && (
-          <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 flex flex-col items-center text-center">
               <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-4">
@@ -487,7 +488,7 @@ const LeaveTypes = () => {
           </div>
         )}
       </AnimatePresence>
-    </div>
+    </>
   );
 };
 

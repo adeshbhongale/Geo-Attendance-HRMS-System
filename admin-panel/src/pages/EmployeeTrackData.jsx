@@ -113,7 +113,7 @@ const EmployeeTrackData = () => {
     });
 
     return grouped.filter(log =>
-      log.address?.toLowerCase().includes(searchTerm.toLowerCase())
+      (log.address || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [data?.logs, searchTerm]);
 

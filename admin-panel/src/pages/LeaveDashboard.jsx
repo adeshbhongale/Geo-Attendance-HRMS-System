@@ -34,6 +34,12 @@ const LeaveDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
+  const getFirstDayOfMonth = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}-01`;
+  };
   const getToday = () => {
     const d = new Date();
     const year = d.getFullYear();
@@ -41,7 +47,7 @@ const LeaveDashboard = () => {
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
-  const [startDate, setStartDate] = useState(getToday());
+  const [startDate, setStartDate] = useState(getFirstDayOfMonth());
   const [endDate, setEndDate] = useState(getToday());
   const [showStartCalendar, setShowStartCalendar] = useState(false);
   const [showEndCalendar, setShowEndCalendar] = useState(false);
@@ -198,8 +204,8 @@ const LeaveDashboard = () => {
   };
 
   const filteredData = data.filter(item =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.department.toLowerCase().includes(searchTerm.toLowerCase())
+    (item.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (item.department || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const StatBox = ({ label, value, icon, color }) => (

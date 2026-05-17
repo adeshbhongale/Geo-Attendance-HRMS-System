@@ -8,7 +8,6 @@ import {
   Edit2,
   Info,
   Loader2,
-  Plus,
   Save,
   Search,
   Timer,
@@ -16,7 +15,7 @@ import {
   Users,
   X
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import api, { IMAGE_BASE_URL } from '../api/axios';
@@ -87,24 +86,7 @@ const Shifts = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [selectedDate]);
-
-  const filteredAttendance = useMemo(() => {
-    return attendance
-      .filter(att => att.punchIn?.time || att.status === 'Absent')
-      .filter(att => filterStatus === 'All' || att.status === filterStatus)
-      .filter(att => filterShift === 'All' || (typeof att.user?.shift === 'string' ? att.user.shift === filterShift : att.user?.shift?._id === filterShift))
-      .filter(att => !overviewSearch || att.user?.name?.toLowerCase().includes(overviewSearch.toLowerCase()))
-      .sort((a, b) => {
-        if (a.status === 'Absent' && b.status !== 'Absent') return 1;
-        if (a.status !== 'Absent' && b.status === 'Absent') return -1;
-        return new Date(b.punchIn?.time || 0) - new Date(a.punchIn?.time || 0);
-      });
-  }, [attendance, filterStatus, filterShift, overviewSearch]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [shiftsRes, empRes, attRes] = await Promise.all([
@@ -112,16 +94,35 @@ const Shifts = () => {
         api.get('/employees'),
         api.get('/attendance', { params: { date: selectedDate } })
       ]);
-      setShifts(shiftsRes.data.data);
+      setShifts(shiftsRes.data.data.filter(s => s.status !== 'inactive'));
       setEmployees(empRes.data.data);
       setAttendance(attRes.data.data);
     } catch (err) {
+      console.error(err);
       toast.error('Failed to load shifts and employees');
     } finally {
       setLoading(false);
     }
-  };
-  
+  }, [selectedDate]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchData();
+  }, [selectedDate, fetchData]);
+
+  const filteredAttendance = useMemo(() => {
+    return attendance
+      .filter(att => att.punchIn?.time || att.status === 'Absent')
+      .filter(att => filterStatus === 'All' || att.status === filterStatus)
+      .filter(att => filterShift === 'All' || (typeof att.user?.shift === 'string' ? att.user.shift === filterShift : att.user?.shift?._id === filterShift))
+      .filter(att => !overviewSearch || (att.user?.name || '').toLowerCase().includes(overviewSearch.toLowerCase()))
+      .sort((a, b) => {
+        if (a.status === 'Absent' && b.status !== 'Absent') return 1;
+        if (a.status !== 'Absent' && b.status === 'Absent') return -1;
+        return new Date(b.punchIn?.time || 0) - new Date(a.punchIn?.time || 0);
+      });
+  }, [attendance, filterStatus, filterShift, overviewSearch]);
+
   const employeesMap = useMemo(() => {
     const map = {};
     employees.forEach(e => map[e._id] = e);
@@ -130,10 +131,16 @@ const Shifts = () => {
 
   const employeesByShift = useMemo(() => {
     const map = {};
-    shifts.forEach(s => map[s._id] = []);
+    shifts.forEach(s => {
+      if (s && s._id) map[s._id] = [];
+    });
     employees.forEach(emp => {
+      if (!emp) return;
       const sId = typeof emp.shift === 'string' ? emp.shift : emp.shift?._id;
-      if (sId && map[sId]) map[sId].push(emp);
+      if (sId) {
+        if (!map[sId]) map[sId] = [];
+        map[sId].push(emp);
+      }
     });
     return map;
   }, [shifts, employees]);
@@ -184,20 +191,15 @@ const Shifts = () => {
     setShowModal(true);
   };
 
-  // Auto-calculate End Time based on Start Time and Working Hours
-  useEffect(() => {
-    if (formData.startTime && formData.workingHours) {
-      const [h, m] = formData.startTime.split(':').map(Number);
-      const hoursToAdd = parseFloat(formData.workingHours) || 0;
-      let totalMinutes = h * 60 + m + hoursToAdd * 60;
-      const endH = Math.floor(totalMinutes / 60) % 24;
-      const endM = Math.round(totalMinutes % 60);
-      setFormData(prev => ({
-        ...prev,
-        endTime: `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`
-      }));
-    }
-  }, [formData.startTime, formData.workingHours]);
+  const calculateEndTime = (start, hours) => {
+    if (!start || hours === undefined || hours === null) return '';
+    const [h, m] = start.split(':').map(Number);
+    const hoursToAdd = parseFloat(hours) || 0;
+    const totalMinutes = h * 60 + m + hoursToAdd * 60;
+    const endH = Math.floor(totalMinutes / 60) % 24;
+    const endM = Math.round(totalMinutes % 60);
+    return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+  };
 
   const requestActionConfirm = (type, action, message) => {
     setConfirmData({ show: true, type, action, message });
@@ -211,7 +213,6 @@ const Shifts = () => {
 
   const handleSaveSubmit = (e) => {
     e.preventDefault();
-    const action = editingShift ? 'update' : 'create';
     requestActionConfirm(
       'save',
       async () => {
@@ -227,6 +228,7 @@ const Shifts = () => {
           fetchData();
           setShowModal(false);
         } catch (err) {
+          console.error(err);
           toast.error(err.response?.data?.message || 'Action failed');
         } finally {
           setSaving(false);
@@ -245,6 +247,7 @@ const Shifts = () => {
           toast.success('Shift deleted');
           fetchData();
         } catch (err) {
+          console.error(err);
           toast.error(err.response?.data?.message || 'Failed to delete shift');
         }
       },
@@ -268,6 +271,7 @@ const Shifts = () => {
       setAssignSearch('');
       fetchData();
     } catch (err) {
+      console.error(err);
       toast.error('Failed to assign shift');
     } finally {
       setSaving(false);
@@ -288,7 +292,7 @@ const Shifts = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h2 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight m-0">Shift Setup</h2>
-            <p className="text-slate-400 text-xs font-medium mt-1 uppercase tracking-widest">Active Shift Schedules</p>
+            <p className="text-slate-400 text-xs font-medium mt-1 tracking-widest">Active Shift Schedules</p>
           </div>
         </div>
 
@@ -415,7 +419,7 @@ const Shifts = () => {
                 <Clock size={32} />
               </div>
               <p className="text-slate-400 font-bold text-sm">No shifts Available.</p>
-              <p className="text-slate-400 text-xs mt-2 italic">Please create shifts in Shift Setup page.</p>
+              <p className="text-slate-400 text-xs mt-2 ">Please create shifts in Shift Setup page.</p>
             </div>
           )}
         </div>
@@ -637,14 +641,14 @@ const Shifts = () => {
       </div>
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-0 sm:p-4 overflow-y-auto">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.98, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.98, y: 20 }}
-              className="bg-white w-full max-w-7xl h-full sm:h-[95vh] sm:rounded-[3rem] shadow-2xl overflow-hidden flex flex-col"
+              className="bg-white w-full max-w-2xl max-h-[95vh] rounded-2xl shadow-2xl overflow-y-auto flex flex-col"
             >
-              <div className="bg-white px-8 py-6 border-b border-slate-100 flex justify-between items-center">
+              <div className="bg-white px-8 py-6 border-b border-slate-100 flex justify-between items-center z-10 shrink-0 sticky top-0">
                 <div>
                   <h3 className="text-xl font-bold text-slate-900 tracking-tighter m-0">
                     {editingShift ? 'Edit Shift' : 'Add New Shift'}
@@ -703,7 +707,14 @@ const Shifts = () => {
                       <input
                         type="time"
                         value={formData.startTime}
-                        onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormData(prev => ({
+                            ...prev,
+                            startTime: val,
+                            endTime: calculateEndTime(val, prev.workingHours)
+                          }));
+                        }}
                         required
                         className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white pl-12 pr-4 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800"
                       />
@@ -753,7 +764,14 @@ const Shifts = () => {
                     <input
                       type="number"
                       value={formData.workingHours}
-                      onChange={(e) => setFormData({ ...formData, workingHours: e.target.value })}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setFormData(prev => ({
+                          ...prev,
+                          workingHours: val,
+                          endTime: calculateEndTime(prev.startTime, val)
+                        }));
+                      }}
                       required
                       className="w-full bg-slate-50 border-2 border-transparent focus:border-indigo-100 focus:bg-white px-5 py-4 rounded-2xl outline-none transition-all text-sm font-bold text-slate-800"
                     />
@@ -825,12 +843,12 @@ const Shifts = () => {
 
       <AnimatePresence>
         {confirmData.show && (
-          <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 10 }}
-              className="bg-white rounded-[2.5rem] p-10 w-full max-w-[400px] text-center shadow-2xl"
+              className="bg-white rounded-2xl p-10 w-full max-w-[400px] text-center shadow-2xl"
             >
               <div className="w-20 h-20 rounded-3xl mx-auto mb-8 flex items-center justify-center bg-indigo-50 text-indigo-600">
                 <AlertCircle size={40} />
@@ -862,14 +880,14 @@ const Shifts = () => {
 
       <AnimatePresence>
         {assignModal.show && (
-          <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-2 sm:p-4 overflow-y-auto">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.98, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.98, y: 20 }}
-              className="bg-white w-full max-w-7xl h-full sm:h-[90vh] sm:rounded-[3rem] shadow-2xl flex flex-col my-auto overflow-hidden"
+              className="bg-white w-full max-w-7xl max-h-[95vh] rounded-2xl shadow-2xl flex flex-col overflow-y-auto"
             >
-              <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-white">
+              <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-white z-10 shrink-0 sticky top-0">
                 <div>
                   <h3 className="text-xl font-bold text-slate-900 tracking-tighter">Assign Shift</h3>
                   <p className="text-slate-400 text-[10px] font-bold tracking-widest mt-1">Assign "{assignModal.shift?.name}" to employees</p>
@@ -895,7 +913,7 @@ const Shifts = () => {
                     <label className="text-[11px] font-bold text-slate-400 tracking-widest ml-1 ">Select Employees</label>
                     <div className="grid grid-cols-1 gap-2 max-h-[350px] overflow-y-auto p-1 custom-scrollbar">
                       {employees
-                        .filter(emp => emp.name?.toLowerCase().includes(assignSearch.toLowerCase()))
+                        .filter(emp => (emp.name || '').toLowerCase().includes(assignSearch.toLowerCase()))
                         .filter(emp => {
                           const empShiftId = emp.shift?._id || emp.shift;
                           return empShiftId !== assignModal.shift?._id;

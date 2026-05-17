@@ -83,9 +83,15 @@ const LoginScreen = ({ navigation }) => {
         });
       }, 1500);
     } catch (err) {
-      const msg = err.response?.data?.message || 'Login failed. Please check your credentials.';
-      setToast({ show: true, message: msg, type: 'error' });
-      setTimeout(() => setToast(prev => ({ ...prev, show: false })), 2000);
+      // Network error (server unreachable)
+      if (!err.response) {
+        setToast({ show: true, message: 'Cannot reach server. Please check your internet connection.', type: 'error' });
+      } else {
+        // Backend returned a specific error message
+        const msg = err.response?.data?.message || 'Login failed. Please check your credentials.';
+        setToast({ show: true, message: msg, type: 'error' });
+      }
+      setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
     } finally {
       setLoading(false);
     }

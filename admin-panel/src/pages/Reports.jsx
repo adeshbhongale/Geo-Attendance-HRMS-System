@@ -142,7 +142,7 @@ const Reports = () => {
   // Pagination Logic
   const filteredData = useMemo(() => {
     return data.filter(row => {
-      const matchesSearch = row.name.toLowerCase().includes(search.toLowerCase()) || row.mobile.includes(search);
+      const matchesSearch = (row.name || '').toLowerCase().includes(search.toLowerCase()) || (row.mobile || '').includes(search);
       const matchesShift = shiftFilter === 'All' || (row.shift && row.shift.includes(shiftFilter));
       const matchesStatus = statusFilter === 'All' || row.status === statusFilter;
 

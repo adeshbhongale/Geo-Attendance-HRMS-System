@@ -27,12 +27,15 @@ app.set('trust proxy', 1);
 const allowedOrigins = process.env.CLIENT_URL ? process.env.CLIENT_URL.split(',') : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174'];
 app.use(cors({
   origin: function (origin, callback) {
-    // allow requests with no origin (like mobile apps or curl requests)
+    // Always allow requests with no origin (mobile apps, Expo Go, curl, Postman)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
-    }
+    // Allow local network IPs (mobile dev on same WiFi)
+    if (/^https?:\/\/(192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|10\.)/.test(origin)) return callback(null, true);
+    // Allow registered origins
+    if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
+    // In development, allow everything
+    if (process.env.NODE_ENV !== 'production') return callback(null, true);
+    // In production, still allow (change this to restrict if needed)
     return callback(null, true);
   },
   credentials: true,
@@ -104,8 +107,9 @@ const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 const io = socketio(server, {
   cors: {
-    origin: allowedOrigins,
-    credentials: true
+    origin: '*',
+    methods: ['GET', 'POST'],
+    credentials: false
   }
 });
 
