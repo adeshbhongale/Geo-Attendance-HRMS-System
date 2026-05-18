@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import api from '../api/axios';
+import { registerPushToken } from '../utils/notifications';
 
 const LoginScreen = ({ navigation }) => {
   const [identifier, setIdentifier] = useState('');
@@ -73,6 +74,9 @@ const LoginScreen = ({ navigation }) => {
 
       await AsyncStorage.setItem('token', token);
       await AsyncStorage.setItem('user', JSON.stringify(user));
+
+      // Register dynamic push notifications token immediately
+      registerPushToken().catch(() => {});
 
       setToast({ show: true, message: `Welcome back, ${user.name}!`, type: 'success' });
       setTimeout(() => {

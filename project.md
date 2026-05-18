@@ -1111,8 +1111,88 @@ Geo-Attendance-HRMS-System/
 - **Resilient Zero-Data State**: Standardized falling back arrays (`|| []`) and rendering nodes to guarantee a completely crash-free experience when database collections are entirely clean or newly initialized.
 - **`getAttendanceDashboard` ReferenceError Fix**: Resolved the critical `ReferenceError: diffDays is not defined` in the backend reports controller by properly instantiating the `diffDays` calculation on range query parsing, eliminating the HTTP 400 Bad Request error on dashboard load.
 
+
+### 25. High-Fidelity Notification System, Date Telemetry Auditing & React Native Hermes Stability (May 18, 2026)
+
+**Stabilized**: Built and verified a complete enterprise Notification Campaigns and Reports suite, engineered date-range filtering and Mongoose aggregations, realigned telemetry reporting by department string names, and resolved the critical React Native block-scope compilation crash under Hermes.
+
+#### 1. Premium Admin Notifications Dashboard & Campaign Creator:
+- **Modular Tabs**: Re-designed and engineered the full-page notification console with high-fidelity layout split into:
+  - **Campaigns Feed**: Grid of sent notifications detailing date, title, description, targets, and delivery states.
+  - **Create Announcement**: Clean, user-friendly form with intuitive dropdown selectors.
+- **Audience Targeting Rules**: Supports dispatching to:
+  - **All Employees**: Broadcasting dynamically to every active employee.
+  - **Specific Department**: Multi-selection of organizational units.
+  - **Specific Employees**: Dropdown multi-select targeting particular individuals.
+- **Toast Notifications**: Interactive state alerts on dispatch.
+
+#### 2. Advanced Notification Reports Screen & Date-Range Telemetry:
+- **Aligning Default Start Date**: Updated default `fromDate` filter state to `'2024-01-01'` to align with the Dashboard page and historical database telemetry.
+- **Date Comparison Fix**: Fixed date parsed checks inside `NotificationReports.jsx` by checking dynamic Mongoose fields (`log.sentAt || log.sentTime || log.createdAt`) to prevent `NaN` date evaluations that filtered out all log records.
+- **CSV Data Exporter**: Formatted exporting schema to download full titles, employee credentials, departments, delivery status, and timestamps.
+- **Unified Design Theme**: Replaced ad-hoc layout tables with premium styled tailwind components matching the core admin system.
+
+#### 3. Real-time Telemetry Analytics & Mongoose Resolvers:
+- **Read State Analysis**: Aligned stats aggregation inside `NotificationAnalytics.jsx` to map read status fields correctly against database schemas.
+- **Department Aggregation Realignment**: Updated Mongoose querying to match string names inside `employee.department` instead of matching raw ObjectIDs, resolving the department telemetry tracking filter.
+- **Comprehensive Database Seeding**: Updated `seed_notification_telemetry.js` and `seed_comprehensive.js` to automatically clear collections and instantiate rich, multi-day historical campaigns and logs.
+
+#### 4. React Native Hermes Block-Scoping Crash Resolution:
+- **ReferenceError Resolution**: Resolved a critical runtime crash on the mobile app's main page `DashboardScreen.js` where `isNewEmployee` was block-scoped inside the `now < start` block, but accessed in the `else` block, causing React Native's Hermes engine to throw `ReferenceError: Property 'isNewEmployee' doesn't exist`.
+- **Variable Hoisting**: Moved the `isNewEmployee` evaluation to the parent function level, making it safely accessible throughout the entire component.
+- **Expo Push Token Acquisition**: Verified automatic Expo push token permission request and registration with the database.
+
 ---
 
-**Last Updated**: May 17, 2026
-**Version**: 2.6.1
-**Status**: Production Hardened, Zero-DB Crash-Resistant, Fully Safeguarded & API Errors Resolved
+### 26. Database Connection Resilience & Scheduler Graceful Fallback (May 18, 2026)
+**Changed**: Hardened the background scheduled task engines to be completely resilient to database connectivity drops, network route disruptions, and socket connection resets (`ECONNRESET`).
+
+#### ⏰ Background Scheduler Resilience & Safeguards:
+- **Files**: `backend/services/notificationSchedulerService.js`
+- **Mongoose connection check**: Enforced checking `mongoose.connection.readyState !== 1` before performing queries in `checkAndDispatchScheduled` and `dispatchNotificationDocument`. This bypasses scheduled actions when the database is offline, avoiding unhandled timeouts.
+- **Granular Network Error Interception**: Refactored the error-handling catch blocks to isolate DNS lookup errors (`ENOTFOUND`, `getaddrinfo`), server selection issues (`MongoServerSelectionError`), and TCP socket resets (`ECONNRESET`).
+- **Clean Console Output**: Replaced massive multiline error stack trace spam with high-level, human-readable console warnings (`⏰ Background Notification Scheduler: MongoDB host is currently offline or unreachable. Reconnection is in progress...`).
+- **Secondary Save Guards**: Prevented write operations (`notification.status = 'failed'`) inside catch blocks when the connection is dropped, keeping the server error-free and stable during DB failovers.
+
+---
+
+### 27. High-Fidelity Custom Dropdowns & Automated Workflow Configuration (May 18, 2026)
+**Changed**: Integrated state-of-the-art interactive custom select elements (`CustomSelect`) in the announcement dashboard to replace all standard HTML `<select>` elements, relaxed campaign editing restrictions, and added custom filters on the list page.
+
+#### 🎨 Premium Customized Dropdowns & Filters (`CustomSelect` & `CustomFilterSelect`):
+- **Dynamic Framer Motion Overlays**: Engineered reusable, high-fidelity custom drop-down menus that animate with subtle scaling and translation on open/close (`framer-motion`'s `AnimatePresence`).
+- **Standardized Look & Feel**: Features custom hover states, border transitions, and checked indicator icons that perfectly match the premium HRMS visual design guidelines.
+- **Auto-Close Behaviors**: Configured an invisible fullscreen backdrop overlay that automatically closes open dropdown panels upon clicking outside the element.
+- **Compact Custom Grid Filters**: Replaced ugly native `<select>` dropdowns for **Status** and **Type** filters in `AllNotifications.jsx` with animated compact selection menus.
+- **Uncompromised Full-Text Mobile Feed Displays**: Redesigned the in-app notification drawer component ([NotificationDrawer.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/mobile-app/src/components/NotificationDrawer.js)) by removing all layout truncation constraints, line caps (`numberOfLines={2}`), and text clipping classes (`truncate`). The mobile app now displays the full notification title and the complete announcement description immediately in the feed list view without truncation.
+- **Dynamic Content Fallback Ingestion**: Added a double-binding data resolution (`item.message || item.body`) to the mobile renderer, ensuring that standard custom text messages and system-generated database events render seamlessly across all devices.
+- **Mobile Push Background Deliverability**: Prioritized raw native FCM/APNs registration tokens (via `getDevicePushTokenAsync()`) over standard Expo tokens on real devices, resolving Firebase SDK delivery payload rejections.
+- **Android Alert Wakes & Notification Channels**: Programmed the client to create and register the high-importance `'default'` Android Notification Channel (`importance: MAX`), and updated the backend in `firebaseService.js` to assign all outgoing multicast and single-device messages to this channel, permitting sound playbacks and heads-up alerts.
+- **Production-Grade Push Wake Payloads**: Injected high-priority delivery parameters (`android: { priority: 'high', notification: { sound: 'default', channelId: 'default' } }` and APNs `aps` blocks) into all FCM payload builders, forcing Android and iOS operating systems to wake up locked/dozed devices and immediately display push banners outside the application.
+
+#### ⚡ Automated & Manual Announcement Flows:
+- **Relaxed Campaign Editing Safeguards**: Removed the restrictive `status === 'sent'` block in the backend `updateNotification` controller (`backend/controllers/notifications.js`), allowing administrators to modify and update already created/sent manual notification campaigns for absolute operational flexibility.
+- **Unlimited Manual Dispatches**: Bypassed the `'sent'` check in `sendNotificationImmediately` controller, enabling administrators to manually broadcast any push notification campaign at any time with absolutely no system-imposed limits.
+- **Firebase Network Hang Safety**: Set a 2.5-second Promise race timeout safeguard across all FCM delivery functions in `firebaseService.js` (`sendToSingleDevice`, `sendMulticast`, `sendToTopic`). If a connection block or Google DNS latency delays the API request, it automatically terminates and logs a clean warning rather than hanging the admin frontend loop indefinitely.
+- **Seeded Template Empty Target Validation**: Upgraded the immediate send controller to reload and check if a dispatched campaign resolves to 0 active targeted employees (which commonly occurs with legacy seeded campaigns referencing mock user IDs). It now instantly catches this and alerts the administrator with a helpful feedback toast (`Failed to broadcast: No matching active target employees were found.`), preventing false successes.
+- **Recurrence Schedule Auto-Recalculation**: Programmed automated interval calculations for Daily, Weekly, and Monthly campaigns inside the scheduler service (`notificationSchedulerService.js`). When a recurring campaign fires, its `scheduledAt` date automatically shifts forward (by +1 day, +7 days, or +1 month) and keeps status as `'scheduled'` for subsequent automated loops.
+- **Delivery Flow Mode Toggle**: Exposed a dynamic selector in `CreateNotification.jsx` allowing admins to register a notification as either `Manual Broadcast` or `Automatic Workflow` (`isAuto: true`).
+- **Dynamic Trigger Selectors**: If "Automatic Workflow" is selected, a context-aware selector appears instantly for assigning trigger events such as `Employee late by 15 mins`, `Employee outside geofence`, `Leave approved`, etc.
+- **Flexible Manual Broadcasting**: Enabled administrators to send automatic notification campaigns manually on-demand directly from the central grid, removing standard limitations on `Sent` and automated triggers.
+- **Backend API Ingestion**: Updated backend query scopes in `getNotifications` controller to retrieve all campaign logs, letting standard and automated notifications live, filter, and render under a single unified administration grid.
+- **Smart Automated Absent & Late Grace Engines**: Created the dynamic background scanner `processAutomaticWorkflows` inside `notificationSchedulerService.js`. On every ticks loop (every 30 seconds):
+  - **Leave and Holiday Exemptions**: Automatically queries and bypasses any employee who is currently on an approved leave (`status: 'Approved'`) today or if today is a public holiday, preventing incorrect penalty notifications.
+  - **Grace Period Elapsed Late Alerts**: Dynamically tracks employee shift schedules. If the grace period (e.g. shift start + 15 minutes) passes and they have not clocked in, it dispatches an automated high-priority late reminder.
+  - **70% Shift Duration Elapsed Absent Alerts**: If 70% of the employee's shift duration has elapsed today and they still have not clocked in, it dispatches an automated absent alert.
+  - **"Automatically Gone" Clear Actions**: If a late employee punches in, the system dynamically locates all unread late/attendance alerts sent to that employee today and automatically marks them as read, immediately clearing their notification drawer unread badges.
+- **Dashboard Table Columns Syncing**: Resolved the duplicate display issue where all rows showed "Manual dispatch" in the administration grid. Re-anchored timing fields to correct schema keys (`scheduledAt`, `status`, `createdAt`), rendering true scheduled timings, dispatch logs, failure counts, or draft details properly for all rows while fully maintaining layout consistency.
+- **Premium Mobile Category Branding**: Implemented distinct color branding and visual themes for every notification type (`Emergency Alert`, `HR Announcement`, `Attendance Alert`, `Punch Confirmation`, etc.) in the employee mobile app:
+  - **Color-Coded Status Pills**: Added beautiful high-contrast text badges to identify categories instantly on mobile feeds.
+  - **Dynamic Unread Accent Borders**: Unread cards feature left-hand dynamic color borders matched to the type.
+  - **Themed Glowing Shadows & Glows**: Active unread alerts are styled with soft themed drop shadows of the category's primary color.
+
+---
+
+**Last Updated**: May 19, 2026
+**Version**: 2.8.0
+**Status**: Production Hardened, Connection Resilient, Notification Telemetry Unified, Custom Select Elements Integrated, Sent Notification Editing Enabled, Unlimited Manual Dispatch Active, All Scheduled Recurrent Options Fully Operational, Firebase Network Safeguards Embedded, Blank Target Validators Active, Full Mobile Feed Display Configured, Background Wakes Restored, Smart Automated Absent/Late Workflows Integrated, Dashboard Column Data-Mapped, Category Visual Theming Configured, Notification Type Column Integrated, Conditional Dash Timings Configured, Robust Multi-Option Firebase Setup Active, Full Notification Database Seeding Verified, Zero Build Errors.

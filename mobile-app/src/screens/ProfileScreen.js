@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import {
+  Bell,
   Calendar,
   Camera,
   ChevronRight,
@@ -25,6 +26,8 @@ import {
 } from 'react-native';
 import api from '../api/axios';
 import { navigateGlobal } from '../utils/navigation';
+import socket from '../socket';
+import NotificationDrawer from '../components/NotificationDrawer';
 
 const ProfileScreen = ({ navigation }) => {
   const [user, setUser] = useState(null);
@@ -32,6 +35,35 @@ const ProfileScreen = ({ navigation }) => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [notifDrawerVisible, setNotifDrawerVisible] = useState(false);
+
+  // Sync initial unread notifications count on Profile screen load
+  useEffect(() => {
+    if (user?._id) {
+      const syncUnreadCount = () => {
+        api.get('/notifications/employee/feed')
+          .then((res) => {
+            if (res.data.success) {
+              const feed = res.data.data || [];
+              setUnreadNotifications(feed.filter(n => !n.isRead).length);
+            }
+          })
+          .catch(() => {});
+      };
+
+      syncUnreadCount();
+
+      socket.on(`notificationBadgeUpdate:${user._id}`, syncUnreadCount);
+      socket.on(`notificationLiveUpdate:${user._id}`, syncUnreadCount);
+
+      return () => {
+        socket.off(`notificationBadgeUpdate:${user._id}`, syncUnreadCount);
+        socket.off(`notificationLiveUpdate:${user._id}`, syncUnreadCount);
+      };
+    }
+  }, [user]);
 
   const [form, setForm] = useState({
     name: '',
@@ -166,9 +198,21 @@ const ProfileScreen = ({ navigation }) => {
 
       {/* Top Header Bar (No TruCode) */}
       <View className="bg-blue-600 pt-10 pb-24 px-6 flex-row items-center justify-between">
-        <View className="w-6" />
+        <View className="w-10" />
         <Text className="text-white font-bold text-lg">Profile</Text>
-        <View className="w-6" />
+        {/* Bell Notification Button on Profile page */}
+        <TouchableOpacity
+          onPress={() => setNotifDrawerVisible(true)}
+          activeOpacity={0.8}
+          className="w-10 h-10 rounded-xl bg-white/10 justify-center items-center relative border border-white/10"
+        >
+          <Bell size={20} color="white" />
+          {unreadNotifications > 0 && (
+            <View className="absolute -top-1 -right-1 bg-rose-500 min-w-4 h-4 rounded-full justify-center items-center px-1 border border-white">
+              <Text className="text-white text-[8px] font-extrabold">{unreadNotifications}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -407,6 +451,13 @@ const ProfileScreen = ({ navigation }) => {
           <Text className="text-white font-bold text-sm text-center flex-1">{toast.message}</Text>
         </View>
       )}
+
+      {/* Dynamic sliding history drawer */}
+      <NotificationDrawer
+        visible={notifDrawerVisible}
+        onClose={() => setNotifDrawerVisible(false)}
+        onUpdateUnreadCount={(cnt) => setUnreadNotifications(cnt)}
+      />
     </View>
   );
 };

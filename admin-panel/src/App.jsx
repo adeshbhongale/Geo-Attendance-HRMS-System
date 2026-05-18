@@ -28,6 +28,12 @@ import TrackingDashboard from './pages/TrackingDashboard';
 import WeekOffs from './pages/WeekOffs';
 import WorkingPlaces from './pages/WorkingPlaces';
 
+// Notifications System
+import AllNotifications from './pages/notifications/AllNotifications';
+import CreateNotification from './pages/notifications/CreateNotification';
+import NotificationReports from './pages/notifications/NotificationReports';
+import NotificationAnalytics from './pages/notifications/NotificationAnalytics';
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider } from 'react-redux';
 import { store } from './store';
@@ -83,6 +89,13 @@ const AppContent = () => {
             <Route path="/employee/:userId" element={isAuthenticated ? <EmployeeDetails /> : <Navigate to="/login" />} />
             <Route path="/track-route/:userId" element={isAuthenticated ? <EmployeeTrackRoute /> : <Navigate to="/login" />} />
             <Route path="/track-data/:userId" element={isAuthenticated ? <EmployeeTrackData /> : <Navigate to="/login" />} />
+
+            {/* Notification routes */}
+            <Route path="/notifications" element={isAuthenticated ? <AllNotifications /> : <Navigate to="/login" />} />
+            <Route path="/notifications/dashboard" element={isAuthenticated ? <NotificationAnalytics /> : <Navigate to="/login" />} />
+            <Route path="/notifications/all" element={isAuthenticated ? <AllNotifications /> : <Navigate to="/login" />} />
+            <Route path="/notifications/create" element={isAuthenticated ? <CreateNotification /> : <Navigate to="/login" />} />
+            <Route path="/notifications/reports" element={isAuthenticated ? <NotificationReports /> : <Navigate to="/login" />} />
 
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

@@ -101,6 +101,7 @@ app.use('/api/departments', require('./routes/departments'));
 app.use('/api/designations', require('./routes/designations'));
 app.use('/api/holidays', require('./routes/holidays'));
 app.use('/api/leave-types', require('./routes/leaveTypes'));
+app.use('/api/notifications', require('./routes/notifications'));
 
 const PORT = process.env.PORT || 5000;
 
@@ -116,6 +117,9 @@ const io = socketio(server, {
 // Make io accessible in controllers
 app.set('io', io);
 
+// Start background notification scheduler service
+const { startScheduler } = require('./services/notificationSchedulerService');
+startScheduler(io);
 
 const User = require('./models/User');
 

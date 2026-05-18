@@ -165,6 +165,20 @@ exports.punchIn = async (req, res, next) => {
       message: 'Punched in successfully',
       data: attendance,
     });
+
+    // Hook in automated notifications
+    try {
+      const autoNotif = require('../services/autoNotificationService');
+      const io = req.app.get('io');
+      const timeStr = new Date(attendance.punchIn.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      autoNotif.triggerPunchIn(userId, timeStr, io);
+      
+      if (attendance.isLate) {
+        autoNotif.triggerLateArrival(userId, attendance.lateTime, io);
+      }
+    } catch (e) {
+      console.error('Punch in notification hook failed:', e);
+    }
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
@@ -220,6 +234,16 @@ exports.punchOut = async (req, res, next) => {
       message: 'Punched out successfully',
       data: attendance,
     });
+
+    // Hook in automated notifications
+    try {
+      const autoNotif = require('../services/autoNotificationService');
+      const io = req.app.get('io');
+      const timeStr = new Date(attendance.punchOut.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      autoNotif.triggerPunchOut(userId, timeStr, io);
+    } catch (e) {
+      console.error('Punch out notification hook failed:', e);
+    }
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
@@ -427,6 +451,8 @@ exports.trackLocation = async (req, res, next) => {
     const incrementalDistance = validation.distance;
     const totalDistanceTillNow = (attendance.totalDistance || 0) + incrementalDistance;
 
+    const previousOutside = attendance.isOutside;
+
     attendance.totalDistance = parseFloat(totalDistanceTillNow.toFixed(6));
     attendance.distance = attendance.totalDistance;
     attendance.isOutside = isOutside;
@@ -451,6 +477,19 @@ exports.trackLocation = async (req, res, next) => {
     });
 
     await attendance.save();
+
+    // Hook in automated notifications for geofence exit/entry
+    try {
+      const autoNotif = require('../services/autoNotificationService');
+      const io = req.app.get('io');
+      if (isOutside && !previousOutside) {
+        autoNotif.triggerOutsideGeofence(userId, office?.name || 'Office Main', io);
+      } else if (!isOutside && previousOutside) {
+        autoNotif.triggerGeofenceEntry(userId, office?.name || 'Office Main', io);
+      }
+    } catch (e) {
+      console.error('Geofence tracking notification hook failed:', e);
+    }
 
     const io = req.app.get('io');
     if (io) {
