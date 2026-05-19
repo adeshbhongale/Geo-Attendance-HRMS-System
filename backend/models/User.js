@@ -72,6 +72,18 @@ const UserSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  fcmToken: {
+    type: String,
+    default: null,
+  },
+  deviceType: {
+    type: String,
+    default: null,
+  },
+  lastActiveDevice: {
+    type: String,
+    default: null,
+  },
 }, {
   timestamps: true,
 });

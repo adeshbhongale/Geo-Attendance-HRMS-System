@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import {
+  Bell,
   Calendar,
   CircleCheck,
   Clock,
@@ -25,6 +26,8 @@ import {
 } from 'react-native';
 import api from '../api/axios';
 import AttendanceMap from '../components/AttendanceMap';
+import socket from '../socket';
+import NotificationDrawer from '../components/NotificationDrawer';
 
 
 const DashboardScreen = ({ navigation }) => {
@@ -40,6 +43,36 @@ const DashboardScreen = ({ navigation }) => {
   const [isPunchIn, setIsPunchIn] = useState(false);
   const [isPunchOut, setIsPunchOut] = useState(false);
   const [isOnDuty, setIsOnDuty] = useState(false);
+
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [notifDrawerVisible, setNotifDrawerVisible] = useState(false);
+
+  // Sync initial unread notifications count
+  useEffect(() => {
+    if (userData?._id) {
+      const syncUnreadCount = () => {
+        api.get('/notifications/employee/feed')
+          .then((res) => {
+            if (res.data.success) {
+              const feed = res.data.data || [];
+              setUnreadNotifications(feed.filter(n => !n.isRead).length);
+            }
+          })
+          .catch(() => {});
+      };
+
+      syncUnreadCount();
+
+      // Setup dynamic socket badge & feed sync listeners
+      socket.on(`notificationBadgeUpdate:${userData._id}`, syncUnreadCount);
+      socket.on(`notificationLiveUpdate:${userData._id}`, syncUnreadCount);
+
+      return () => {
+        socket.off(`notificationBadgeUpdate:${userData._id}`, syncUnreadCount);
+        socket.off(`notificationLiveUpdate:${userData._id}`, syncUnreadCount);
+      };
+    }
+  }, [userData]);
 
   useEffect(() => {
     const punchIn = !!attendance?.punchIn?.time;
@@ -87,6 +120,10 @@ const DashboardScreen = ({ navigation }) => {
        }
     }
 
+    // Check if it's a new employee (created within last 48h)
+    const joinDate = new Date(userData?.createdAt || now);
+    const isNewEmployee = (now - joinDate) < (48 * 60 * 60 * 1000);
+
     // Dynamic Cutoff for "Missed" status (Half Day Threshold)
     const halfDayAfterStr = shift.halfDayAfter || "14:00";
     const [hHour, hMin] = halfDayAfterStr.split(':').map(Number);
@@ -107,9 +144,6 @@ const DashboardScreen = ({ navigation }) => {
 
     if (now < start) {
       const diff = start - now;
-      // Check if it's a new employee (created within last 48h)
-      const joinDate = new Date(userData?.createdAt || now);
-      const isNewEmployee = (now - joinDate) < (48 * 60 * 60 * 1000);
 
       if (diff > 3600000 && !isNewEmployee) {
         const h = Math.floor(diff / (1000 * 60 * 60));
@@ -372,7 +406,21 @@ const DashboardScreen = ({ navigation }) => {
           <Text className="text-white text-[10px] font-bold tracking-widest mb-1">Welcome Back</Text>
           <Text className="text-2xl font-bold text-white tracking-tighter">{userData?.name || 'Employee'}</Text>
         </View>
-        <View className="flex-row items-center">
+        <View className="flex-row items-center gap-3">
+          {/* Bell Notification Button with dynamic badging */}
+          <TouchableOpacity
+            onPress={() => setNotifDrawerVisible(true)}
+            activeOpacity={0.8}
+            className="w-12 h-12 rounded-2xl bg-white/10 justify-center items-center relative border border-white/10"
+          >
+            <Bell size={22} color="white" />
+            {unreadNotifications > 0 && (
+              <View className="absolute -top-1.5 -right-1.5 bg-rose-500 min-w-5 h-5 rounded-full justify-center items-center px-1 border border-white">
+                <Text className="text-white text-[9px] font-extrabold">{unreadNotifications}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
           <TouchableOpacity
             className="w-12 h-12 rounded-2xl bg-indigo-50 justify-center items-center border border-indigo-100 overflow-hidden"
             onPress={() => navigation.navigate('Profile')}
@@ -629,6 +677,13 @@ const DashboardScreen = ({ navigation }) => {
         </View>
 
       </ScrollView>
+
+      {/* Dynamic sliding history drawer */}
+      <NotificationDrawer
+        visible={notifDrawerVisible}
+        onClose={() => setNotifDrawerVisible(false)}
+        onUpdateUnreadCount={(cnt) => setUnreadNotifications(cnt)}
+      />
     </View>
   );
 };

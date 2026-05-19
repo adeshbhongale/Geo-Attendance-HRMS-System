@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Activity,
+  Bell,
   Briefcase,
   Building2,
   Calendar,
@@ -11,6 +12,7 @@ import {
   LayoutDashboard,
   LogOut,
   Navigation,
+  Plus,
   Settings,
   ShieldCheck,
   Users,
@@ -29,11 +31,16 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
   const SETUP_PATHS = ['/shift-setup', '/departments', '/designations', '/working-places', '/week-offs', '/leave-types', '/holidays'];
   const isOnSetupPage = useCallback(() => SETUP_PATHS.some(p => location.pathname === p), [location.pathname]);
 
-  const [isSettingsOpen, setIsSettingsOpen] = useState(isOnSetupPage);
+  const NOTIFICATION_PATHS = ['/notifications/dashboard', '/notifications/all', '/notifications/create', '/notifications/reports', '/notifications/analytics'];
+  const isOnNotificationPage = useCallback(() => NOTIFICATION_PATHS.some(p => location.pathname.startsWith(p)), [location.pathname]);
+
+  const [isSettingsOpen, setIsSettingsOpen] = useState(isOnSetupPage());
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(isOnNotificationPage());
 
   useEffect(() => {
     if (isOnSetupPage()) setIsSettingsOpen(true);
-  }, [location.pathname]);
+    if (isOnNotificationPage()) setIsNotificationsOpen(true);
+  }, [location.pathname, isOnSetupPage, isOnNotificationPage]);
 
   const navItems = [
     { name: 'Dashboard', icon: <LayoutDashboard size={18} />, path: '/' },
@@ -43,6 +50,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     { name: 'Shifts', icon: <Clock size={18} />, path: '/shifts' },
     { name: 'Leaves', icon: <FileText size={18} />, path: '/leaves' },
     { name: 'Tracking Dashboard', icon: <Activity size={18} />, path: '/tracking-dashboard' },
+    { name: 'Notifications', icon: <Bell size={18} />, path: '/notifications/dashboard' },
   ];
 
   const settingsItems = [
@@ -53,6 +61,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     { name: 'Week Offs', icon: <Calendar size={16} />, path: '/week-offs' },
     { name: 'Leave Types', icon: <ShieldCheck size={16} />, path: '/leave-types' },
     { name: 'Holidays', icon: <Calendar size={16} />, path: '/holidays' },
+    { name: 'Notifications', icon: <Bell size={16} />, path: '/notifications' },
   ];
 
   return (
@@ -106,6 +115,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
               {item.name}
             </NavLink>
           ))}
+
 
           {/* Collapsible Settings */}
           <div className="mt-2">

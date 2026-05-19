@@ -8,6 +8,9 @@ const Location = require('../models/Location');
 const Department = require('../models/Department');
 const Designation = require('../models/Designation');
 const Holiday = require('../models/Holiday');
+const Notification = require('../models/Notification');
+const NotificationLog = require('../models/NotificationLog');
+const EmployeeNotification = require('../models/EmployeeNotification');
 const statsService = require('../services/attendanceStatsService');
 const geoService = require('../services/geoTrackingService');
 const dotenv = require('dotenv');
@@ -30,19 +33,44 @@ const seedData = async () => {
     console.log('Connection Successful!');
 
     const { clearCloudinaryStorage } = require('../utils/cloudinary');
-    // 1. Clear existing data
-    await Promise.all([
-      User.deleteMany({ role: { $ne: 'admin' } }),
-      Attendance.deleteMany(),
-      Leave.deleteMany(),
-      Shift.deleteMany(),
-      LeaveType.deleteMany(),
-      Location.deleteMany(),
-      Department.deleteMany(),
-      Designation.deleteMany(),
-      Holiday.deleteMany(),
-      clearCloudinaryStorage()
-    ]);
+    
+    const saveInBatches = async (Model, records, batchSize = 100) => {
+      for (let i = 0; i < records.length; i += batchSize) {
+        const chunk = records.slice(i, i + batchSize);
+        let retries = 3;
+        while (retries > 0) {
+          try {
+            await Model.insertMany(chunk);
+            break;
+          } catch (err) {
+            retries--;
+            console.warn(`Batch insert failed for ${Model.modelName}. Retrying... (${3 - retries}/3). Error: ${err.message}`);
+            if (retries === 0) throw err;
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+    };
+
+    // 1. Clear existing data sequentially to avoid connection congestion
+    console.log('Clearing existing database collections...');
+    await User.deleteMany({ role: { $ne: 'admin' } });
+    await Attendance.deleteMany();
+    await Leave.deleteMany();
+    await Shift.deleteMany();
+    await LeaveType.deleteMany();
+    await Location.deleteMany();
+    await Department.deleteMany();
+    await Designation.deleteMany();
+    await Holiday.deleteMany();
+    
+    try {
+      console.log('Clearing Cloudinary storage...');
+      await clearCloudinaryStorage();
+    } catch (cErr) {
+      console.warn('Cloudinary clearing failed, skipping:', cErr.message);
+    }
     console.log('Cleared existing collections and Cloudinary storage.');
 
     // 2. Create Shifts
@@ -53,7 +81,11 @@ const seedData = async () => {
         endTime: '16:00',
         gracePeriod: 15,
         halfDayAfter: '12:00',
-        workingHours: 8
+        workingHours: 8,
+        weeklyOff: ['Sunday'],
+        lateRules: "If you are late then your payment will be deducted by 10% of the day's salary.",
+        halfDayRules: "If you leave for half day then your payment will be deducted by 50% of the day's salary.",
+        status: 'active'
       },
       {
         name: 'Evening Shift',
@@ -61,7 +93,11 @@ const seedData = async () => {
         endTime: '00:00',
         gracePeriod: 15,
         halfDayAfter: '20:00',
-        workingHours: 8
+        workingHours: 8,
+        weeklyOff: ['Sunday'],
+        lateRules: "If you are late then your payment will be deducted by 10% of the day's salary.",
+        halfDayRules: "If you leave for half day then your payment will be deducted by 50% of the day's salary.",
+        status: 'active'
       },
       {
         name: 'Night Shift',
@@ -70,7 +106,10 @@ const seedData = async () => {
         gracePeriod: 15,
         halfDayAfter: '04:00',
         workingHours: 8,
-        isNightShift: true
+        weeklyOff: ['Sunday'],
+        lateRules: "If you are late then your payment will be deducted by 10% of the day's salary.",
+        halfDayRules: "If you leave for half day then your payment will be deducted by 50% of the day's salary.",
+        status: 'active'
       }
     ]);
     console.log(`Created ${shifts.length} Shifts.`);
@@ -339,8 +378,8 @@ const seedData = async () => {
         let lastLat = office.latitude;
         let lastLng = office.longitude;
 
-        // --- ULTRA-DENSE MICRO-TRACKING (Exactly 50 points, 1-10m increments) ---
-        const totalLogCount = 50;
+        // --- ULTRA-DENSE MICRO-TRACKING (Exactly 10 points, 1-10m increments) ---
+        const totalLogCount = 10;
         for (let i = 0; i < totalLogCount; i++) {
           // Small random jump between 1m (0.000009 deg) and 10m (0.00009 deg)
           const angle = Math.random() * Math.PI * 2;
@@ -487,8 +526,12 @@ const seedData = async () => {
       }
     }
 
-    await Attendance.insertMany(attendanceRecords);
-    await Leave.insertMany(leaveRecords);
+    // Safe Chunked Insertions to prevent connection timeouts/drops
+    console.log(`Saving ${attendanceRecords.length} Attendance records in batches...`);
+    await saveInBatches(Attendance, attendanceRecords, 50);
+
+    console.log(`Saving ${leaveRecords.length} Leave records in batches...`);
+    await saveInBatches(Leave, leaveRecords, 50);
 
     console.log(`Successfully seeded:`);
     console.log(`- ${employees.length} Employees`);
@@ -528,6 +571,263 @@ const seedData = async () => {
       }
     }
     console.log(`Normalized ${updatedCount} existing employee records.`);
+
+    // ==========================================
+    // 8. Seed Notification Telemetry
+    // ==========================================
+    console.log('Seeding push notifications and recipient logs...');
+
+    // Clear old manual notifications, logs, feeds
+    await Promise.all([
+      Notification.deleteMany({}),
+      NotificationLog.deleteMany({}),
+      EmployeeNotification.deleteMany({})
+    ]);
+
+    const seededAdmin = await User.findOne({ role: 'admin' });
+    const seededEmployees = await User.find({ role: 'employee' });
+
+    if (seededAdmin && seededEmployees.length > 0) {
+      const campaigns = [
+        {
+          title: 'General HR Announcement: Q3 Strategy Meeting',
+          description: 'All departments are requested to join the Q3 Townhall on Friday at 3:00 PM via Zoom. We will review geofence enhancements and designation quotas.',
+          type: 'HR Announcement',
+          frequency: 'Instant',
+          targetType: 'All Employees',
+          status: 'sent',
+          daysAgo: 5,
+          isAuto: false,
+          autoType: null
+        },
+        {
+          title: 'Critical Office Relocation Update',
+          description: 'Please note that starting Monday, our main headquarters will shift to the new smart business park. Punch-in boundaries have been updated accordingly.',
+          type: 'General Announcement',
+          frequency: 'Instant',
+          targetType: 'All Employees',
+          status: 'sent',
+          daysAgo: 3,
+          isAuto: false,
+          autoType: null
+        },
+        {
+          title: 'Punch In Discrepancy Audit Alert',
+          description: 'We have noticed multiple employees punching out late without registering active movement routes. Please ensure your mobile location services are set to Always Allow.',
+          type: 'Attendance Alert',
+          frequency: 'Instant',
+          targetType: 'All Employees',
+          status: 'sent',
+          daysAgo: 1,
+          isAuto: false,
+          autoType: null
+        },
+        {
+          title: 'Draft: Upcoming Team Bonding Event',
+          description: 'A mock draft notification for the upcoming corporate sports meet. Scheduled to be sent next Monday.',
+          type: 'Meeting Notification',
+          frequency: 'Custom Schedule',
+          targetType: 'All Employees',
+          status: 'draft',
+          daysAgo: 0,
+          isAuto: false,
+          autoType: null
+        },
+        {
+          title: 'Emergency Building Evacuation Drill',
+          description: 'Critical: The annual fire safety drill is scheduled for this Wednesday at 10:00 AM. Please follow exit markers.',
+          type: 'Emergency Alert',
+          frequency: 'Instant',
+          targetType: 'All Employees',
+          status: 'sent',
+          daysAgo: 2,
+          isAuto: false,
+          autoType: null
+        },
+        // Automatic workflows covering all 6 trigger events
+        {
+          title: 'Late Coming Warning',
+          description: 'System Alert: You have checked in late today. Please ensure timely arrivals to maintain shift efficiency.',
+          type: 'Late Coming',
+          frequency: 'Instant',
+          targetType: 'All Employees',
+          status: 'sent',
+          daysAgo: 4,
+          isAuto: true,
+          autoType: 'Employee late by 15 mins'
+        },
+        {
+          title: 'Geofence Breach Notification',
+          description: 'System Alert: Your physical device was detected punching outside the office perimeter.',
+          type: 'Geofence Exited',
+          frequency: 'Instant',
+          targetType: 'All Employees',
+          status: 'sent',
+          daysAgo: 2,
+          isAuto: true,
+          autoType: 'Employee outside geofence'
+        },
+        {
+          title: 'Absenteeism Notice',
+          description: 'System Alert: No punch-in was recorded for your scheduled shift today, and no approved leaves were found.',
+          type: 'Attendance Alert',
+          frequency: 'Instant',
+          targetType: 'All Employees',
+          status: 'sent',
+          daysAgo: 1,
+          isAuto: true,
+          autoType: 'Employee absent'
+        },
+        {
+          title: 'Leave Application Approved',
+          description: 'Congratulations! Your requested leave of absence has been reviewed and approved by the HR Manager.',
+          type: 'Leave Approved',
+          frequency: 'Instant',
+          targetType: 'All Employees',
+          status: 'sent',
+          daysAgo: 3,
+          isAuto: true,
+          autoType: 'Leave approved'
+        },
+        {
+          title: 'Leave Application Submitted',
+          description: 'Your leave application has been submitted successfully and is awaiting review.',
+          type: 'Leave Applied',
+          frequency: 'Instant',
+          targetType: 'All Employees',
+          status: 'sent',
+          daysAgo: 5,
+          isAuto: false,
+          autoType: null
+        },
+        {
+          title: 'Leave Application Rejected',
+          description: 'Your requested leave of absence has been rejected. Please connect with your supervisor.',
+          type: 'Leave Rejected',
+          frequency: 'Instant',
+          targetType: 'All Employees',
+          status: 'sent',
+          daysAgo: 5,
+          isAuto: false,
+          autoType: null
+        },
+        {
+          title: 'Geofence Safe Zone Entered',
+          description: 'Welcome to the Main HQ! Your device has entered the office coordinates safely.',
+          type: 'Geofence Entered',
+          frequency: 'Instant',
+          targetType: 'All Employees',
+          status: 'sent',
+          daysAgo: 6,
+          isAuto: false,
+          autoType: null
+        },
+        {
+          title: 'Shift Commencement Alert',
+          description: 'Your morning shift is scheduled to begin in 15 minutes. Please locate your workstation and clock in.',
+          type: 'Shift Reminder',
+          frequency: 'Instant',
+          targetType: 'All Employees',
+          status: 'sent',
+          daysAgo: 4,
+          isAuto: true,
+          autoType: 'Shift starting reminder'
+        },
+        {
+          title: 'Daily Punch In Reminder',
+          description: 'Good morning! This is your daily reminder to punch in for work.',
+          type: 'Punch In Reminder',
+          frequency: 'Instant',
+          targetType: 'All Employees',
+          status: 'sent',
+          daysAgo: 7,
+          isAuto: false,
+          autoType: null
+        },
+        {
+          title: 'Daily Punch Out Reminder',
+          description: 'Shift completed! Don\'t forget to punch out to record your working hours correctly.',
+          type: 'Punch Out Reminder',
+          frequency: 'Instant',
+          targetType: 'All Employees',
+          status: 'sent',
+          daysAgo: 1,
+          isAuto: true,
+          autoType: 'Punch out reminder'
+        }
+      ];
+
+      const seededLogs = [];
+      const seededFeeds = [];
+
+      for (const camp of campaigns) {
+        const sentTime = new Date();
+        sentTime.setDate(sentTime.getDate() - camp.daysAgo);
+
+        const notification = await Notification.create({
+          title: camp.title,
+          description: camp.description,
+          type: camp.type,
+          frequency: camp.frequency,
+          targetType: camp.targetType,
+          status: camp.status,
+          createdBy: seededAdmin._id,
+          isAuto: camp.isAuto,
+          autoType: camp.autoType,
+          createdAt: sentTime,
+          updatedAt: sentTime
+        });
+
+        if (camp.status === 'sent') {
+          seededEmployees.forEach((emp, index) => {
+            const isRead = index % 3 !== 0;
+            const isDelivered = index % 12 !== 0;
+
+            let readTime = null;
+            if (isRead && isDelivered) {
+              readTime = new Date(sentTime.getTime());
+              readTime.setMinutes(readTime.getMinutes() + 15 + (index * 7) % 105);
+            }
+
+            seededLogs.push({
+              notificationId: notification._id,
+              employeeId: emp._id,
+              fcmToken: emp.fcmToken || `mock_fcm_token_index_${index}`,
+              sentAt: sentTime,
+              deliveredAt: isDelivered ? sentTime : null,
+              isRead: isRead && isDelivered,
+              readTime: readTime,
+              deliveryStatus: isDelivered ? 'delivered' : 'failed',
+              deviceType: index % 2 === 0 ? 'Mobile' : 'Web',
+              errorMessage: isDelivered ? null : 'FCM service returned device unregistered'
+            });
+
+            seededFeeds.push({
+              employeeId: emp._id,
+              notificationId: notification._id,
+              title: camp.title,
+              body: camp.description,
+              type: camp.type,
+              isRead: isRead && isDelivered,
+              readTime: readTime,
+              createdAt: sentTime
+            });
+          });
+        }
+      }
+
+      if (seededLogs.length > 0) {
+        console.log(`Saving ${seededLogs.length} Notification Logs in batches...`);
+        await saveInBatches(NotificationLog, seededLogs, 50);
+      }
+
+      if (seededFeeds.length > 0) {
+        console.log(`Saving ${seededFeeds.length} In-App Feeds in batches...`);
+        await saveInBatches(EmployeeNotification, seededFeeds, 50);
+      }
+
+      console.log(`- Seeded ${seededLogs.length} Notification Logs & In-App Feeds successfully!`);
+    }
 
     console.log('Seeding process finished.');
     process.exit();

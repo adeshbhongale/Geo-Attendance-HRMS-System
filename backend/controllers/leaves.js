@@ -53,7 +53,7 @@ exports.applyLeave = async (req, res, next) => {
     }
 
     // Removed redundant declaration
-    
+
     const leave = await Leave.create({
       user: userId,
       leaveType,
@@ -80,7 +80,7 @@ exports.getMyLeaves = async (req, res, next) => {
   try {
     const leaves = await Leave.find({ user: req.user.id }).sort('-createdAt');
     const activeLeaveTypes = await LeaveType.find({ status: 'active' });
-    
+
     const now = new Date();
     const quotas = activeLeaveTypes.map(lt => {
       let filter = { user: req.user.id, leaveType: lt.name, status: 'Approved' };
@@ -184,10 +184,10 @@ exports.updateLeaveStatus = async (req, res, next) => {
 
     const oldStatus = leave.status;
     const { status, adminNote } = req.body;
-    
+
     if (status) leave.status = status;
     if (adminNote) leave.adminNote = adminNote;
-    
+
     await leave.save();
 
     // If newly approved, decrement user's leave balance
@@ -222,6 +222,17 @@ exports.updateLeaveStatus = async (req, res, next) => {
       success: true,
       data: leave,
     });
+
+    // Hook in automated notifications
+    try {
+      const autoNotif = require('../services/autoNotificationService');
+      const io = req.app.get('io');
+      if (status === 'Approved') {
+        autoNotif.triggerLeaveApproved(leave.user, leave.leaveType, io);
+      }
+    } catch (e) {
+      console.error('Leave status update notification hook failed:', e);
+    }
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }

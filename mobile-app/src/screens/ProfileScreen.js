@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import {
+  Bell,
   Calendar,
   Camera,
   ChevronRight,
@@ -24,6 +25,8 @@ import {
   View,
 } from 'react-native';
 import api from '../api/axios';
+import NotificationDrawer from '../components/NotificationDrawer';
+import socket from '../socket';
 import { navigateGlobal } from '../utils/navigation';
 
 const ProfileScreen = ({ navigation }) => {
@@ -32,6 +35,35 @@ const ProfileScreen = ({ navigation }) => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [notifDrawerVisible, setNotifDrawerVisible] = useState(false);
+
+  // Sync initial unread notifications count on Profile screen load
+  useEffect(() => {
+    if (user?._id) {
+      const syncUnreadCount = () => {
+        api.get('/notifications/employee/feed')
+          .then((res) => {
+            if (res.data.success) {
+              const feed = res.data.data || [];
+              setUnreadNotifications(feed.filter(n => !n.isRead).length);
+            }
+          })
+          .catch(() => { });
+      };
+
+      syncUnreadCount();
+
+      socket.on(`notificationBadgeUpdate:${user._id}`, syncUnreadCount);
+      socket.on(`notificationLiveUpdate:${user._id}`, syncUnreadCount);
+
+      return () => {
+        socket.off(`notificationBadgeUpdate:${user._id}`, syncUnreadCount);
+        socket.off(`notificationLiveUpdate:${user._id}`, syncUnreadCount);
+      };
+    }
+  }, [user]);
 
   const [form, setForm] = useState({
     name: '',
@@ -92,7 +124,6 @@ const ProfileScreen = ({ navigation }) => {
         name: form.name,
         email: form.email,
         mobile: form.mobile,
-        designation: form.designation,
         profileImage: form.profileImage || 'skipped',
       };
 
@@ -166,59 +197,71 @@ const ProfileScreen = ({ navigation }) => {
 
       {/* Top Header Bar (No TruCode) */}
       <View className="bg-blue-600 pt-10 pb-24 px-6 flex-row items-center justify-between">
-        <View className="w-6" />
+        <View className="w-10" />
         <Text className="text-white font-bold text-lg">Profile</Text>
-        <View className="w-6" />
+        {/* Bell Notification Button on Profile page */}
+        <TouchableOpacity
+          onPress={() => setNotifDrawerVisible(true)}
+          activeOpacity={0.8}
+          className="w-10 h-10 rounded-xl bg-white/10 justify-center items-center relative border border-white/10"
+        >
+          <Bell size={20} color="white" />
+          {unreadNotifications > 0 && (
+            <View className="absolute -top-1 -right-1 bg-rose-500 min-w-4 h-4 rounded-full justify-center items-center px-1 border border-white">
+              <Text className="text-white text-[8px] font-extrabold">{unreadNotifications}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
       <ScrollView
         className="flex-1 -mt-20"
         showsVerticalScrollIndicator={false}
       >
-        {/* Profile Info Card (Matching Image) */}
+        {/* Profile Info Card */}
         <View className="px-6 mb-6">
-          <View className="bg-white rounded-3xl p-6 shadow-md items-center border border-slate-200">
-            <View className="w-24 h-24 rounded-full bg-slate-100 border-4 border-slate-50 items-center justify-center overflow-hidden -mt-4 shadow-sm">
+          <View className="bg-white rounded-3xl p-5 shadow-md flex-row items-center border border-slate-200 relative">
+
+            {/* Left Side: Profile Image */}
+            <View className="w-20 h-20 rounded-full bg-slate-100 border-4 border-slate-50 items-center justify-center overflow-hidden shadow-sm mr-4">
               {user?.profileImage ? (
                 <Image source={{ uri: user.profileImage }} className="w-full h-full" />
               ) : (
-                <UserIcon size={40} color="#94a3b8" />
+                <UserIcon size={32} color="#94a3b8" />
               )}
             </View>
 
-            <Text className="text-2xl font-bold text-slate-800 text-center mt-2">{user?.name || 'User'}</Text>
-            <View className="bg-slate-100 px-3 rounded-lg">
-              <Text className="text-[10px] font-bold text-slate-500">Emp ID: {user?._id}</Text>
-            </View>
-            {/* Department + Designation */}
-            <View className="flex-row items-center justify-center gap-3 mt-2 flex-wrap">
-              <Text className="text-slate-500 font-bold text-sm">
-                {user?.department}
-              </Text>
+            {/* Right Side: Other Info */}
+            <View className="flex-1 pr-5">
+              <Text className="text-xl font-bold text-slate-800" numberOfLines={1}>{user?.name || 'User'}</Text>
 
-              <View className="w-1 h-1 rounded-full bg-slate-400" />
+              {/* Department + Designation */}
+              <View className="flex-row items-center gap-1.5 mt-2 flex-wrap">
+                <Text className="text-slate-500 font-bold text-xs flex-shrink">
+                  {user?.department}
+                </Text>
+                <View className="w-1 h-1 rounded-full bg-slate-400" />
+                <Text className="text-slate-500 font-bold text-xs flex-shrink">
+                  {user?.designation}
+                </Text>
+              </View>
 
-              <Text className="text-slate-500 font-bold text-sm">
-                {user?.designation}
-              </Text>
-            </View>
-
-            {/* Email + Mobile */}
-            <View className="flex-row items-center justify-center gap-3 mt-2 flex-wrap px-4">
-              <Text
-                numberOfLines={1}
-                className="text-slate-600 font-bold text-sm"
-              >
-                {user?.email}
-              </Text>
-
-              <View className="w-1 h-1 rounded-full bg-slate-400" />
-
-              <Text className="text-slate-600 font-bold text-sm">
-                {user?.mobile}
-              </Text>
+              {/* Email + Mobile */}
+              <View className="flex-row items-center gap-1.5 mt-2 flex-wrap">
+                <Text
+                  numberOfLines={1}
+                  className="text-slate-600 font-bold text-[10px] flex-shrink"
+                >
+                  {user?.email}
+                </Text>
+                <View className="w-1 h-1 rounded-full bg-slate-400" />
+                <Text className="text-slate-600 font-bold text-[10px]">
+                  {user?.mobile}
+                </Text>
+              </View>
             </View>
 
+            {/* Edit Button */}
             <TouchableOpacity
               onPress={() => {
                 setForm({
@@ -230,9 +273,9 @@ const ProfileScreen = ({ navigation }) => {
                 });
                 setEditModalVisible(true);
               }}
-              className="absolute top-4 right-4 bg-slate-50 p-2.5 rounded-xl border border-slate-100 shadow-sm"
+              className="absolute top-4 right-4 bg-slate-50 p-2 rounded-xl border border-slate-100 shadow-sm"
             >
-              <Pencil size={18} color="#4f46e5" />
+              <Pencil size={16} color="#4f46e5" />
             </TouchableOpacity>
           </View>
         </View>
@@ -374,15 +417,6 @@ const ProfileScreen = ({ navigation }) => {
                   />
                 </View>
 
-                <View className="mt-4">
-                  <Text className="text-[10px] font-bold text-slate-400  tracking-widest mb-2 ml-1">Designation</Text>
-                  <TextInput
-                    className="bg-slate-50 rounded-xl px-5 h-14 border border-slate-100 font-bold text-slate-800"
-                    value={form.designation}
-                    onChangeText={(v) => setForm({ ...form, designation: v })}
-                    placeholder="e.g. System Engineer"
-                  />
-                </View>
 
                 <TouchableOpacity
                   onPress={handleUpdate}
@@ -407,6 +441,13 @@ const ProfileScreen = ({ navigation }) => {
           <Text className="text-white font-bold text-sm text-center flex-1">{toast.message}</Text>
         </View>
       )}
+
+      {/* Dynamic sliding history drawer */}
+      <NotificationDrawer
+        visible={notifDrawerVisible}
+        onClose={() => setNotifDrawerVisible(false)}
+        onUpdateUnreadCount={(cnt) => setUnreadNotifications(cnt)}
+      />
     </View>
   );
 };
