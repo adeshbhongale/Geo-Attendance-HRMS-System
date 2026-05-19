@@ -9,6 +9,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { enableScreens } from 'react-native-screens';
 import api from './src/api/axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import socket from './src/socket';
 
 enableScreens();
 
@@ -26,28 +28,58 @@ import { LogBox } from 'react-native';
 
 LogBox.ignoreAllLogs(true);
 
-const LOCATION_TASK_NAME = 'background-location-task';
+const LOCATION_TRACKING_TASK = 'background-location-tracking';
 
-// Define the background task
-TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
-  if (error) {
-    console.error('[BACKGROUND] Task Error:', error.message);
-    return;
-  }
+// Global variables for batch tracking
+let trackingBuffer = [];
+let lastBatchTime = Date.now();
+
+// Background Task Definition
+TaskManager.defineTask(LOCATION_TRACKING_TASK, async ({ data, error }) => {
+  if (error) return;
   if (data) {
     const { locations } = data;
-    const location = locations[0];
-    if (location) {
+    if (locations && locations.length > 0) {
       try {
-        await api.post('/attendance/track', {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          address: 'Background tracking...',
-          battery: 100
+        const loc = locations[0];
+        const { latitude, longitude, accuracy, speed, heading, mocked, timestamp } = loc.coords;
+
+        // 1. Enterprise Validation (Internal 2s check)
+        if (accuracy > 50) return;
+        const speedKmh = (speed || 0) * 3.6;
+        if (speedKmh > 30) return; // Ignore jumps above human speed
+
+        // 2. Add to internal buffer
+        trackingBuffer.push({
+          latitude,
+          longitude,
+          accuracy,
+          speed: speed || 0,
+          heading,
+          isMock: mocked,
+          timestamp: timestamp || Date.now()
         });
-      } catch (err) {
-        // Silent fail in background
-      }
+
+        // 3. Every 10 seconds: Transmit Batch
+        const now = Date.now();
+        if (now - lastBatchTime >= 10000 && trackingBuffer.length > 0) {
+          const batch = [...trackingBuffer];
+          trackingBuffer = [];
+          lastBatchTime = now;
+
+          // Retrieve User ID from storage
+          const userId = await AsyncStorage.getItem('userId');
+          if (userId) {
+            // Send via Socket for real-time movement
+            if (socket.connected) {
+              socket.emit('trackingBatch', { userId, batch });
+            } else {
+              // REST Fallback if socket is disconnected
+              await api.post('/attendance/track-batch', { userId, batch });
+            }
+          }
+        }
+      } catch (err) { }
     }
   }
 });
