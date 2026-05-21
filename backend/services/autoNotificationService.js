@@ -107,7 +107,7 @@ const triggerPunchOutReminder = async (employeeId, shiftName = 'Shift', io = nul
 
     return await notificationService.createAndSendNotification({
       title: 'Punch Out Reminder 🕒',
-      description: `Your shift (${shiftName}) is ending in 30 minutes. Please remember to clock out of your attendance tracking.`,
+      description: `Your shift (${shiftName}) ended 1 hour ago and you missed your punch out. Please punch out to record your attendance.`,
       type: 'Punch Out Reminder',
       autoType: 'Punch out reminder',
       frequency: 'Instant',
@@ -144,44 +144,6 @@ const triggerShiftStartingReminder = async (employeeId, timeStr = 'soon', io = n
 };
 
 /**
- * Triggers generic punch in confirmation
- */
-const triggerPunchIn = async (employeeId, timeStr, io = null) => {
-  try {
-    return await notificationService.createAndSendNotification({
-      title: 'Punch-In Successful ✅',
-      description: `You clocked in successfully at ${timeStr}. Have a great shift!`,
-      type: 'Punch In Reminder',
-      frequency: 'Instant',
-      targetType: 'Specific Employees',
-      employees: [employeeId],
-      isAuto: true
-    }, io);
-  } catch (err) {
-    console.error('Error in triggerPunchIn auto-notification:', err);
-  }
-};
-
-/**
- * Triggers generic punch out confirmation
- */
-const triggerPunchOut = async (employeeId, timeStr, io = null) => {
-  try {
-    return await notificationService.createAndSendNotification({
-      title: 'Punch-Out Successful 👋',
-      description: `You clocked out successfully at ${timeStr}. See you next time!`,
-      type: 'Punch Out Reminder',
-      frequency: 'Instant',
-      targetType: 'Specific Employees',
-      employees: [employeeId],
-      isAuto: true
-    }, io);
-  } catch (err) {
-    console.error('Error in triggerPunchOut auto-notification:', err);
-  }
-};
-
-/**
  * Triggers notification when employee enters office geofence boundaries
  */
 const triggerGeofenceEntry = async (employeeId, locationName = 'Office', io = null) => {
@@ -197,53 +159,6 @@ const triggerGeofenceEntry = async (employeeId, locationName = 'Office', io = nu
     }, io);
   } catch (err) {
     console.error('Error in triggerGeofenceEntry auto-notification:', err);
-  }
-};
-
-/**
- * Triggers notification when employee requests leave (Notify HR/Admins)
- */
-const triggerLeaveRequest = async (employeeId, leaveType = 'Leave', io = null) => {
-  try {
-    const employee = await User.findById(employeeId);
-    if (!employee) return null;
-
-    // Find active admins to notify
-    const admins = await User.find({ role: 'admin', status: 'active' });
-    const adminIds = admins.map(a => a._id);
-
-    if (adminIds.length === 0) return null;
-
-    return await notificationService.createAndSendNotification({
-      title: 'New Leave Request 📄',
-      description: `${employee.name} has submitted a new leave request for ${leaveType}.`,
-      type: 'Leave Applied',
-      frequency: 'Instant',
-      targetType: 'Specific Employees',
-      employees: adminIds,
-      isAuto: true
-    }, io);
-  } catch (err) {
-    console.error('Error in triggerLeaveRequest auto-notification:', err);
-  }
-};
-
-/**
- * Triggers notification when employee's leave request is rejected
- */
-const triggerLeaveRejected = async (employeeId, leaveType = 'Leave', io = null) => {
-  try {
-    return await notificationService.createAndSendNotification({
-      title: 'Leave Request Rejected ❌',
-      description: `Your leave request for ${leaveType} was rejected. Please contact your manager/HR for details.`,
-      type: 'Leave Rejected',
-      frequency: 'Instant',
-      targetType: 'Specific Employees',
-      employees: [employeeId],
-      isAuto: true
-    }, io);
-  } catch (err) {
-    console.error('Error in triggerLeaveRejected auto-notification:', err);
   }
 };
 
@@ -273,10 +188,6 @@ module.exports = {
   triggerLeaveApproved,
   triggerPunchOutReminder,
   triggerShiftStartingReminder,
-  triggerPunchIn,
-  triggerPunchOut,
   triggerGeofenceEntry,
-  triggerLeaveRequest,
-  triggerLeaveRejected,
   triggerAttendanceMissing,
 };

@@ -271,6 +271,41 @@ const processAutomaticWorkflows = async (io = null) => {
           },
           { isRead: true, readAt: new Date() }
         );
+
+        // Check if employee forgot to punch out after shift ended
+        const hasPunchedOut = attendance.punchOut && attendance.punchOut.time;
+        if (!hasPunchedOut) {
+          // Parse shift times
+          const [startHour, startMin] = shift.startTime.split(':').map(Number);
+          const [endHour, endMin] = shift.endTime.split(':').map(Number);
+
+          const shiftStart = new Date(now);
+          shiftStart.setHours(startHour, startMin, 0, 0);
+
+          const shiftEnd = new Date(now);
+          shiftEnd.setHours(endHour, endMin, 0, 0);
+
+          // Account for overnight shifts
+          if (shiftEnd < shiftStart) {
+            shiftEnd.setDate(shiftEnd.getDate() + 1);
+          }
+
+          // Check if 1 hour has passed since shift end
+          const oneHourPastShiftEnd = new Date(shiftEnd.getTime() + 60 * 60 * 1000);
+          if (now >= oneHourPastShiftEnd) {
+            // Avoid double-sending punch out reminder today
+            const sentReminderToday = await EmployeeNotification.findOne({
+              employeeId: employee._id,
+              autoType: 'Punch out reminder',
+              createdAt: { $gte: todayStart, $lte: todayEnd }
+            });
+
+            if (!sentReminderToday) {
+              await autoNotif.triggerPunchOutReminder(employee._id, shift.name, io);
+            }
+          }
+        }
+
         continue; // Employee is physically present, skip further alerts
       }
 

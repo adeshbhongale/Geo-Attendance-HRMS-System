@@ -18,7 +18,7 @@ import {
   FileText,
   Trophy
 } from 'lucide-react';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
@@ -114,17 +114,27 @@ const AiAnalytics = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDept, setSelectedDept] = useState('All');
   const [expandedEmployeeId, setExpandedEmployeeId] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedDept, data]);
 
   useEffect(() => {
     const cachedData = localStorage.getItem('ai_leaderboard_cache');
     const cachedFallback = localStorage.getItem('ai_leaderboard_fallback');
     if (cachedData) {
-      setData(JSON.parse(cachedData));
-      setIsFallback(cachedFallback === 'true');
-      setLoading(false);
-    } else {
-      fetchAIStats();
+      const parsed = JSON.parse(cachedData);
+      const hasSuggestions = parsed.length > 0 && parsed[0].suggestions;
+      if (hasSuggestions) {
+        setData(parsed);
+        setIsFallback(cachedFallback === 'true');
+        setLoading(false);
+        return;
+      }
     }
+    fetchAIStats();
   }, []);
 
   const fetchAIStats = async () => {
@@ -150,6 +160,27 @@ const AiAnalytics = () => {
   const toggleExpand = (id) => {
     setExpandedEmployeeId(expandedEmployeeId === id ? null : id);
   };
+
+  // Extract unique departments
+  const departments = useMemo(() => {
+    return ['All', ...new Set(data.map(e => e.department))];
+  }, [data]);
+
+  // Filtering Logic
+  const filteredData = useMemo(() => {
+    return data.filter(e => {
+      const matchesSearch = (e.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesDept = selectedDept === 'All' || e.department === selectedDept;
+      return matchesSearch && matchesDept;
+    });
+  }, [data, searchTerm, selectedDept]);
+
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredData.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredData, currentPage]);
+
+  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
 
   if (loading) {
     return (
@@ -181,16 +212,6 @@ const AiAnalytics = () => {
       </div>
     );
   }
-
-  // Extract unique departments
-  const departments = ['All', ...new Set(data.map(e => e.department))];
-
-  // Filtering Logic
-  const filteredData = data.filter(e => {
-    const matchesSearch = (e.name || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDept = selectedDept === 'All' || e.department === selectedDept;
-    return matchesSearch && matchesDept;
-  });
 
   return (
     <div className="space-y-8 pb-12">
@@ -295,20 +316,21 @@ const AiAnalytics = () => {
                 <th className="px-8 py-5 text-[15px] font-bold text-slate-900 text-center w-60 border border-slate-300">Employee</th>
                 <th className="px-8 py-5 text-[15px] font-bold text-slate-900 text-center w-50 border border-slate-300">Department</th>
                 <th className="px-8 py-5 text-[15px] font-bold text-slate-900 text-center w-50 border border-slate-300">AI Score</th>
-                <th className="px-8 py-5 text-[15px] font-bold text-slate-900 text-center w-50 border border-slate-300">Statistics</th>
+                <th className="px-8 py-5 text-[15px] font-bold text-slate-900 text-center w-55 border border-slate-300">AI Suggestions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filteredData.map((emp, index) => {
+              {paginatedData.map((emp, index) => {
                 const isExpanded = expandedEmployeeId === emp._id;
                 const stats = emp.stats || {};
+                const rank = (currentPage - 1) * itemsPerPage + index + 1;
 
                 return (
                   <React.Fragment key={emp._id}>
                     <tr className="hover:bg-slate-50/50 transition-colors group">
                       <td className="px-8 py-6 border border-slate-300 text-center">
-                        <span className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs mx-auto ${index < 3 && searchTerm === '' && selectedDept === 'All' ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500'}`}>
-                          {index + 1}
+                        <span className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs mx-auto ${rank <= 3 && searchTerm === '' && selectedDept === 'All' ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500'}`}>
+                          {rank}
                         </span>
                       </td>
                       <td className="px-8 py-6 border border-slate-300">
@@ -340,19 +362,19 @@ const AiAnalytics = () => {
                           className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-indigo-600 hover:text-white transition-all text-xs font-bold flex items-center gap-1.5 mx-auto active:scale-95"
                         >
                           {isExpanded ? (
-                            <>Hide Stats <ChevronUp size={15} /></>
+                            <>Hide Suggestions <ChevronUp size={15} /></>
                           ) : (
-                            <>View Stats <ChevronDown size={15} /></>
+                            <>View Suggestions <ChevronDown size={15} /></>
                           )}
                         </button>
                       </td>
                     </tr>
 
-                    {/* Expandable Stats details */}
+                    {/* Expandable Suggestions details */}
                     <AnimatePresence>
                       {isExpanded && (
                         <tr>
-                          <td colSpan={5} className="bg-slate-50/30 p-8 border border-slate-300">
+                          <td colSpan={5} className="bg-indigo-50/20 p-8 border border-slate-300">
                             <motion.div
                               initial={{ opacity: 0, height: 0 }}
                               animate={{ opacity: 1, height: 'auto' }}
@@ -360,19 +382,44 @@ const AiAnalytics = () => {
                               transition={{ duration: 0.25 }}
                               className="overflow-hidden"
                             >
-                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                                <CompactStatItem label="Working Days" value={stats.workingDays} icon={Calendar} color="indigo" />
-                                <CompactStatItem label="Total Working HR" value={stats.totalWorkingHours} icon={Clock} color="emerald" />
-                                <CompactStatItem label="Total Break Time" value={stats.totalBreakTime} icon={Coffee} color="amber" />
-                                <CompactStatItem label="Total Distance" value={stats.totalDistance} icon={MapPin} color="violet" />
-                                <CompactStatItem label="Current Shift" value={stats.currentShift} icon={Moon} color="sky" />
-                                <CompactStatItem label="Current Working HR" value={stats.currentWorkingHours} icon={Clock} color="emerald" />
-                                <CompactStatItem label="Current Break" value={stats.currentBreak} icon={Coffee} color="amber" />
-                                <CompactStatItem label="Current Distance" value={stats.currentDistance} icon={MapPin} color="violet" />
-                                <CompactStatItem label="Late Days" value={stats.lateDays} icon={AlertCircle} color="rose" />
-                                <CompactStatItem label="Half Day Count" value={stats.halfDayCount} icon={AlertCircle} color="rose" />
-                                <CompactStatItem label="Absent Days" value={stats.absentDays} icon={AlertCircle} color="rose" />
-                                <CompactStatItem label="Leave Days" value={stats.leaveDays} icon={FileText} color="indigo" />
+                              <div className="flex flex-col gap-6">
+                                <div className="flex flex-col gap-3">
+                                  <h4 className="text-xs font-extrabold text-indigo-700 tracking-wider flex items-center gap-1.5 mb-1">
+                                    <Sparkles size={14} /> RECOMMENDED IMPROVEMENTS
+                                  </h4>
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {Array.isArray(emp.suggestions) && emp.suggestions.map((tip, idx) => (
+                                      <div key={idx} className="bg-white p-4 rounded-xl border border-indigo-50 shadow-sm flex items-start gap-3">
+                                        <div className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                                          {idx + 1}
+                                        </div>
+                                        <p className="text-xs font-bold text-slate-700 leading-relaxed">{tip}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-col gap-3">
+                                  <h4 className="text-xs font-extrabold text-rose-700 tracking-wider flex items-center gap-1.5 mb-1">
+                                    <AlertTriangle size={14} /> WEAK POINTS / AREAS OF CONCERN
+                                  </h4>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {Array.isArray(emp.weakPoints) && emp.weakPoints.length > 0 ? (
+                                      emp.weakPoints.map((point, idx) => (
+                                        <div key={idx} className="bg-white p-4 rounded-xl border border-rose-50 shadow-sm flex items-start gap-3">
+                                          <div className="w-6 h-6 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                                            {idx + 1}
+                                          </div>
+                                          <p className="text-xs font-bold text-slate-700 leading-relaxed">{point}</p>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <div className="bg-white p-4 rounded-xl border border-rose-50 shadow-sm flex items-start gap-3 col-span-2">
+                                        <p className="text-xs font-bold text-slate-500 italic">None identified</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             </motion.div>
                           </td>
@@ -387,6 +434,48 @@ const AiAnalytics = () => {
           {filteredData.length === 0 && (
             <div className="p-20 text-center text-slate-400 font-bold">
               No employees found matching your search criteria.
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 px-8 py-6 border-t border-slate-100 bg-slate-50/20">
+              <p className="text-[11px] font-bold text-slate-400 tracking-wider">
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredData.length)} of {filteredData.length} records
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  className="px-4 py-2.5 rounded-xl border border-slate-100 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                >
+                  Previous
+                </button>
+                <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                  {Array.from({ length: totalPages }).map((_, idx) => {
+                    const pageNum = idx + 1;
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`w-9 h-9 rounded-xl text-xs font-bold transition-all shadow-sm ${currentPage === pageNum
+                            ? 'bg-indigo-600 text-white shadow-indigo-100'
+                            : 'bg-white border border-slate-100 text-slate-600 hover:bg-slate-50 hover:border-slate-200'
+                          }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  className="px-4 py-2.5 rounded-xl border border-slate-100 bg-white text-xs font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-200 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </div>

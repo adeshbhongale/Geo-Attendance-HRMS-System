@@ -1,5 +1,6 @@
 const Location = require('../models/Location');
 const CompanySetting = require('../models/CompanySetting');
+const User = require('../models/User');
 
 // @desc    Get office settings
 // @route   GET /api/settings/office
@@ -21,9 +22,41 @@ exports.getOfficeSettings = async (req, res, next) => {
       });
     }
 
+    // Check if logged-in user is an employee and has an assigned workingPlace
+    const user = await User.findById(req.user.id).populate('workingPlace');
+    let responseData = {};
+
+    if (user && user.workingPlace) {
+      responseData = {
+        _id: user.workingPlace._id,
+        name: user.workingPlace.name || 'Office Main',
+        latitude: user.workingPlace.latitude,
+        longitude: user.workingPlace.longitude,
+        address: user.workingPlace.address || '',
+        radius: user.workingPlace.radius || 200,
+        geofenceEnabled: user.workingPlace.geofenceEnabled !== undefined ? user.workingPlace.geofenceEnabled : true,
+        weeklyOffs: office.weeklyOffs,
+        globalHolidays: office.globalHolidays,
+        leaveTypesEnabled: office.leaveTypesEnabled,
+      };
+    } else {
+      responseData = {
+        _id: office._id,
+        name: 'Primary Office',
+        latitude: office.officeLocation?.latitude || 18.5204,
+        longitude: office.officeLocation?.longitude || 73.8567,
+        address: office.officeLocation?.address || 'Pune, Maharashtra, India',
+        radius: office.officeLocation?.radius || 200,
+        geofenceEnabled: office.officeLocation?.geofenceEnabled !== undefined ? office.officeLocation.geofenceEnabled : true,
+        weeklyOffs: office.weeklyOffs,
+        globalHolidays: office.globalHolidays,
+        leaveTypesEnabled: office.leaveTypesEnabled,
+      };
+    }
+
     res.status(200).json({
       success: true,
-      data: office,
+      data: responseData,
     });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });

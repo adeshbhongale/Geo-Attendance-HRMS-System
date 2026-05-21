@@ -86,7 +86,11 @@ exports.getAIAnalytics = async (req, res, next) => {
     }).join('\n\n');
 
     const prompt = `
-Analyze the performance of the following employees based on their summary statistics and calculate a single overall performance score (out of 100) for each employee.
+Analyze the performance of the following employees based on their summary statistics. For each employee:
+1. Calculate a single overall performance score (out of 100) that must be above 50 (i.e. between 50 and 100).
+2. Provide exactly 3 concise, actionable improvements/tips (maximum 10 words per tip).
+3. Provide exactly 2 weak points or areas of concern (maximum 10 words per weak point).
+
 Criteria to consider for the score:
 - Attendance & Reliability (impacted by Absent Days, Leave Days)
 - Punctuality & Shift Adherence (impacted by Late Days, Half Days)
@@ -101,7 +105,9 @@ Generate the response in EXACTLY this JSON format:
   "scores": [
     {
       "name": "string (exact employee name)",
-      "score": number
+      "score": number,
+      "suggestions": ["short tip 1", "short tip 2", "short tip 3"],
+      "weakPoints": ["short weak point 1", "short weak point 2"]
     }
   ]
 }
@@ -138,11 +144,30 @@ Return ONLY the raw JSON object. Do not include markdown code blocks, do not inc
         const avgBreak = workingDaysNum > 0 ? (totalBreakMins / workingDaysNum) : 0;
         const breakScore = Math.max(0, 100 - Math.max(0, avgBreak - 60) * 1.5);
 
-        const overallScore = Math.round(attendanceScore * 0.35 + punctualityScore * 0.25 + productivityScore * 0.30 + breakScore * 0.10);
+        const overallScore = Math.max(51, Math.round(attendanceScore * 0.35 + punctualityScore * 0.25 + productivityScore * 0.30 + breakScore * 0.10));
+
+        const suggestions = [];
+        if (absentDaysNum > 0) suggestions.push("Focus on reducing absent days");
+        if (lateDaysNum > 0) suggestions.push("Strive for more punctual clock-ins");
+        if (halfDaysNum > 0) suggestions.push("Avoid partial shift half-days");
+        if (suggestions.length < 3) suggestions.push("Maintain current work schedule");
+        if (suggestions.length < 3) suggestions.push("Optimize daily break intervals");
+        if (suggestions.length < 3) suggestions.push("Keep up the good productivity");
+        const finalSuggestions = suggestions.slice(0, 3);
+
+        const weakPoints = [];
+        if (absentDaysNum > 0) weakPoints.push("High absenteeism rate");
+        if (lateDaysNum > 0) weakPoints.push("Punctuality improvement needed");
+        if (halfDaysNum > 0) weakPoints.push("Multiple partial shift half-days");
+        if (weakPoints.length < 2) weakPoints.push("Keep consistency in shift clock-ins");
+        if (weakPoints.length < 2) weakPoints.push("Optimize break time intervals");
+        const finalWeakPoints = weakPoints.slice(0, 2);
 
         return {
           name: emp.name,
-          score: overallScore
+          score: overallScore,
+          suggestions: finalSuggestions,
+          weakPoints: finalWeakPoints
         };
       });
     };
@@ -150,7 +175,7 @@ Return ONLY the raw JSON object. Do not include markdown code blocks, do not inc
     let scores = [];
     let isFallback = false;
     const apiKey = process.env.GEMINI_API_KEY;
-    const isKeyMissing = !apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE' || apiKey.startsWith('AIzaSyA0Dx'); // checks for the invalid key starting format in .env
+    const isKeyMissing = !apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE';
 
     if (isKeyMissing) {
       console.warn('⚠️ Gemini API key is missing or using placeholder in .env file. Using local fallback scores.');
@@ -178,12 +203,27 @@ Return ONLY the raw JSON object. Do not include markdown code blocks, do not inc
     // Merge computed scores back into employee objects
     const data = employees.map(emp => {
       const matched = scores.find(s => s.name.toLowerCase() === emp.name.toLowerCase());
+      const fallbackSuggs = [
+        "Maintain current work schedule",
+        "Optimize daily break intervals",
+        "Keep up the good productivity"
+      ];
+      const fallbackWeakPoints = [
+        "None identified",
+        "Keep consistency in shift clock-ins"
+      ];
+      
+      let finalScore = matched ? matched.score : 60;
+      if (finalScore < 51) finalScore = 51; // force score above 50
+      
       return {
         _id: emp._id,
         name: emp.name,
         department: emp.department || 'General',
         stats: employeeStats[emp._id],
-        score: matched ? matched.score : 60 // default fallback score if matching fails
+        score: finalScore,
+        suggestions: (matched && Array.isArray(matched.suggestions)) ? matched.suggestions : fallbackSuggs,
+        weakPoints: (matched && Array.isArray(matched.weakPoints)) ? matched.weakPoints : fallbackWeakPoints
       };
     });
 

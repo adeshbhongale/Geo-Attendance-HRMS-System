@@ -390,13 +390,10 @@ const CreateNotification = () => {
     'Meeting Notification',
     'Emergency Alert',
     'Late Coming',
-    'Leave Applied',
     'Leave Approved',
-    'Leave Rejected',
     'Geofence Entered',
     'Geofence Exited',
     'Shift Change Notification',
-    'Punch In Reminder',
     'Punch Out Reminder'
   ]);
   const [allowedAutoTypes, setAllowedAutoTypes] = useState([

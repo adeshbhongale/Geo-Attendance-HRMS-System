@@ -56,7 +56,7 @@ exports.punchIn = async (req, res, next) => {
     }
 
     // Parallelize time-consuming operations: Selfie upload + DB Queries
-    const [selfieData, existingAttendance, office, user] = await Promise.all([
+    const [selfieData, existingAttendance, officeMain, user] = await Promise.all([
       selfie && selfie !== 'skipped' ? uploadToCloudinary(selfie, 'hrms/attendance/selfies').catch(err => {
         console.log('Selfie upload warning:', err.message);
         return null;
@@ -65,21 +65,23 @@ exports.punchIn = async (req, res, next) => {
         user: userId,
         date: { $gte: startOfDay, $lte: endOfDay }
       }),
-      Location.findOne({ name: 'Office Main' }) || Location.findOne(),
-      User.findById(userId).populate('shift')
+      Location.findOne({ name: 'Office Main' }).then(loc => loc || Location.findOne()),
+      User.findById(userId).populate('shift').populate('workingPlace')
     ]);
 
     if (existingAttendance) {
       // If it's an 'Absent' placeholder, we allow overwriting it with a real punch-in
       if (existingAttendance.status === 'Absent') {
-         await Attendance.deleteOne({ _id: existingAttendance._id });
-         existingAttendance = null; 
+        await Attendance.deleteOne({ _id: existingAttendance._id });
+        existingAttendance = null;
       } else if (!existingAttendance.punchOut?.time) {
         return res.status(400).json({ success: false, message: 'You already have an active session. Please punch out first.' });
       } else {
         return res.status(400).json({ success: false, message: 'You have already completed your attendance for today.' });
       }
     }
+
+    const office = user?.workingPlace || officeMain;
 
     if (!office) {
       return res.status(500).json({ success: false, message: 'Office location not set by admin' });
@@ -97,32 +99,32 @@ exports.punchIn = async (req, res, next) => {
       // ── Block Future Shifts ──
       const [sH, sM] = user.shift.startTime.split(':').map(Number);
       const [eH, eM] = user.shift.endTime.split(':').map(Number);
-      
+
       const shiftStart = new Date(now);
       shiftStart.setHours(sH, sM, 0, 0);
-      
+
       const shiftEnd = new Date(now);
       shiftEnd.setHours(eH, eM, 0, 0);
       if (eH < sH || (eH === sH && eM < sM)) shiftEnd.setDate(shiftEnd.getDate() + 1);
 
       // Block punch in only if shift has already ended
       if (now > shiftEnd) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Shift has already ended. You cannot punch in now.' 
+        return res.status(400).json({
+          success: false,
+          message: 'Shift has already ended. You cannot punch in now.'
         });
       }
 
       // Allow punch in only up to 60 minutes before shift starts
       // EXCEPTION: New employees (created within last 48h) can punch in anytime on their first shifts
       const joinDate = new Date(user.createdAt);
-      const isNewEmployee = (now - joinDate) < (48 * 60 * 60 * 1000); 
+      const isNewEmployee = (now - joinDate) < (48 * 60 * 60 * 1000);
 
-      const earlyBuffer = 60 * 60 * 1000; 
+      const earlyBuffer = 60 * 60 * 1000;
       if (!isNewEmployee && now < new Date(shiftStart.getTime() - earlyBuffer)) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `Too early. You can only punch in after ${new Date(shiftStart.getTime() - earlyBuffer).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` 
+        return res.status(400).json({
+          success: false,
+          message: `Too early. You can only punch in after ${new Date(shiftStart.getTime() - earlyBuffer).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
         });
       }
     }
@@ -170,9 +172,6 @@ exports.punchIn = async (req, res, next) => {
     try {
       const autoNotif = require('../services/autoNotificationService');
       const io = req.app.get('io');
-      const timeStr = new Date(attendance.punchIn.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      autoNotif.triggerPunchIn(userId, timeStr, io);
-      
       if (attendance.isLate) {
         autoNotif.triggerLateArrival(userId, attendance.lateTime, io);
       }
@@ -190,7 +189,7 @@ exports.punchOut = async (req, res, next) => {
     const userId = req.user.id;
 
     // Parallelize selfie upload and DB lookups
-    const [selfieData, attendance, office, user] = await Promise.all([
+    const [selfieData, attendance, officeMain, user] = await Promise.all([
       selfie && selfie !== 'skipped' ? uploadToCloudinary(selfie, 'hrms/attendance/selfies').catch(err => {
         console.log('Selfie upload warning:', err.message);
         return null;
@@ -199,12 +198,18 @@ exports.punchOut = async (req, res, next) => {
         user: userId,
         "punchOut.time": { $exists: false }
       }).sort('-date'),
-      Location.findOne({ name: 'Office Main' }) || Location.findOne(),
-      User.findById(userId).populate('shift')
+      Location.findOne({ name: 'Office Main' }).then(loc => loc || Location.findOne()),
+      User.findById(userId).populate('shift').populate('workingPlace')
     ]);
 
     if (!attendance) {
       return res.status(400).json({ success: false, message: 'No active punch-in session found' });
+    }
+
+    const office = user?.workingPlace || officeMain;
+
+    if (!office) {
+      return res.status(500).json({ success: false, message: 'Office location not set by admin' });
     }
 
     const outDistance = calculateDistance(latitude, longitude, office.latitude, office.longitude);
@@ -235,15 +240,15 @@ exports.punchOut = async (req, res, next) => {
       data: attendance,
     });
 
-    // Hook in automated notifications
-    try {
+    // Hook in automated notifications (Punch-Out notification is now scheduled automatically after shift instead of instant)
+    /* try {
       const autoNotif = require('../services/autoNotificationService');
       const io = req.app.get('io');
       const timeStr = new Date(attendance.punchOut.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       autoNotif.triggerPunchOut(userId, timeStr, io);
     } catch (e) {
       console.error('Punch out notification hook failed:', e);
-    }
+    } */
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
@@ -254,15 +259,15 @@ exports.punchOut = async (req, res, next) => {
 // @access  Private
 exports.getHistory = async (req, res, next) => {
   try {
-    const attendanceRaw = await Attendance.find({ 
+    const attendanceRaw = await Attendance.find({
       user: req.user.id,
       "punchIn.time": { $exists: true }
     }).sort('-date');
 
     const attendance = attendanceRaw.map(a => {
       const record = a.toObject();
-      return { 
-        ...record, 
+      return {
+        ...record,
         workingHours: statsService.calculateWorkingHours(record),
         status: statsService.resolveStatus(record, record.user)
       };
@@ -301,7 +306,7 @@ exports.getAllAttendance = async (req, res, next) => {
       const start = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
       const end = new Date(start);
       end.setUTCDate(end.getUTCDate() + 1);
-      
+
       query.date = { $gte: start, $lt: end };
       searchDate = start;
     }
@@ -324,9 +329,9 @@ exports.getAllAttendance = async (req, res, next) => {
     });
 
     const Holiday = require('../models/Holiday');
-    const searchDateStart = new Date(searchDate); searchDateStart.setUTCHours(0,0,0,0);
-    const searchDateEnd = new Date(searchDate); searchDateEnd.setUTCHours(23,59,59,999);
-    
+    const searchDateStart = new Date(searchDate); searchDateStart.setUTCHours(0, 0, 0, 0);
+    const searchDateEnd = new Date(searchDate); searchDateEnd.setUTCHours(23, 59, 59, 999);
+
     const [isHoliday, approvedLeaves] = await Promise.all([
       Holiday.findOne({ holiday_date: { $gte: searchDateStart, $lte: searchDateEnd }, status: 'active' }),
       Leave.find({
@@ -335,11 +340,11 @@ exports.getAllAttendance = async (req, res, next) => {
         endDate: { $gte: searchDate }
       })
     ]);
-    
+
     const leaveUserIdsSet = new Set(approvedLeaves.map(l => l.user.toString()));
     const allUsers = await User.find({ role: { $ne: 'admin' } }).populate('shift', 'name startTime endTime');
     const presentUserIds = new Set(attendance.map(a => a.user?._id?.toString()));
-    
+
     const now = new Date();
 
     const absentRecords = allUsers
@@ -347,7 +352,7 @@ exports.getAllAttendance = async (req, res, next) => {
       .filter(user => {
         const joined = new Date(user.joiningDate || user.createdAt);
         joined.setUTCHours(0, 0, 0, 0);
-        
+
         // If user joined AFTER the search date, they don't exist yet
         if (joined > searchDate) return false;
 
@@ -447,8 +452,9 @@ exports.trackLocation = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'No active session found to track' });
     }
 
-    const office = await Location.findOne({ name: 'Office Main' }) || await Location.findOne();
-    
+    const user = await User.findById(userId).populate('workingPlace');
+    const office = user?.workingPlace || (await Location.findOne({ name: 'Office Main' }) || await Location.findOne());
+
     let lastPoint = null;
     if (attendance.trackingLogs.length > 0) {
       lastPoint = attendance.trackingLogs[attendance.trackingLogs.length - 1];
@@ -561,7 +567,7 @@ exports.getMonthlyView = async (req, res, next) => {
 
     const user = await User.findById(userId).select('+createdAt');
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-    
+
     const joiningDate = user.createdAt ? new Date(user.createdAt) : new Date(0);
     joiningDate.setUTCHours(0, 0, 0, 0);
 
@@ -591,11 +597,11 @@ exports.getMonthlyView = async (req, res, next) => {
 
     const [settings, monthHolidays] = await Promise.all([
       CompanySetting.findOne(),
-      Holiday.find({ 
-        holiday_date: { 
-          $gte: startDate.toISOString().split('T')[0], 
-          $lt: endDate.toISOString().split('T')[0] 
-        } 
+      Holiday.find({
+        holiday_date: {
+          $gte: startDate.toISOString().split('T')[0],
+          $lt: endDate.toISOString().split('T')[0]
+        }
       })
     ]);
 
@@ -611,9 +617,9 @@ exports.getMonthlyView = async (req, res, next) => {
       const isWeekOff = settings?.weeklyOffs?.includes(dayName);
       const holidayName = holidayMap[i];
 
-      const isFuture = (parseInt(year) > now.getUTCFullYear()) || 
-                      (parseInt(year) === now.getUTCFullYear() && parseInt(month) > (now.getUTCMonth() + 1)) ||
-                      (parseInt(year) === now.getUTCFullYear() && parseInt(month) === (now.getUTCMonth() + 1) && i > now.getUTCDate());
+      const isFuture = (parseInt(year) > now.getUTCFullYear()) ||
+        (parseInt(year) === now.getUTCFullYear() && parseInt(month) > (now.getUTCMonth() + 1)) ||
+        (parseInt(year) === now.getUTCFullYear() && parseInt(month) === (now.getUTCMonth() + 1) && i > now.getUTCDate());
 
       const isToday = (parseInt(year) === now.getUTCFullYear() && parseInt(month) === (now.getUTCMonth() + 1) && i === now.getUTCDate());
       const isBeforeJoining = d.getTime() < joiningDate.getTime();
@@ -639,7 +645,7 @@ exports.getMonthlyView = async (req, res, next) => {
         if (d.getUTCMonth() + 1 === parseInt(month) && d.getUTCFullYear() === parseInt(year)) {
           const day = d.getUTCDate();
           if (dailyStatus[day] && !dailyStatus[day].isBeforeJoining) {
-            dailyStatus[day] = { ...dailyStatus[day], status: 'On Leave', color: '#f59e0b', isFuture: false }; 
+            dailyStatus[day] = { ...dailyStatus[day], status: 'On Leave', color: '#f59e0b', isFuture: false };
             summary.onLeave++;
           }
         }
@@ -664,10 +670,10 @@ exports.getMonthlyView = async (req, res, next) => {
 
     summary.absent = 0;
     for (let i = 1; i <= daysInMonth; i++) {
-       const dayStatus = dailyStatus[i];
-       if (dayStatus.status === 'Absent' && !dayStatus.isWeekOff && !dayStatus.isHoliday && !dayStatus.isBeforeJoining && !dayStatus.isFuture && !dayStatus.isToday) {
-         summary.absent++;
-       }
+      const dayStatus = dailyStatus[i];
+      if (dayStatus.status === 'Absent' && !dayStatus.isWeekOff && !dayStatus.isHoliday && !dayStatus.isBeforeJoining && !dayStatus.isFuture && !dayStatus.isToday) {
+        summary.absent++;
+      }
     }
 
     res.status(200).json({ success: true, data: { summary, dailyStatus, daysInMonth, monthName: new Date(year, month - 1).toLocaleString('default', { month: 'long' }) } });

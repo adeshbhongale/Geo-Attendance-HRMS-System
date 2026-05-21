@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Briefcase, Camera, Info, Mail, Phone, Save, ShieldCheck, User, X } from 'lucide-react';
+import { Briefcase, Camera, Info, Mail, Phone, Save, ShieldCheck, User, X, Smartphone, Download } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useDispatch, useSelector } from 'react-redux';
@@ -242,15 +242,39 @@ const Profile = () => {
         </div>
       </div>
 
-      <div className="mt-8 p-6 bg-amber-50 rounded-3xl border border-amber-100 flex items-start gap-4">
-        <div className="p-2 bg-white rounded-xl text-amber-600 shadow-sm">
-          <Info size={20} />
+      <div className="mt-8 p-6 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600 shadow-sm shrink-0">
+            <Smartphone size={24} />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-800 mb-1">Download Mobile App</p>
+            <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
+              Access your geo-attendance portal on the go. Download the official app for Android and iOS devices.
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="text-xs font-bold text-amber-900 mb-1">Administrative Note</p>
-          <p className="text-[11px] text-amber-700 leading-relaxed font-medium">
-            Changes to your email or mobile number will take effect immediately. You will need to use your updated credentials for future logins to the management portal.
-          </p>
+        <div className="flex flex-wrap gap-3 shrink-0 w-full md:w-auto justify-end">
+          {import.meta.env.VITE_ANDROID_APK_URL && (
+            <a
+              href={import.meta.env.VITE_ANDROID_APK_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-indigo-100 active:scale-95 text-center justify-center flex-1 md:flex-initial"
+            >
+              <Download size={14} /> Android APK
+            </a>
+          )}
+          {import.meta.env.VITE_IOS_APP_URL && (
+            <a
+              href={import.meta.env.VITE_IOS_APP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-slate-200 active:scale-95 text-center justify-center flex-1 md:flex-initial"
+            >
+              <Download size={14} /> iOS App
+            </a>
+          )}
         </div>
       </div>
     </div>

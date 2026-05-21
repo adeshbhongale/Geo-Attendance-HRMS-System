@@ -3,6 +3,7 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Download,
   FileText,
   Search
@@ -241,6 +242,19 @@ const NotificationAnalytics = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [generatedAt, setGeneratedAt] = useState('');
+
+  const [isRowDropdownOpen, setIsRowDropdownOpen] = useState(false);
+  const rowDropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (rowDropdownRef.current && !rowDropdownRef.current.contains(event.target)) {
+        setIsRowDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchDashboardData = async () => {
     try {
@@ -539,21 +553,42 @@ const NotificationAnalytics = () => {
         <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
 
           <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className="flex items-center gap-2 border border-slate-200 px-3 py-2 rounded-xl bg-slate-50 text-slate-700 text-xs font-bold">
-              <span>Show</span>
-              <select
-                value={itemsPerPage}
-                onChange={(e) => {
-                  setItemsPerPage(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="bg-transparent border-none focus:outline-none focus:ring-0 p-0 text-indigo-600 font-bold"
+            <div className="relative" ref={rowDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsRowDropdownOpen(!isRowDropdownOpen)}
+                className="flex items-center gap-2 border border-slate-200 px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors text-slate-700 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               >
-                <option value={5}>5 rows</option>
-                <option value={10}>10 rows</option>
-                <option value={25}>25 rows</option>
-                <option value={50}>50 rows</option>
-              </select>
+                <span>Show</span>
+                <span className="text-indigo-600 font-extrabold">{itemsPerPage} rows</span>
+                <ChevronDown size={14} className={`text-slate-400 transition-transform ${isRowDropdownOpen ? 'rotate-180 text-indigo-600' : ''}`} />
+              </button>
+
+              {isRowDropdownOpen && (
+                <div className="absolute left-0 top-full mt-2 z-50 w-32 bg-white border border-slate-200 rounded-xl shadow-xl p-1">
+                  {[5, 10, 25, 50].map((num) => {
+                    const isSelected = itemsPerPage === num;
+                    return (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => {
+                          setItemsPerPage(num);
+                          setCurrentPage(1);
+                          setIsRowDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-indigo-50 text-indigo-600'
+                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                      >
+                        {num} rows
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <button
