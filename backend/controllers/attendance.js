@@ -2,6 +2,7 @@ const Attendance = require('../models/Attendance');
 const User = require('../models/User');
 const Location = require('../models/Location');
 const Leave = require('../models/Leave');
+const { getISTDateComponents, createDateFromIST, getStartOfDayIST, getEndOfDayIST } = require('../utils/timezone');
 // SINGLE SOURCE OF TRUTH — all calculations via canonical service
 const statsService = require('../services/employeeStatsService');
 const geoService = require('../services/geoTrackingService');
@@ -27,6 +28,86 @@ exports.trackBatch = async (req, res, next) => {
   }
 };
 
+// Helper to match shift window timezone-aware
+function matchShift(now, shift, isNewEmployee = false) {
+  const [sH, sM] = shift.startTime.split(':').map(Number);
+  const [eH, eM] = shift.endTime.split(':').map(Number);
+
+  const nowIST = getISTDateComponents(now);
+  const candidateOffsets = [-1, 0, 1];
+  
+  let matched = null;
+  let closest = null;
+  let minDiff = Infinity;
+
+  for (const offset of candidateOffsets) {
+    const targetDateCandidate = new Date(Date.UTC(nowIST.year, nowIST.month, nowIST.date + offset));
+    const targetY = targetDateCandidate.getUTCFullYear();
+    const targetM = targetDateCandidate.getUTCMonth();
+    const targetD = targetDateCandidate.getUTCDate();
+
+    const shiftStart = createDateFromIST(targetY, targetM, targetD, sH, sM);
+    let shiftEnd = createDateFromIST(targetY, targetM, targetD, eH, eM);
+
+    if (eH < sH || (eH === sH && eM < sM)) {
+      shiftEnd = createDateFromIST(targetY, targetM, targetD + 1, eH, eM);
+    }
+
+    const earlyBuffer = 60 * 60 * 1000;
+    const windowStart = new Date(shiftStart.getTime() - earlyBuffer);
+    const windowEnd = shiftEnd;
+
+    if (now >= windowStart && now <= windowEnd) {
+      matched = {
+        shiftStart,
+        shiftEnd,
+        date: new Date(Date.UTC(targetY, targetM, targetD))
+      };
+      break;
+    }
+
+    const diff = Math.abs(shiftStart - now);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = {
+        shiftStart,
+        shiftEnd,
+        date: new Date(Date.UTC(targetY, targetM, targetD))
+      };
+    }
+  }
+
+  if (matched) {
+    return { matched: true, ...matched };
+  }
+
+  if (isNewEmployee && closest) {
+    return { matched: true, ...closest };
+  }
+
+  // Find closest future shift for error message
+  let closestFutureShift = null;
+  let minFutureDiff = Infinity;
+  for (const offset of [0, 1]) {
+    const targetDateCandidate = new Date(Date.UTC(nowIST.year, nowIST.month, nowIST.date + offset));
+    const targetY = targetDateCandidate.getUTCFullYear();
+    const targetM = targetDateCandidate.getUTCMonth();
+    const targetD = targetDateCandidate.getUTCDate();
+
+    const shiftStart = createDateFromIST(targetY, targetM, targetD, sH, sM);
+    const diff = shiftStart - now;
+    if (diff > 0 && diff < minFutureDiff) {
+      minFutureDiff = diff;
+      closestFutureShift = shiftStart;
+    }
+  }
+
+  return {
+    matched: false,
+    closestFutureShift
+  };
+}
+
 // @desc    Punch In
 // @route   POST /api/attendance/punch-in
 // @access  Private
@@ -36,16 +117,55 @@ exports.punchIn = async (req, res, next) => {
     const userId = req.user.id;
 
     const now = new Date();
-    const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
-    const todayStr = now.toISOString().split('T')[0];
-    const startOfDay = new Date(todayStr + "T00:00:00.000Z");
-    const endOfDay = new Date(todayStr + "T23:59:59.999Z");
+
+    // Parallelize time-consuming operations: Selfie upload + DB Queries
+    const [selfieData, officeMain, user, settings] = await Promise.all([
+      selfie && selfie !== 'skipped' ? uploadToCloudinary(selfie, 'hrms/attendance/selfies').catch(err => {
+        console.log('Selfie upload warning:', err.message);
+        return null;
+      }) : Promise.resolve(null),
+      Location.findOne({ name: 'Office Main' }).then(loc => loc || Location.findOne()),
+      User.findById(userId).populate('shift').populate('workingPlace'),
+      CompanySetting.findOne()
+    ]);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    let targetDate = getStartOfDayIST(now);
+    let matchedShift = null;
+
+    if (user.shift) {
+      const matchResult = matchShift(now, user.shift, (now - new Date(user.createdAt)) < (48 * 60 * 60 * 1000));
+      if (matchResult.matched) {
+        matchedShift = matchResult;
+        targetDate = matchResult.date;
+      } else {
+        if (matchResult.closestFutureShift) {
+          const allowedTime = new Date(matchResult.closestFutureShift.getTime() - (60 * 60 * 1000));
+          const allowedIST = getISTDateComponents(allowedTime);
+          const hrVal = allowedIST.hour % 12 || 12;
+          const ampm = allowedIST.hour >= 12 ? 'pm' : 'am';
+          const formattedTime = `${hrVal.toString().padStart(2, '0')}:${allowedIST.minute.toString().padStart(2, '0')} ${ampm}`;
+
+          return res.status(400).json({
+            success: false,
+            message: `Too early. You can only punch in after ${formattedTime}.`
+          });
+        }
+
+        return res.status(400).json({
+          success: false,
+          message: 'Shift has already ended. You cannot punch in now.'
+        });
+      }
+    }
 
     // ── Check for Week Offs and Holidays ──
-    const [settings, holiday] = await Promise.all([
-      CompanySetting.findOne(),
-      Holiday.findOne({ holiday_date: todayStr })
-    ]);
+    const targetIST = getISTDateComponents(targetDate);
+    const dayName = targetIST.dayName;
+    const holiday = await Holiday.findOne({ holiday_date: targetDate });
 
     if (settings?.weeklyOffs?.includes(dayName)) {
       return res.status(400).json({ success: false, message: `Today is ${dayName} (Weekly Off). Attendance is not required.` });
@@ -55,19 +175,10 @@ exports.punchIn = async (req, res, next) => {
       return res.status(400).json({ success: false, message: `Today is ${holiday.holiday_name} (Holiday). Attendance is not required.` });
     }
 
-    // Parallelize time-consuming operations: Selfie upload + DB Queries
-    const [selfieData, existingAttendance, officeMain, user] = await Promise.all([
-      selfie && selfie !== 'skipped' ? uploadToCloudinary(selfie, 'hrms/attendance/selfies').catch(err => {
-        console.log('Selfie upload warning:', err.message);
-        return null;
-      }) : Promise.resolve(null),
-      Attendance.findOne({
-        user: userId,
-        date: { $gte: startOfDay, $lte: endOfDay }
-      }),
-      Location.findOne({ name: 'Office Main' }).then(loc => loc || Location.findOne()),
-      User.findById(userId).populate('shift').populate('workingPlace')
-    ]);
+    let existingAttendance = await Attendance.findOne({
+      user: userId,
+      date: targetDate
+    });
 
     if (existingAttendance) {
       // If it's an 'Absent' placeholder, we allow overwriting it with a real punch-in
@@ -95,40 +206,6 @@ exports.punchIn = async (req, res, next) => {
     let isHalfDay = false;
     let status = 'Present';
 
-    if (user.shift) {
-      // ── Block Future Shifts ──
-      const [sH, sM] = user.shift.startTime.split(':').map(Number);
-      const [eH, eM] = user.shift.endTime.split(':').map(Number);
-
-      const shiftStart = new Date(now);
-      shiftStart.setHours(sH, sM, 0, 0);
-
-      const shiftEnd = new Date(now);
-      shiftEnd.setHours(eH, eM, 0, 0);
-      if (eH < sH || (eH === sH && eM < sM)) shiftEnd.setDate(shiftEnd.getDate() + 1);
-
-      // Block punch in only if shift has already ended
-      if (now > shiftEnd) {
-        return res.status(400).json({
-          success: false,
-          message: 'Shift has already ended. You cannot punch in now.'
-        });
-      }
-
-      // Allow punch in only up to 60 minutes before shift starts
-      // EXCEPTION: New employees (created within last 48h) can punch in anytime on their first shifts
-      const joinDate = new Date(user.createdAt);
-      const isNewEmployee = (now - joinDate) < (48 * 60 * 60 * 1000);
-
-      const earlyBuffer = 60 * 60 * 1000;
-      if (!isNewEmployee && now < new Date(shiftStart.getTime() - earlyBuffer)) {
-        return res.status(400).json({
-          success: false,
-          message: `Too early. You can only punch in after ${new Date(shiftStart.getTime() - earlyBuffer).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
-        });
-      }
-    }
-
     const tempAttendance = {
       punchIn: { time: now },
       status: 'Present',
@@ -142,7 +219,7 @@ exports.punchIn = async (req, res, next) => {
 
     const attendance = await Attendance.create({
       user: userId,
-      date: startOfDay,
+      date: targetDate,
       punchIn: {
         time: now,
         location: { latitude, longitude, address },
@@ -154,12 +231,12 @@ exports.punchIn = async (req, res, next) => {
       lateTime,
       isHalfDay,
       isOutside,
-      shiftInfo: {
+      shiftInfo: user.shift ? {
         name: user.shift.name,
         startTime: user.shift.startTime,
         endTime: user.shift.endTime,
         requiredHours: user.shift.workingHours
-      }
+      } : undefined
     });
 
     res.status(201).json({
@@ -293,21 +370,18 @@ exports.getAllAttendance = async (req, res, next) => {
     let searchDate = new Date();
 
     if (date) {
-      // Create a range for the entire day using UTC components to match the new storage format
       const [year, month, day] = date.split('-').map(Number);
-      const start = new Date(Date.UTC(year, month - 1, day));
-      const end = new Date(Date.UTC(year, month - 1, day));
-      end.setUTCDate(end.getUTCDate() + 1);
+      const start = createDateFromIST(year, month - 1, day, 0, 0, 0, 0);
+      const end = createDateFromIST(year, month - 1, day, 23, 59, 59, 999);
 
-      query.date = { $gte: start, $lt: end };
+      query.date = { $gte: start, $lte: end };
       searchDate = start;
     } else {
       const now = new Date();
-      const start = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-      const end = new Date(start);
-      end.setUTCDate(end.getUTCDate() + 1);
+      const start = getStartOfDayIST(now);
+      const end = getEndOfDayIST(now);
 
-      query.date = { $gte: start, $lt: end };
+      query.date = { $gte: start, $lte: end };
       searchDate = start;
     }
 
@@ -379,16 +453,17 @@ exports.getAllAttendance = async (req, res, next) => {
               if (user.shift) {
                 const [eH, eM] = user.shift.endTime.split(':').map(Number);
                 const [sH, sM] = user.shift.startTime.split(':').map(Number);
-                const shiftEnd = new Date(now);
-                shiftEnd.setHours(eH, eM, 0, 0);
+                const searchIST = getISTDateComponents(searchDate);
+                let shiftEnd = createDateFromIST(searchIST.year, searchIST.month, searchIST.date, eH, eM);
                 if (eH < sH || (eH === sH && eM < sM)) {
-                  shiftEnd.setDate(shiftEnd.setDate() + 1);
+                  shiftEnd = createDateFromIST(searchIST.year, searchIST.month, searchIST.date + 1, eH, eM);
                 }
                 if (now >= shiftEnd) {
                   isShiftEnded = true;
                 }
               } else {
-                if (now.getHours() >= 23) {
+                const nowIST = getISTDateComponents(now);
+                if (nowIST.hour >= 23) {
                   isShiftEnded = true;
                 }
               }
@@ -439,14 +514,10 @@ exports.trackLocation = async (req, res, next) => {
     const userId = req.user.id;
 
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-    const startOfDay = new Date(todayStr + "T00:00:00.000Z");
-
     const attendance = await Attendance.findOne({
       user: userId,
-      date: { $gte: startOfDay },
       "punchOut.time": { $exists: false }
-    });
+    }).sort('-date');
 
     if (!attendance) {
       return res.status(404).json({ success: false, message: 'No active session found to track' });
@@ -568,11 +639,10 @@ exports.getMonthlyView = async (req, res, next) => {
     const user = await User.findById(userId).select('+createdAt');
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    const joiningDate = user.createdAt ? new Date(user.createdAt) : new Date(0);
-    joiningDate.setUTCHours(0, 0, 0, 0);
+    const joiningDate = user.createdAt ? getStartOfDayIST(new Date(user.createdAt)) : new Date(0);
 
-    const startDate = new Date(Date.UTC(year, month - 1, 1));
-    const endDate = new Date(Date.UTC(year, month, 1));
+    const startDate = createDateFromIST(parseInt(year), parseInt(month) - 1, 1, 0, 0, 0, 0);
+    const endDate = createDateFromIST(parseInt(year), parseInt(month), 1, 0, 0, 0, 0);
 
     const attendance = await Attendance.find({
       user: userId,
@@ -617,11 +687,12 @@ exports.getMonthlyView = async (req, res, next) => {
       const isWeekOff = settings?.weeklyOffs?.includes(dayName);
       const holidayName = holidayMap[i];
 
-      const isFuture = (parseInt(year) > now.getUTCFullYear()) ||
-        (parseInt(year) === now.getUTCFullYear() && parseInt(month) > (now.getUTCMonth() + 1)) ||
-        (parseInt(year) === now.getUTCFullYear() && parseInt(month) === (now.getUTCMonth() + 1) && i > now.getUTCDate());
+      const nowIST = getISTDateComponents(now);
+      const isFuture = (parseInt(year) > nowIST.year) ||
+        (parseInt(year) === nowIST.year && parseInt(month) > (nowIST.month + 1)) ||
+        (parseInt(year) === nowIST.year && parseInt(month) === (nowIST.month + 1) && i > nowIST.date);
 
-      const isToday = (parseInt(year) === now.getUTCFullYear() && parseInt(month) === (now.getUTCMonth() + 1) && i === now.getUTCDate());
+      const isToday = (parseInt(year) === nowIST.year && parseInt(month) === (nowIST.month + 1) && i === nowIST.date);
       const isBeforeJoining = d.getTime() < joiningDate.getTime();
 
       let status = 'Absent';
@@ -653,7 +724,7 @@ exports.getMonthlyView = async (req, res, next) => {
     });
 
     attendance.forEach(record => {
-      const day = new Date(record.date).getUTCDate();
+      const day = getISTDateComponents(new Date(record.date)).date;
       let status = record.status || 'Present';
       let color = '#10b981';
       if (status === 'Late' || status === 'Half Day') color = '#f59e0b';

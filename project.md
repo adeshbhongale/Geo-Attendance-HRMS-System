@@ -1266,6 +1266,31 @@ Geo-Attendance-HRMS-System/
 
 ---
 
-**Last Updated**: May 21, 2026
-**Version**: 2.9.5
-**Status**: Production Hardened, Connection Resilient, Notification Telemetry Unified, Custom Select Elements Integrated, Sent Notification Editing Enabled, Unlimited Manual Dispatch Active, All Scheduled Recurrent Options Fully Operational, Firebase Network Safeguards Embedded, Blank Target Validators Active, Full Mobile Feed Display Configured, Background Wakes Restored, Smart Automated Absent/Late Workflows Integrated, Dashboard Column Data-Mapped, Category Visual Theming Configured, Notification Type Column Integrated, Conditional Dash Timings Configured, Robust Multi-Option Firebase Setup Active, Full Notification Database Seeding Verified, Interactive Seed DB Integration Active, Timezone-Robust Date Range Filtering Operational, Automated Single-Delivery Frequency Guard Active, Dashboard Department Employee Counts Integrated, Custom Form Status Dropdowns Active, Shifts Page Neutral Status and Pagination Active, Deferred Absenteeism Engine Configured, AI Leaderboard Table Borders and Fallback Warnings Integrated, Zero Build Errors.
+### 34. Timezone-Aware Shift & Attendance Alignment (May 22, 2026)
+**Changed**: Aligned backend timezone-aware calculations to fixed Indian Standard Time (IST, UTC+5.5), resolving shift mapping discrepancy offsets, incorrect daily absence counts, and missing attendance punch-in records on server time zone differences.
+
+#### 🌐 Indian Standard Time (IST) Alignment:
+- **Central Timezone Utility ([timezone.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/utils/timezone.js))**: Created a fixed Indian Standard Time (IST) Date builder and component generator, decoupling calculations from host system timezone.
+- **Dynamic Shift Window Alignment ([attendance.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/controllers/attendance.js) & [employeeStatsService.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/services/employeeStatsService.js))**: Updated `matchShift` to compare current time against yesterday, today, and tomorrow shift windows relative to IST. Decoupled status verification (`resolveStatus`), check-in buffers, and late calculations from server timezone biases.
+- **Unified Attendance Queries ([auth.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/controllers/auth.js) & [employees.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/controllers/employees.js))**: Fixed `/me` profile check and online status queries to query active sessions within the target date's IST midnight boundaries.
+- **Reporting Grid Sync ([reports.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/controllers/reports.js))**: Configured aggregation queries using timezone `+05:30` parameters and localized monthly calendar indexing in `getMonthlyView` to prevent off-by-one calendar cells.
+- **Validation Suite**: Added direct verification and unit-test scripts (`verify_controllers.js` and `simulate_new_logic.js`) to validate logic stability.
+
+---
+
+### 35. Dashboard Attendance and Shift Completion Adjustments (May 22, 2026)
+**Changed**: Updated the dashboard logic for both the mobile app and website to allow employees to punch in/out after their shift has ended, and to avoid counting employees as absent until the calendar day is complete.
+
+#### 📱 Mobile App Dashboard screen ([DashboardScreen.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/mobile-app/src/screens/DashboardScreen.js)):
+- Removed `isMissed` and `isOver` checks from the "Day Completed" view logic.
+- Configured the dashboard to render the active action button ("Punch In Now" or "Punch Out Now") regardless of whether the shift has ended, until the user actually punches out.
+
+#### 💻 Website/Admin Dashboard Page stats ([reports.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/controllers/reports.js)):
+- Modified the main statistic aggregation endpoint `getStats` to count an employee as absent only if the calendar day has ended (after 23:00) without any punch-in, instead of checking if their shift has ended.
+- Standardized absent-marking logic to align with `getTrackingStats` and `getAttendanceDashboard` rules.
+
+---
+
+**Last Updated**: May 22, 2026
+**Version**: 2.9.7
+**Status**: Production Hardened, Connection Resilient, Notification Telemetry Unified, Custom Select Elements Integrated, Sent Notification Editing Enabled, Unlimited Manual Dispatch Active, All Scheduled Recurrent Options Fully Operational, Firebase Network Safeguards Embedded, Blank Target Validators Active, Full Mobile Feed Display Configured, Background Wakes Restored, Smart Automated Absent/Late Workflows Integrated, Dashboard Column Data-Mapped, Category Visual Theming Configured, Notification Type Column Integrated, Conditional Dash Timings Configured, Robust Multi-Option Firebase Setup Active, Full Notification Database Seeding Verified, Interactive Seed DB Integration Active, Timezone-Robust Date Range Filtering Operational, Automated Single-Delivery Frequency Guard Active, Dashboard Department Employee Counts Integrated, Custom Form Status Dropdowns Active, Shifts Page Neutral Status and Pagination Active, Deferred Absenteeism Engine Configured, AI Leaderboard Table Borders and Fallback Warnings Integrated, Timezone-Aware Shift & Attendance Alignment Configured, Dashboard Attendance and Shift Completion Adjustments Configured, Zero Build Errors.

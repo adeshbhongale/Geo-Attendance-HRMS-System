@@ -233,7 +233,7 @@ const ProfileScreen = ({ navigation }) => {
 
             {/* Right Side: Other Info */}
             <View className="flex-1 pr-5">
-              <Text className="text-xl font-bold text-slate-800" numberOfLines={1}>{user?.name || 'User'}</Text>
+              <Text className="text-xl font-bold text-slate-800" numberOfLines={2}>{user?.name || 'User'}</Text>
 
               {/* Department + Designation */}
               <View className="flex-row items-center gap-1.5 mt-2 flex-wrap">

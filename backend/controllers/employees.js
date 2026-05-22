@@ -8,6 +8,7 @@ const Location = require('../models/Location');
 const LeaveType = require('../models/LeaveType');
 const xlsx = require('xlsx');
 const { uploadProfileImage } = require('../utils/cloudinary');
+const { getStartOfDayIST } = require('../utils/timezone');
 
 // @desc    Get all employees
 // @route   GET /api/employees
@@ -21,9 +22,8 @@ exports.getEmployees = async (req, res, next) => {
             .sort('-createdAt');
 
         const now = new Date();
-        const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-        const todayEnd = new Date(todayStart);
-        todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
+        const todayStart = getStartOfDayIST(now);
+        const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
 
         const [todayAttendance, leaveStats] = await Promise.all([
             Attendance.find({

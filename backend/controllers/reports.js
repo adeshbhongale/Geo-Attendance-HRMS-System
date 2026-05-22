@@ -192,33 +192,20 @@ exports.getStats = async (req, res) => {
         if (targetDate.getUTCDay() === 0 || isHoliday) {
           // Sunday or Holiday -> skip, not counted in any stats
         } else {
-          // Check if shift is ended
-          let isShiftEnded = false;
+          // Check if day is ended
+          let isDayEnded = false;
           if (endOfTargetDate < now) {
-            isShiftEnded = true;
+            isDayEnded = true;
           } else {
-            if (user.shift) {
-              const [eH, eM] = user.shift.endTime.split(':').map(Number);
-              const [sH, sM] = user.shift.startTime.split(':').map(Number);
-              const shiftEnd = new Date(now);
-              shiftEnd.setHours(eH, eM, 0, 0);
-              if (eH < sH || (eH === sH && eM < sM)) {
-                shiftEnd.setDate(shiftEnd.getDate() + 1);
-              }
-              if (now >= shiftEnd) {
-                isShiftEnded = true;
-              }
-            } else {
-              if (now.getHours() >= 23) {
-                isShiftEnded = true;
-              }
+            if (now.getHours() >= 23) {
+              isDayEnded = true;
             }
           }
 
-          if (isShiftEnded) {
+          if (isDayEnded) {
             absentToday++;
           } else {
-            // Shift has not ended yet -> skipped, do not count in any stats
+            // Day has not ended yet -> skipped, do not count in any stats
           }
         }
       }
@@ -387,13 +374,6 @@ exports.getTrackingStats = async (req, res) => {
           const isEndOfDay = now.getHours() >= 23;
           if (!isEndOfDay) {
             isNeutral = true;
-          } else if (user.shift) {
-            const [eH, eM] = user.shift.endTime.split(':').map(Number);
-            const shiftEnd = new Date();
-            shiftEnd.setHours(eH, eM, 0, 0);
-            if (now < shiftEnd) {
-              isNeutral = true;
-            }
           }
         }
 
@@ -570,13 +550,6 @@ exports.getAttendanceDashboard = async (req, res) => {
             const isEndOfDay = now.getHours() >= 23;
             if (!isEndOfDay) {
               isUpcoming = true;
-            } else if (user.shift) {
-              const [eH, eM] = user.shift.endTime.split(':').map(Number);
-              const shiftEnd = new Date();
-              shiftEnd.setHours(eH, eM, 0, 0);
-              if (now < shiftEnd) {
-                isUpcoming = true;
-              }
             }
           } else if (dayStart > now) {
             isUpcoming = true;
@@ -684,13 +657,6 @@ exports.getAttendanceDashboard = async (req, res) => {
                 const isEndOfDay = now.getHours() >= 23;
                 if (!isEndOfDay) {
                   isUpcoming = true;
-                } else if (emp.shift) {
-                  const [eH, eM] = emp.shift.endTime.split(':').map(Number);
-                  const shiftEnd = new Date();
-                  shiftEnd.setHours(eH, eM, 0, 0);
-                  if (now < shiftEnd) {
-                    isUpcoming = true;
-                  }
                 }
               } else if (dayStart > now) {
                 isUpcoming = true;

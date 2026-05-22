@@ -11,6 +11,7 @@
 const Attendance = require('../models/Attendance');
 const Leave = require('../models/Leave');
 const User = require('../models/User');
+const { getISTDateComponents, createDateFromIST, getStartOfDayIST, getEndOfDayIST } = require('../utils/timezone');
 
 /**
  * Resolve the "True" status of an attendance record dynamically.
@@ -35,27 +36,34 @@ const resolveStatus = (attendance, user) => {
 
   if (isNaN(sH) || isNaN(eH)) return attendance.status || 'NA';
 
-  const start = new Date(punchIn);
-  start.setHours(sH, sM, 0, 0);
+  // Get IST components of punchIn
+  const pIST = getISTDateComponents(punchIn);
 
-  const end = new Date(punchIn);
-  end.setHours(eH, eM, 0, 0);
+  // By default, assume shift starts on the same IST day as punchIn
+  let start = createDateFromIST(pIST.year, pIST.month, pIST.date, sH, sM);
+  let end = createDateFromIST(pIST.year, pIST.month, pIST.date, eH, eM);
 
   // Midpoint/rollover logic
   if (eH < sH || (eH === sH && eM < sM)) {
-    if (punchIn.getHours() > sH || (punchIn.getHours() === sH && punchIn.getMinutes() >= sM)) {
-      if (eH <= sH) end.setDate(end.getDate() + 1);
-    } else if (punchIn.getHours() < eH || (punchIn.getHours() === eH && punchIn.getMinutes() < eM)) {
-      start.setDate(start.getDate() - 1);
+    // If punchIn happened after start time of the shift, it's night shift starting on target day
+    if (pIST.hour > sH || (pIST.hour === sH && pIST.minute >= sM)) {
+      end = createDateFromIST(pIST.year, pIST.month, pIST.date + 1, eH, eM);
+    } 
+    // If punchIn happened before end time of the shift, it's night shift starting on yesterday
+    else if (pIST.hour < eH || (pIST.hour === eH && pIST.minute < eM)) {
+      start = createDateFromIST(pIST.year, pIST.month, pIST.date - 1, sH, sM);
     }
   }
 
   // 1. Check Half Day based on Punch-In Time (Hard Cutoff)
   const halfDayAfterStr = shift.halfDayAfter || "00:00";
   const [hH, hM] = halfDayAfterStr.split(':').map(Number);
-  const halfDayCutoff = new Date(start);
-  halfDayCutoff.setHours(isNaN(hH) ? 14 : hH, isNaN(hM) ? 0 : hM, 0, 0);
-  if (hH < sH) halfDayCutoff.setDate(halfDayCutoff.getDate() + 1);
+
+  const sIST = getISTDateComponents(start);
+  let halfDayCutoff = createDateFromIST(sIST.year, sIST.month, sIST.date, isNaN(hH) ? 14 : hH, isNaN(hM) ? 0 : hM);
+  if (hH < sH) {
+    halfDayCutoff = createDateFromIST(sIST.year, sIST.month, sIST.date + 1, isNaN(hH) ? 14 : hH, isNaN(hM) ? 0 : hM);
+  }
 
   if (punchIn > halfDayCutoff) return 'Half Day';
 
@@ -149,9 +157,17 @@ const calculateLateTime = (attendance, shift) => {
 
   const punchIn = new Date(attendance.punchIn.time);
   const [sHour, sMin] = shift.startTime.split(':').map(Number);
+  const [eHour, eMin] = (shift.endTime || "00:00").split(':').map(Number);
 
-  const shiftStart = new Date(punchIn);
-  shiftStart.setHours(sHour, sMin, 0, 0);
+  const pIST = getISTDateComponents(punchIn);
+  let shiftStart = createDateFromIST(pIST.year, pIST.month, pIST.date, sHour, sMin);
+
+  if (eHour < sHour || (eHour === sHour && eMin < sMin)) {
+    // Cross midnight shift
+    if (pIST.hour < eHour || (pIST.hour === eHour && pIST.minute < eMin)) {
+      shiftStart = createDateFromIST(pIST.year, pIST.month, pIST.date - 1, sHour, sMin);
+    }
+  }
 
   const lateMinutes = punchIn > shiftStart ? Math.floor((punchIn - shiftStart) / 60000) : 0;
   const gracePeriod = shift.gracePeriod || 15;
@@ -211,12 +227,10 @@ const getAggregatedStats = (records, user, approvedLeaves = [], customStart = nu
   const workingDays = presentOnly + lateDays + halfDayCount;
 
   // ── 3. Leave count (already filtered by caller or global) ─────────
-  // ── 3. Absent days (business-day logic, excluding Sundays & leaves) ─
   const joinDate = new Date(user.joiningDate || user.createdAt || new Date());
   const joinDay = new Date(Date.UTC(joinDate.getUTCFullYear(), joinDate.getUTCMonth(), joinDate.getUTCDate()));
-
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = getStartOfDayIST(now);
 
   let rangeStart = customStart ? new Date(customStart) : joinDay;
   let rangeEnd = customEnd ? new Date(customEnd) : today;
@@ -240,6 +254,9 @@ const getAggregatedStats = (records, user, approvedLeaves = [], customStart = nu
     });
   };
 
+  const nowIST = getISTDateComponents(now);
+  const todayStrIST = `${nowIST.year}-${(nowIST.month + 1).toString().padStart(2, '0')}-${nowIST.date.toString().padStart(2, '0')}`;
+
   let leaveDaysCount = 0;
   let absentDays = 0;
   let curr = new Date(actualStart);
@@ -247,20 +264,21 @@ const getAggregatedStats = (records, user, approvedLeaves = [], customStart = nu
   // Separate loop for Leave days - count ALL leave days in the provided range
   let leaveCheck = new Date(actualStart);
   while (leaveCheck <= rangeEnd) {
-    if (leaveCheck.getDay() !== 0 && isOnLeave(leaveCheck)) {
+    const checkIST = getISTDateComponents(leaveCheck);
+    if (checkIST.dayName !== 'Sunday' && isOnLeave(leaveCheck)) {
       leaveDaysCount++;
     }
-    leaveCheck.setDate(leaveCheck.getDate() + 1);
+    leaveCheck.setTime(leaveCheck.getTime() + 24 * 60 * 60 * 1000);
   }
 
   // Loop for Attendance/Absence - only up to Today
   while (curr <= rangeEnd && curr <= today) {
-    const isSunday = curr.getUTCDay() === 0;
-    const dateStr = curr.toISOString().split('T')[0];
+    const currIST = getISTDateComponents(curr);
+    const dateStr = `${currIST.year}-${(currIST.month + 1).toString().padStart(2, '0')}-${currIST.date.toString().padStart(2, '0')}`;
     const hasRecord = recordDates.has(dateStr);
-    const isToday = dateStr === now.toISOString().split('T')[0];
+    const isToday = dateStr === todayStrIST;
 
-    if (!isSunday && !isOnLeave(curr)) {
+    if (currIST.dayName !== 'Sunday' && !isOnLeave(curr)) {
       // 1. A user is NEVER absent on their joining day (day 1)
       // 2. If it's a past day (after joining day), count as absent if no record
       // 3. If it's today (after joining day), count as absent ONLY if shift has ended
@@ -277,18 +295,18 @@ const getAggregatedStats = (records, user, approvedLeaves = [], customStart = nu
         } else if (user.shift) {
           const [sH, sM] = user.shift.startTime.split(':').map(Number);
           const [eH, eM] = user.shift.endTime.split(':').map(Number);
-          const shiftEnd = new Date();
-          shiftEnd.setHours(eH, eM, 0, 0);
+          
+          let shiftEnd = createDateFromIST(nowIST.year, nowIST.month, nowIST.date, eH, eM);
 
           // Handle night shift rollover
-          if ((eH < sH || (eH === sH && eM < sM)) && eH < 12 && now.getHours() > 12) {
-            shiftEnd.setDate(shiftEnd.getDate() + 1);
+          if ((eH < sH || (eH === sH && eM < sM)) && eH < 12 && nowIST.hour > 12) {
+            shiftEnd = createDateFromIST(nowIST.year, nowIST.month, nowIST.date + 1, eH, eM);
           }
 
           if (now > shiftEnd) shouldCheckAbsent = true;
         } else {
           // Fallback for today without shift
-          if (now.getHours() >= 23) shouldCheckAbsent = true;
+          if (nowIST.hour >= 23) shouldCheckAbsent = true;
         }
       }
 
@@ -301,7 +319,7 @@ const getAggregatedStats = (records, user, approvedLeaves = [], customStart = nu
         }
       }
     }
-    curr.setDate(curr.getDate() + 1);
+    curr.setTime(curr.getTime() + 24 * 60 * 60 * 1000);
   }
 
   // ── 5. Aggregated hours & distance (using canonical formula) ──────
@@ -320,15 +338,14 @@ const getAggregatedStats = (records, user, approvedLeaves = [], customStart = nu
   // ── 6. Total non-Sunday days in range ────────────────────────────
   let totalDaysInRange = 0;
   const dayCheck = new Date(actualStart);
-  dayCheck.setHours(0, 0, 0, 0);
 
   const endLimit = new Date(rangeEnd);
   if (endLimit > today) endLimit.setTime(today.getTime());
-  endLimit.setHours(23, 59, 59, 999);
 
   while (dayCheck <= endLimit) {
-    if (dayCheck.getDay() !== 0) totalDaysInRange++;
-    dayCheck.setDate(dayCheck.getDate() + 1);
+    const checkIST = getISTDateComponents(dayCheck);
+    if (checkIST.dayName !== 'Sunday') totalDaysInRange++;
+    dayCheck.setTime(dayCheck.getTime() + 24 * 60 * 60 * 1000);
   }
 
   // ── 7. Build standardized DTO ─────────────────────────────────────
@@ -370,10 +387,10 @@ const getEmployeeFullStats = async (employeeId, startDate = null, endDate = null
 
   const recordQuery = { user: employeeId };
   if (startDate && endDate) {
-    const s = new Date(startDate);
-    s.setUTCHours(0, 0, 0, 0);
-    const e = new Date(endDate);
-    e.setUTCHours(23, 59, 59, 999);
+    const sIST = getISTDateComponents(new Date(startDate));
+    const eIST = getISTDateComponents(new Date(endDate));
+    const s = createDateFromIST(sIST.year, sIST.month, sIST.date, 0, 0, 0, 0);
+    const e = createDateFromIST(eIST.year, eIST.month, eIST.date, 23, 59, 59, 999);
     recordQuery.date = { $gte: s, $lte: e };
   }
 
@@ -409,9 +426,8 @@ const getEmployeeFullStats = async (employeeId, startDate = null, endDate = null
 
   // Today's record for "Current" fields
   const now = new Date();
-  const todayUTC = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-  const endUTC = new Date(todayUTC);
-  endUTC.setUTCDate(endUTC.getUTCDate() + 1);
+  const todayUTC = getStartOfDayIST(now);
+  const endUTC = getEndOfDayIST(now);
 
   const todayRecord = await Attendance.findOne({
     user: employeeId,

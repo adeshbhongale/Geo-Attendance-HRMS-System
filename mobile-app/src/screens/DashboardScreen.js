@@ -58,7 +58,7 @@ const DashboardScreen = ({ navigation }) => {
               setUnreadNotifications(feed.filter(n => !n.isRead).length);
             }
           })
-          .catch(() => {});
+          .catch(() => { });
       };
 
       syncUnreadCount();
@@ -110,14 +110,14 @@ const DashboardScreen = ({ navigation }) => {
 
     const end = new Date(now);
     end.setHours(eHour, eMin, 0, 0);
-    
+
     // Automatically detect shifts spanning midnight
     if (eHour < sHour || (eHour === sHour && eMin < sMin) || shift.isNightShift) {
-       if (now.getHours() > sHour || (now.getHours() === sHour && now.getMinutes() >= sMin)) {
-          if (eHour <= sHour) end.setDate(end.getDate() + 1);
-       } else if (now.getHours() < eHour || (now.getHours() === eHour && now.getMinutes() < eMin)) {
-          start.setDate(start.getDate() - 1);
-       }
+      if (now.getHours() > sHour || (now.getHours() === sHour && now.getMinutes() >= sMin)) {
+        if (eHour <= sHour) end.setDate(end.getDate() + 1);
+      } else if (now.getHours() < eHour || (now.getHours() === eHour && now.getMinutes() < eMin)) {
+        start.setDate(start.getDate() - 1);
+      }
     }
 
     // Check if it's a new employee (created within last 48h)
@@ -151,11 +151,11 @@ const DashboardScreen = ({ navigation }) => {
         return { label: 'Upcoming Shift', time: `Starts in ${h}h ${m}m`, color: 'text-indigo-400', isFuture: true };
       } else {
         const m = Math.floor(diff / (1000 * 60));
-        return { 
-          label: isNewEmployee ? 'First Day' : 'Starts in', 
-          time: isNewEmployee ? 'Ready to Start' : `${m}m`, 
-          color: 'text-indigo-400', 
-          isActive: true 
+        return {
+          label: isNewEmployee ? 'First Day' : 'Starts in',
+          time: isNewEmployee ? 'Ready to Start' : `${m}m`,
+          color: 'text-indigo-400',
+          isActive: true
         };
       }
     } else if (now < end) {
@@ -170,11 +170,11 @@ const DashboardScreen = ({ navigation }) => {
       const diff = end - now;
       const h = Math.floor(diff / (1000 * 60 * 60));
       const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      return { 
-        label: isLate ? 'Late Arrival' : 'Ends in', 
-        time: `${h}h ${m}m`, 
-        color: isLate ? 'text-amber-400' : 'text-emerald-400', 
-        isActive: true 
+      return {
+        label: isLate ? 'Late Arrival' : 'Ends in',
+        time: `${h}h ${m}m`,
+        color: isLate ? 'text-amber-400' : 'text-emerald-400',
+        isActive: true
       };
     } else {
       // Shift is over
@@ -404,7 +404,7 @@ const DashboardScreen = ({ navigation }) => {
       <View className="bg-blue-600 rounded-b-3xl pt-14 pb-5 px-6 border-b border-slate-100 flex-row justify-between items-center">
         <View>
           <Text className="text-white text-[10px] font-bold tracking-widest mb-1">Welcome Back</Text>
-          <Text className="text-2xl font-bold text-white tracking-tighter">{userData?.name || 'Employee'}</Text>
+          <Text className="text-xl font-bold text-white flex-wrap" numberOfLines={2}>{userData?.name || 'NA'}</Text>
         </View>
         <View className="flex-row items-center gap-3">
           {/* Bell Notification Button with dynamic badging */}
@@ -483,12 +483,11 @@ const DashboardScreen = ({ navigation }) => {
                   <Text className="text-[10px] text-indigo-400 font-bold">{countdown.time}</Text>
                 </View>
               </View>
-            ) : isPunchOut || countdown?.isMissed || countdown?.isOver ? (
+            ) : isPunchOut ? (
               <View className="h-16 rounded-2xl bg-slate-50 flex-row justify-center items-center border border-slate-100 shadow-sm">
                 <CircleCheck size={24} color="#10b981" />
                 <View className="ml-3">
                   <Text className="font-bold text-lg text-slate-800 tracking-tight">Day Completed</Text>
-                  {countdown?.isMissed && <Text className="text-[10px] text-rose-500 font-bold">Marked as Absent</Text>}
                 </View>
               </View>
             ) : (

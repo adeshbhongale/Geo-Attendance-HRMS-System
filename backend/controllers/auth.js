@@ -2,6 +2,7 @@ const User = require('../models/User');
 const AttendanceModel = require('../models/Attendance');
 const ErrorResponse = require('../utils/errorResponse');
 const { uploadProfileImage } = require('../utils/cloudinary');
+const { getISTDateComponents, createDateFromIST, getStartOfDayIST, getEndOfDayIST } = require('../utils/timezone');
 
 // @desc    Register user
 // @route   POST /api/auth/register
@@ -99,9 +100,8 @@ exports.getMe = async (req, res, next) => {
   // we remove the 'Absent' record to allow the user a fresh start.
 
   const now = new Date();
-  const todayStart = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-  const todayEnd = new Date(todayStart);
-  todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
+  const todayStart = getStartOfDayIST(now);
+  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
 
   const absentRecord = await AttendanceModel.findOne({
     user: req.user.id,
@@ -119,9 +119,11 @@ exports.getMe = async (req, res, next) => {
       else cutoffStr = "06:00";
     }
     const [cHour, cMin] = cutoffStr.split(':').map(Number);
-    const cutoffTime = new Date();
-    cutoffTime.setHours(cHour, cMin, 0, 0);
-    if (cHour < 12 && now.getHours() > 12) cutoffTime.setDate(cutoffTime.getDate() + 1);
+    const nowIST = getISTDateComponents(now);
+    let cutoffTime = createDateFromIST(nowIST.year, nowIST.month, nowIST.date, cHour, cMin);
+    if (cHour < 12 && nowIST.hour > 12) {
+      cutoffTime = createDateFromIST(nowIST.year, nowIST.month, nowIST.date + 1, cHour, cMin);
+    }
 
     // If we are still within the valid window for the NEW shift, delete the old absence
     if (now <= cutoffTime) {

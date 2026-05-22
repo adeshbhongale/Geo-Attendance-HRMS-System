@@ -26,9 +26,56 @@ const seedData = async () => {
       process.exit(1);
     }
 
+    // A robust helper to run database operations with auto-retry and auto-reconnection
+    const safeDbCall = async (fn, label = 'DB operation') => {
+      let retries = 5;
+      let delay = 2000;
+      for (let i = 0; i < retries; i++) {
+        try {
+          if (mongoose.connection.readyState !== 1) {
+            console.log(`[Connection] MongoDB not connected (readyState: ${mongoose.connection.readyState}). Reconnecting...`);
+            try {
+              await mongoose.disconnect();
+            } catch (_) {}
+            await new Promise(r => setTimeout(r, 1000));
+            await mongoose.connect(process.env.MONGO_URI, {
+              serverSelectionTimeoutMS: 30000,
+              socketTimeoutMS: 60000,
+              connectTimeoutMS: 30000,
+            });
+            console.log('[Connection] Reconnected successfully!');
+          }
+          return await fn();
+        } catch (err) {
+          const isNetworkError = 
+            err.message.includes('ECONNRESET') || 
+            err.message.includes('socket') || 
+            err.name === 'MongooseServerSelectionError' ||
+            err.message.includes('buffered') ||
+            err.message.includes('connection') ||
+            err.message.includes('topology') ||
+            err.code === 'ECONNRESET' ||
+            err.code === 'EPIPE';
+          
+          if (isNetworkError && i < retries - 1) {
+            console.warn(`[Retry] ${label} failed (Error: ${err.message}). Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
+            try {
+              await mongoose.disconnect();
+            } catch (_) {}
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 1.5;
+          } else {
+            throw err;
+          }
+        }
+      }
+    };
+
     console.log('Connecting to MongoDB...');
     await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+      serverSelectionTimeoutMS: 30000,
+      socketTimeoutMS: 60000,
+      connectTimeoutMS: 30000,
     });
     console.log('Connection Successful!');
 
@@ -40,7 +87,7 @@ const seedData = async () => {
         let retries = 3;
         while (retries > 0) {
           try {
-            await Model.insertMany(chunk);
+            await safeDbCall(() => Model.insertMany(chunk), `Batch insert for ${Model.modelName}`);
             break;
           } catch (err) {
             retries--;
@@ -55,15 +102,21 @@ const seedData = async () => {
 
     // 1. Clear existing data sequentially to avoid connection congestion
     console.log('Clearing existing database collections...');
-    await User.deleteMany({ role: { $ne: 'admin' } });
-    await Attendance.deleteMany();
-    await Leave.deleteMany();
-    await Shift.deleteMany();
-    await LeaveType.deleteMany();
-    await Location.deleteMany();
-    await Department.deleteMany();
-    await Designation.deleteMany();
-    await Holiday.deleteMany();
+    await safeDbCall(() => User.deleteMany({ role: { $ne: 'admin' } }), 'Clear Users');
+    await safeDbCall(() => Attendance.deleteMany(), 'Clear Attendance');
+    await safeDbCall(() => Leave.deleteMany(), 'Clear Leave');
+    await safeDbCall(() => Shift.deleteMany(), 'Clear Shift');
+    await safeDbCall(() => LeaveType.deleteMany(), 'Clear LeaveType');
+    await safeDbCall(() => Location.deleteMany(), 'Clear Location');
+    await safeDbCall(() => Department.deleteMany(), 'Clear Department');
+    await safeDbCall(() => Designation.deleteMany(), 'Clear Designation');
+    await safeDbCall(() => Holiday.deleteMany(), 'Clear Holiday');
+    // Clear old manual notifications, logs, feeds
+    await safeDbCall(() => Promise.all([
+      Notification.deleteMany({}),
+      NotificationLog.deleteMany({}),
+      EmployeeNotification.deleteMany({})
+    ]), 'Clear Notifications');
 
     try {
       console.log('Clearing Cloudinary storage...');
@@ -74,7 +127,7 @@ const seedData = async () => {
     console.log('Cleared existing collections and Cloudinary storage.');
 
     // 2. Create Shifts
-    const shifts = await Shift.insertMany([
+    const shifts = await safeDbCall(() => Shift.insertMany([
       {
         name: 'Morning Shift',
         startTime: '08:00',
@@ -111,57 +164,57 @@ const seedData = async () => {
         halfDayRules: "If you leave for half day then your payment will be deducted by 50% of the day's salary.",
         status: 'active'
       }
-    ]);
+    ]), 'Insert Shifts');
     console.log(`Created ${shifts.length} Shifts.`);
 
     // 3. Create Office Location
-    const office = await Location.create({
+    const office = await safeDbCall(() => Location.create({
       name: 'Office Main HQ',
       latitude: 16.703559,
       longitude: 74.450000,
       radius: 200,
       address: 'Jawaharnagar, Ichalkaranji, Maharashtra, India'
-    });
+    }), 'Create Location');
     console.log('Created Office Location.');
 
     // 3.5 Create Leave Types
-    const leaveTypesData = await LeaveType.insertMany([
+    const leaveTypesData = await safeDbCall(() => LeaveType.insertMany([
       { name: 'Casual Leave', code: 'CL', limit: 6, genderRestriction: 'All', status: 'active' },
       { name: 'Sick Leave', code: 'SL', limit: 6, genderRestriction: 'All', status: 'active' },
       { name: 'Paid Leave', code: 'PL', limit: 6, genderRestriction: 'All', status: 'active' },
       { name: 'Unpaid Leave', code: 'LWP', limit: 6, genderRestriction: 'All', status: 'active' }
-    ]);
+    ]), 'Insert Leave Types');
     console.log(`Created ${leaveTypesData.length} Leave Types.`);
 
     // 3.6 Create Departments
-    const departmentsData = await Department.insertMany([
+    const departmentsData = await safeDbCall(() => Department.insertMany([
       { name: 'IT', description: 'Information Technology' },
       { name: 'Sales', description: 'Sales & Marketing' },
       { name: 'HR', description: 'Human Resources' },
       { name: 'Support', description: 'Customer Support' },
       { name: 'Logistics', description: 'Logistics & Supply Chain' }
-    ]);
+    ]), 'Insert Departments');
     console.log(`Created ${departmentsData.length} Departments.`);
 
     // 3.65 Create Holidays
-    const holidaysData = await Holiday.insertMany([
+    const holidaysData = await safeDbCall(() => Holiday.insertMany([
       { holiday_date: new Date('2026-01-01'), holiday_name: 'New Year Day', holiday_type: 'd', status: 'active' },
       { holiday_date: new Date('2026-05-01'), holiday_name: 'Labour Day', holiday_type: 'd', status: 'active' },
       { holiday_date: new Date('2026-08-15'), holiday_name: 'Independence Day', holiday_type: 'd', status: 'active' },
       { holiday_date: new Date('2026-10-02'), holiday_name: 'Gandhi Jayanti', holiday_type: 'd', status: 'active' },
       { holiday_date: new Date('2026-12-25'), holiday_name: 'Christmas', holiday_type: 'd', status: 'active' }
-    ]);
+    ]), 'Insert Holidays');
     console.log(`Created ${holidaysData.length} Holidays.`);
 
     // 3.7 Create Designations
-    const designationsData = await Designation.insertMany([
+    const designationsData = await safeDbCall(() => Designation.insertMany([
       { name: 'Software Engineer', description: 'Software Development' },
       { name: 'Project Lead', description: 'Team Lead & Project Management' },
       { name: 'Systems Engineer', description: 'Systems & Infrastructure' },
       { name: 'Sales Engineer', description: 'Sales Engineering' },
       { name: 'HR Manager', description: 'Human Resources Management' },
       { name: 'Support Analyst', description: 'Customer Support Analysis' }
-    ]);
+    ]), 'Insert Designations');
     console.log(`Created ${designationsData.length} Designations.`);
 
     // 4. Create Employees
@@ -211,7 +264,7 @@ const seedData = async () => {
       createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000)
     });
 
-    const employees = await User.insertMany(employeeData);
+    const employees = await safeDbCall(() => User.insertMany(employeeData), 'Insert Employees');
     console.log(`Created ${employees.length} Employees (including Adesh Bhongale).`);
 
     // 6. Generate History (Last 30 Days)
@@ -540,7 +593,7 @@ const seedData = async () => {
 
     // 7. Maintenance Phase (from seedEmployees logic)
     console.log('Running maintenance/normalization phase...');
-    const allEmployees = await User.find({ role: 'employee' });
+    const allEmployees = await safeDbCall(() => User.find({ role: 'employee' }), 'Find all employees');
     let updatedCount = 0;
 
     for (let emp of allEmployees) {
@@ -566,7 +619,7 @@ const seedData = async () => {
         updated = true;
       }
       if (updated) {
-        await emp.save();
+        await safeDbCall(() => emp.save(), `Save employee ${emp.name}`);
         updatedCount++;
       }
     }
@@ -577,17 +630,8 @@ const seedData = async () => {
     // ==========================================
     console.log('Seeding push notifications and recipient logs...');
 
-    // Clear old manual notifications, logs, feeds
-    await Promise.all([
-      Notification.deleteMany({}),
-      NotificationLog.deleteMany({}),
-      EmployeeNotification.deleteMany({})
-    ]);
-
-    console.log('- Cleared old notification collections.');
-
-    const seededAdmin = await User.findOne({ role: 'admin' }) || await User.findOne({ role: 'employee' });
-    const seededEmployees = await User.find({ role: 'employee' });
+    const seededAdmin = await safeDbCall(() => User.findOne({ role: 'admin' }), 'Find admin') || await safeDbCall(() => User.findOne({ role: 'employee' }), 'Find employee fallback');
+    const seededEmployees = await safeDbCall(() => User.find({ role: 'employee' }), 'Find employees');
 
     if (seededAdmin && seededEmployees.length > 0) {
       console.log('Generating dynamic notifications for all 9 types based on seeded data...');
@@ -595,7 +639,7 @@ const seedData = async () => {
       const seededLogs = [];
       const seededFeeds = [];
 
-      const allDepts = await Department.find({});
+      const allDepts = await safeDbCall(() => Department.find({}), 'Find departments');
       const deptNames = allDepts.map(d => d.name);
       const targetDept = deptNames[0] || 'IT';
 
@@ -709,7 +753,7 @@ const seedData = async () => {
           employeesTarget = [randEmp1._id, randEmp2._id];
         }
 
-        const notification = await Notification.create({
+        const notification = await safeDbCall(() => Notification.create({
           title: t.title,
           description: resolvedDescription,
           type: t.type,
@@ -723,7 +767,7 @@ const seedData = async () => {
           autoType: t.autoType,
           createdAt: notifDate,
           updatedAt: notifDate
-        });
+        }), `Create Notification Template ${t.type}`);
 
         // Get actual recipient employees to insert logs and feeds
         let recipients = [];
