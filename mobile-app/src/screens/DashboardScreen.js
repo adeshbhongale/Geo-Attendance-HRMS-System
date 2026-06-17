@@ -349,33 +349,22 @@ const DashboardScreen = ({ navigation }) => {
         try {
           const loc = await getCurrentLocation();
           if (loc) {
-            const { latitude, longitude } = loc.coords;
-            let addr = 'Auto Tracked';
+            const { latitude, longitude, accuracy, speed, altitude, heading, mocked } = loc.coords;
 
-            try {
-              const MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-              const geoRes = await fetch(
-                `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${MAPS_KEY}`
-              );
-              const geoData = await geoRes.json();
-              if (geoData.status === 'OK' && geoData.results.length > 0) {
-                addr = geoData.results[0].formatted_address;
-              } else {
-                const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
-                if (geocode[0]) {
-                  const g = geocode[0];
-                  addr = [g.streetNumber, g.street, g.district || g.subregion, g.city, g.region, g.postalCode].filter(Boolean).join(', ');
-                }
-              }
-            } catch {
-              const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
-              if (geocode[0]) {
-                const g = geocode[0];
-                addr = [g.streetNumber, g.street, g.city, g.region, g.postalCode].filter(Boolean).join(', ');
-              }
-            }
+            // Push point to the offline queue
+            const { addPointToQueue, syncQueue } = require('../utils/offlineQueue');
+            await addPointToQueue({
+              latitude,
+              longitude,
+              accuracy,
+              speed: speed || 0,
+              heading,
+              isMock: mocked,
+              timestamp: Date.now()
+            });
 
-            await api.post('/attendance/track', { latitude, longitude, address: addr });
+            // Trigger synchronization
+            await syncQueue();
           }
         } catch (err) { }
       }, 120000);

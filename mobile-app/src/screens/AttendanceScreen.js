@@ -359,61 +359,32 @@ const AttendanceScreen = ({ navigation }) => {
           timeout: 8000,
         });
 
-        const { latitude, longitude, accuracy, speed, altitude, mocked } = loc.coords;
+        const { latitude, longitude, accuracy, speed, altitude, mocked, heading } = loc.coords;
 
-        // Validation 1: High Accuracy Check (Max 50m)
-        if (accuracy > 50) {
-          return;
-        }
-
-        // Validation 2: Speed check (50 km/h limit)
-        const speedKmh = (speed || 0) * 3.6;
-        if (speedKmh > 50) return;
-
-        // Validation 3: Jump & Drift filtering (Min 5m, Max 139m/10s)
-        if (lastSentLocation) {
-          const distFromLast = calculateDistance(
-            lastSentLocation.lat,
-            lastSentLocation.lng,
-            latitude,
-            longitude
-          );
-
-          if (distFromLast < 5) return;
-
-          if (distFromLast > 139) {
-            // Rapid retry in 2 seconds to get a stable point
-            setTimeout(() => trackCurrentLocation(true), 2000);
-            return;
-          }
-        }
-
-        // Fetch address for the point
-        let trackAddr = 'Tracking...';
-        try {
-          const MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-          const geoRes = await fetch(
-            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${MAPS_KEY}`
-          );
-          const geoData = await geoRes.json();
-          if (geoData.status === 'OK' && geoData.results.length > 0) {
-            trackAddr = geoData.results[0].formatted_address;
-          }
-        } catch (e) {
-        }
-
-        const res = await api.post('/attendance/track', {
+        // Push point directly to the offline queue
+        const { addPointToQueue, syncQueue } = require('../utils/offlineQueue');
+        await addPointToQueue({
           latitude,
           longitude,
-          address: trackAddr,
           accuracy,
-          speed: speedKmh,
-          altitude,
-          isMocked: mocked,
-          time: new Date().toISOString(),
+          speed: speed || 0,
+          heading,
+          isMock: mocked,
+          timestamp: Date.now()
         });
 
+        // Trigger queue synchronization
+        await syncQueue();
+
         setLastSentLocation({ lat: latitude, lng: longitude });
+        
+        // Update local map position state
+        setLocation(prev => ({
+          ...prev,
+          latitude,
+          longitude,
+          accuracy
+        }));
 
         // Update dashboard stats in background
         fetchUser();

@@ -13,6 +13,8 @@ const { getGoogleRoadDistance } = require('../utils/googleMaps');
 const enterpriseTracking = require('../services/enterpriseTrackingService');
 const CompanySetting = require('../models/CompanySetting');
 const Holiday = require('../models/Holiday');
+const { RawTrackingPoint, LiveEmployeeStatus } = require('../models/Tracking');
+const { reverseGeocodeAsync } = require('../services/enterpriseTrackingService');
 
 // @desc    Track location batch
 // @route   POST /api/attendance/track-batch
@@ -21,7 +23,14 @@ exports.trackBatch = async (req, res, next) => {
   try {
     const { userId, batch } = req.body;
     const io = req.app.get('io');
-    const result = await enterpriseTracking.processTrackingBatch(userId || req.user.id, batch, io);
+
+    const mongoose = require('mongoose');
+    let targetUserId = req.user.id;
+    if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+      targetUserId = userId;
+    }
+
+    const result = await enterpriseTracking.processTrackingBatch(targetUserId, batch, io);
     res.status(200).json(result);
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -240,9 +249,25 @@ exports.punchOut = async (req, res, next) => {
     attendance.isHalfDay = finalStatus === 'Half Day';
     attendance.isLate = finalStatus === 'Late';
 
+    // Sort and deduplicate logs on punch out to ensure absolute accuracy
+    if (attendance.trackingLogs && attendance.trackingLogs.length > 0) {
+      attendance.trackingLogs.sort((a, b) => new Date(a.time) - new Date(b.time));
+      const deduplicatedLogs = [];
+      const seenTimes = new Set();
+      for (const log of attendance.trackingLogs) {
+        const timeMs = new Date(log.time).getTime();
+        if (!seenTimes.has(timeMs)) {
+          seenTimes.add(timeMs);
+          deduplicatedLogs.push(log);
+        }
+      }
+      attendance.trackingLogs = deduplicatedLogs;
+    }
+
     // Calculate Net Working Hours and Distance using Centralized Services
     attendance.workingHours = statsService.calculateWorkingHours(attendance);
     attendance.distance = geoService.calculateTotalDistance(attendance.trackingLogs);
+    attendance.totalDistance = attendance.distance;
 
     await attendance.save();
 
@@ -472,7 +497,7 @@ exports.getAllAttendance = async (req, res, next) => {
 // @access  Private
 exports.trackLocation = async (req, res, next) => {
   try {
-    const { latitude, longitude, address, accuracy, speed, altitude, heading, battery } = req.body;
+    const { latitude, longitude, accuracy, speed, altitude, heading, battery } = req.body;
     const userId = req.user.id;
 
     const now = new Date();
@@ -499,61 +524,168 @@ exports.trackLocation = async (req, res, next) => {
       };
     }
 
+    // Enterprise validation check
     const validation = geoService.validateLocation(lastPoint, {
       latitude,
       longitude,
+      accuracy,
       time: now
     });
 
     const isOutside = office ? (calculateDistance(latitude, longitude, office.latitude, office.longitude) > office.radius) : false;
 
-    if (validation.isSuspicious) {
-      attendance.trackingLogs.push({
+    // Handle stationary drift correction (skip saving, return success)
+    if (!validation.isValid && !validation.isSuspicious) {
+      return res.status(200).json({ success: true, message: 'Drift filtered', isOutside, totalDistance: attendance.totalDistance });
+    }
+
+    // Determine status of point
+    let pointStatus = 'valid';
+    let incrementalDistance = 0;
+
+    if (validation.isRecovery) {
+      pointStatus = 'valid';
+      // Recovery starts fresh segment, incrementalDistance is 0
+    } else if (validation.isWeak) {
+      pointStatus = 'weak';
+    } else if (validation.isSuspicious) {
+      pointStatus = 'suspicious';
+    } else {
+      incrementalDistance = validation.distance;
+    }
+
+    const previousOutside = attendance.isOutside;
+
+    attendance.isOutside = isOutside;
+    attendance.lastTrackedLocation = { latitude, longitude, time: now };
+    attendance.lastTrackingTime = now;
+    if (battery) attendance.battery = battery;
+
+    const isDuplicate = attendance.trackingLogs.some(log => 
+      new Date(log.time).getTime() === now.getTime()
+    );
+
+    if (!isDuplicate) {
+      const newLogEntry = {
         time: now,
         latitude,
         longitude,
-        address,
-        isSuspicious: true,
+        isSuspicious: validation.isSuspicious,
         isMocked: req.body.isMocked,
         accuracy,
         speed,
         altitude,
-        heading,
-        distanceFromPrevious: 0
-      });
-      await attendance.save();
-      return res.status(200).json({ success: true, message: 'Location marked as suspicious', isSuspicious: true, retry: true });
+        heading
+      };
+
+      attendance.trackingLogs.push(newLogEntry);
+      attendance.trackingLogs.sort((a, b) => new Date(a.time) - new Date(b.time));
+
+      const deduplicatedLogs = [];
+      const seenTimes = new Set();
+      for (const log of attendance.trackingLogs) {
+        const timeMs = new Date(log.time).getTime();
+        if (!seenTimes.has(timeMs)) {
+          seenTimes.add(timeMs);
+          deduplicatedLogs.push(log);
+        }
+      }
+
+      let accumulatedDistance = 0;
+      for (let i = 0; i < deduplicatedLogs.length; i++) {
+        if (i === 0) {
+          deduplicatedLogs[i].distanceFromPrevious = 0;
+          deduplicatedLogs[i].totalDistanceTillNow = 0;
+        } else {
+          const prev = deduplicatedLogs[i - 1];
+          const curr = deduplicatedLogs[i];
+          const dist = geoService.calculateDistance(
+            prev.latitude,
+            prev.longitude,
+            curr.latitude,
+            curr.longitude
+          );
+          const validDist = dist >= 0.005 ? dist : 0;
+          deduplicatedLogs[i].distanceFromPrevious = parseFloat((validDist * 1000).toFixed(2));
+          accumulatedDistance += validDist;
+          deduplicatedLogs[i].totalDistanceTillNow = parseFloat(accumulatedDistance.toFixed(6));
+        }
+      }
+
+      attendance.trackingLogs = deduplicatedLogs;
+      attendance.totalDistance = parseFloat(accumulatedDistance.toFixed(6));
+      attendance.distance = attendance.totalDistance;
     }
+    await attendance.save();
 
-    const incrementalDistance = validation.distance;
-    const totalDistanceTillNow = (attendance.totalDistance || 0) + incrementalDistance;
-
-    const previousOutside = attendance.isOutside;
-
-    attendance.totalDistance = parseFloat(totalDistanceTillNow.toFixed(6));
-    attendance.distance = attendance.totalDistance;
-    attendance.isOutside = isOutside;
-
-    attendance.lastTrackedLocation = { latitude, longitude, address, time: now };
-    attendance.lastTrackingTime = now;
-    if (battery) attendance.battery = battery;
-
-    attendance.trackingLogs.push({
-      time: now,
-      latitude,
-      longitude,
-      address,
-      distanceFromPrevious: parseFloat((incrementalDistance * 1000).toFixed(2)),
-      totalDistanceTillNow: parseFloat(totalDistanceTillNow.toFixed(6)),
-      isSuspicious: false,
+    // Also write to RawTrackingPoint (Enterprise tracking history)
+    const rawPoint = await RawTrackingPoint.create({
+      userId,
+      location: { type: 'Point', coordinates: [longitude, latitude] },
       accuracy,
       speed,
-      isMocked: req.body.isMocked,
+      heading,
       altitude,
-      heading
+      timestamp: now,
+      status: pointStatus,
+      isMock: req.body.isMocked
     });
 
-    await attendance.save();
+    // Update Live Status
+    let liveStatus = await LiveEmployeeStatus.findOne({ userId });
+    if (!liveStatus) {
+      liveStatus = new LiveEmployeeStatus({ userId });
+    }
+    
+    liveStatus.lastLocation = rawPoint.location;
+    liveStatus.currentSpeed = speed || 0;
+    liveStatus.lastUpdate = now;
+    liveStatus.totalDistanceToday = attendance.totalDistance;
+    
+    // Detect movement state based on speed
+    const speedMs = speed || 0;
+    const speedKmh = speedMs * 3.6;
+    let moveState = 'Idle';
+    if (speedKmh < 1) moveState = 'Idle';
+    else if (speedKmh < 6) moveState = 'Walking';
+    else if (speedKmh < 25) moveState = 'Bike';
+    else if (speedKmh < 100) moveState = 'Vehicle';
+    else moveState = 'Suspicious';
+    
+    liveStatus.movementState = moveState;
+    liveStatus.currentStatus = 'online';
+    if (battery) liveStatus.batteryLevel = battery;
+
+    // Background Geocoding Check
+    const currentCoords = rawPoint.location.coordinates;
+    let shouldGeocode = false;
+
+    if (!liveStatus.lastAddress) {
+      shouldGeocode = true;
+    } else {
+      const lastGeocodedCoords = liveStatus.lastGeocodedLocation?.coordinates || liveStatus.lastLocation?.coordinates;
+      if (lastGeocodedCoords) {
+        const distSinceLastGeocode = geoService.calculateDistance(
+          lastGeocodedCoords[1], lastGeocodedCoords[0],
+          currentCoords[1], currentCoords[0]
+        );
+        const timeSinceLastGeocode = liveStatus.lastGeocodeTime ? (Date.now() - new Date(liveStatus.lastGeocodeTime).getTime()) / 1000 : Infinity;
+
+        if (distSinceLastGeocode > 0.1 || timeSinceLastGeocode > 300) {
+          shouldGeocode = true;
+        }
+      } else {
+        shouldGeocode = true;
+      }
+    }
+
+    if (shouldGeocode) {
+      reverseGeocodeAsync(userId, rawPoint).catch(err => {
+        console.error('[EnterpriseTracking] Background geocode from trackLocation failed:', err);
+      });
+    }
+
+    await liveStatus.save();
 
     // Hook in automated notifications for geofence exit/entry
     try {
@@ -575,7 +707,7 @@ exports.trackLocation = async (req, res, next) => {
         userName: req.user.name,
         latitude,
         longitude,
-        address,
+        address: liveStatus.lastAddress || 'Live Tracking...',
         time: now,
         totalDistance: attendance.totalDistance,
         isOutside

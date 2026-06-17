@@ -12,6 +12,7 @@ const Shift = require('../models/Shift');
 const statsService = require('../services/employeeStatsService');
 const { getISTDateComponents, createDateFromIST } = require('../utils/timezone');
 const CompanySetting = require('../models/CompanySetting');
+const { RawTrackingPoint } = require('../models/Tracking');
 
 // ─────────────────────────────────────────────────────────────
 // Helper – build a UTC-midnight Date from a YYYY-MM-DD string
@@ -1078,7 +1079,47 @@ exports.getEmployeeTrackDetails = async (req, res) => {
       populate: { path: 'shift', select: 'name' }
     });
     if (!attendance) return res.json({ success: true, data: { exists: false, message: 'No tracking data' } });
-    res.json({ success: true, data: { exists: true, employee: attendance.user, summary: { totalDistance: attendance.totalDistance || 0, workingHours: statsService.calculateWorkingHours(attendance), lastKnownLocation: attendance.trackingLogs?.length > 0 ? attendance.trackingLogs[attendance.trackingLogs.length - 1] : attendance.punchIn?.location }, logs: attendance.trackingLogs || [], punchIn: attendance.punchIn, punchOut: attendance.punchOut } });
+
+    // Fetch RawTrackingPoints for high-fidelity path representation
+    const startOfDay = new Date(targetDate);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(targetDate);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+
+    const rawPoints = await RawTrackingPoint.find({
+      userId: req.params.userId,
+      timestamp: { $gte: startOfDay, $lte: endOfDay }
+    }).sort('timestamp');
+
+    const rawPath = rawPoints.map(p => ({
+      latitude: p.location.coordinates[1],
+      longitude: p.location.coordinates[0],
+      timestamp: p.timestamp,
+      accuracy: p.accuracy,
+      speed: p.speed,
+      status: p.status,
+      isMock: p.isMock,
+      address: p.address
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        exists: true,
+        employee: attendance.user,
+        summary: {
+          totalDistance: attendance.totalDistance || 0,
+          workingHours: statsService.calculateWorkingHours(attendance),
+          lastKnownLocation: attendance.trackingLogs?.length > 0 
+            ? attendance.trackingLogs[attendance.trackingLogs.length - 1] 
+            : attendance.punchIn?.location
+        },
+        logs: attendance.trackingLogs || [],
+        rawPath,
+        punchIn: attendance.punchIn,
+        punchOut: attendance.punchOut
+      }
+    });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
@@ -1093,7 +1134,42 @@ exports.getEmployeeTrackDetailsMe = async (req, res) => {
     const targetDate = date ? parseUTCDate(date) : todayUTC();
     const attendance = await Attendance.findOne({ user: req.user.id, date: targetDate });
     if (!attendance) return res.json({ success: true, data: { exists: false, message: 'No tracking data' } });
-    res.json({ success: true, data: { exists: true, summary: { totalDistance: attendance.totalDistance || 0, workingHours: statsService.calculateWorkingHours(attendance) }, logs: attendance.trackingLogs || [], punchIn: attendance.punchIn, punchOut: attendance.punchOut } });
+
+    const startOfDay = new Date(targetDate);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(targetDate);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+
+    const rawPoints = await RawTrackingPoint.find({
+      userId: req.user.id,
+      timestamp: { $gte: startOfDay, $lte: endOfDay }
+    }).sort('timestamp');
+
+    const rawPath = rawPoints.map(p => ({
+      latitude: p.location.coordinates[1],
+      longitude: p.location.coordinates[0],
+      timestamp: p.timestamp,
+      accuracy: p.accuracy,
+      speed: p.speed,
+      status: p.status,
+      isMock: p.isMock,
+      address: p.address
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        exists: true,
+        summary: {
+          totalDistance: attendance.totalDistance || 0,
+          workingHours: statsService.calculateWorkingHours(attendance)
+        },
+        logs: attendance.trackingLogs || [],
+        rawPath,
+        punchIn: attendance.punchIn,
+        punchOut: attendance.punchOut
+      }
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

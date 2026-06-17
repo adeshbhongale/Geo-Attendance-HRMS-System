@@ -54,19 +54,11 @@ exports.calculateTotalDistance = (points) => {
  * Validates if a new location point is realistic compared to the last point
  * @param {Object} lastPoint - Previous location point
  * @param {Object} newPoint - New location point
- * @returns {Object} { isValid, isSuspicious, distance, reason }
+ * @returns {Object} { isValid, isSuspicious, isWeak, isRecovery, distance, reason, status }
  */
 exports.validateLocation = (lastPoint, newPoint) => {
-  if (!lastPoint || !lastPoint.latitude || !lastPoint.longitude || !lastPoint.time) return { isValid: true, isSuspicious: false, distance: 0 };
-
-  // Accuracy Check (Recommended <= 50m)
-  if (newPoint.accuracy && newPoint.accuracy > 50) {
-    return {
-      isValid: false,
-      isSuspicious: true,
-      distance: 0,
-      reason: 'Low accuracy (> 50m)'
-    };
+  if (!lastPoint || !lastPoint.latitude || !lastPoint.longitude || !lastPoint.time) {
+    return { isValid: true, isSuspicious: false, distance: 0 };
   }
 
   const distance = exports.calculateDistance(
@@ -78,7 +70,28 @@ exports.validateLocation = (lastPoint, newPoint) => {
 
   const timeDiff = (new Date(newPoint.time) - new Date(lastPoint.time)) / 1000; // in seconds
 
-  // Stationary Drift Correction: If movement < 5m (0.005km), ignore it
+  // 1. GPS Lost -> GPS Recovered (Long Signal Gap)
+  if (timeDiff > 120) {
+    return {
+      isValid: true,
+      isRecovery: true,
+      distance: 0, // Fresh segment starts, do not count jump distance
+      reason: 'GPS Recovery after signal gap (> 120s)'
+    };
+  }
+
+  // 2. Accuracy Check (Do not discard points where accuracy > 50m, mark them as 'weak')
+  if (newPoint.accuracy && newPoint.accuracy > 50) {
+    return {
+      isValid: true,
+      isWeak: true,
+      status: 'weak',
+      distance: 0, // Do not add distance for noisy GPS drift
+      reason: 'Weak GPS signal (> 50m)'
+    };
+  }
+
+  // 3. Stationary Drift Correction: If movement < 5m (0.005km), ignore it
   if (distance < 0.005) {
     return {
       isValid: false,
@@ -88,27 +101,70 @@ exports.validateLocation = (lastPoint, newPoint) => {
     };
   }
 
-  // Max Speed Validation: Max speed 50 km/h (Recommended)
+  // 4. Max Speed Validation (Bike/Vehicle standard: 120 km/h)
   const speedKmh = timeDiff > 0 ? (distance / (timeDiff / 3600)) : 0;
-  if (speedKmh > 50) {
+  if (speedKmh > 120) {
     return {
       isValid: false,
       isSuspicious: true,
-      distance,
-      reason: `Unrealistic speed (> 50km/h: ${speedKmh.toFixed(2)} km/h)`
-    };
-  }
-
-  // Jump Validation: Max jump distance 139m (0.139km) in 10s (Consistent with 50km/h)
-  if (timeDiff <= 15 && distance > 0.139) {
-    return {
-      isValid: false,
-      isSuspicious: true,
-      distance,
-      reason: 'Sudden jump detected (> 139m)'
+      distance: 0,
+      reason: `Suspiciously high speed (> 120km/h: ${speedKmh.toFixed(2)} km/h)`
     };
   }
 
   return { isValid: true, isSuspicious: false, distance };
+};
+
+/**
+ * Applies a 2D Kalman filter on a batch of tracking points to smooth route jitter
+ * @param {Object} lastPoint - Last known location point (with coordinates)
+ * @param {Array} points - Array of points to smooth
+ * @param {number} processNoise - Tunable process noise
+ * @returns {Array} Smoothed points
+ */
+exports.smoothPoints = (lastPoint, points, processNoise = 0.0000001) => {
+  if (!points || points.length === 0) return [];
+
+  let latFilter = {
+    value: lastPoint ? lastPoint.latitude : null,
+    error: lastPoint ? (lastPoint.accuracy || 10) : 10
+  };
+  let lngFilter = {
+    value: lastPoint ? lastPoint.longitude : null,
+    error: lastPoint ? (lastPoint.accuracy || 10) : 10
+  };
+
+  return points.map(p => {
+    const accuracy = p.accuracy || 10;
+    const measurementNoise = accuracy * accuracy;
+
+    // Latitude update
+    if (latFilter.value === null) {
+      latFilter.value = p.latitude;
+      latFilter.error = measurementNoise;
+    } else {
+      latFilter.error = latFilter.error + processNoise;
+      const gain = latFilter.error / (latFilter.error + measurementNoise);
+      latFilter.value = latFilter.value + gain * (p.latitude - latFilter.value);
+      latFilter.error = (1 - gain) * latFilter.error;
+    }
+
+    // Longitude update
+    if (lngFilter.value === null) {
+      lngFilter.value = p.longitude;
+      lngFilter.error = measurementNoise;
+    } else {
+      lngFilter.error = lngFilter.error + processNoise;
+      const gain = lngFilter.error / (lngFilter.error + measurementNoise);
+      lngFilter.value = lngFilter.value + gain * (p.longitude - lngFilter.value);
+      lngFilter.error = (1 - gain) * lngFilter.error;
+    }
+
+    return {
+      ...p,
+      latitude: parseFloat(latFilter.value.toFixed(6)),
+      longitude: parseFloat(lngFilter.value.toFixed(6))
+    };
+  });
 };
 

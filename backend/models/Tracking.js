@@ -14,7 +14,8 @@ const rawTrackingPointSchema = new mongoose.Schema({
   altitude: Number,
   timestamp: { type: Date, default: Date.now, index: true },
   status: { type: String, enum: ['valid', 'suspicious', 'weak', 'idle'], default: 'valid' },
-  isMock: { type: Boolean, default: false }
+  isMock: { type: Boolean, default: false },
+  address: String
 });
 
 rawTrackingPointSchema.index({ location: '2dsphere' });
@@ -74,7 +75,12 @@ const liveStatusSchema = new mongoose.Schema({
   totalDistanceToday: { type: Number, default: 0 },
   lastUpdate: { type: Date, default: Date.now },
   batteryLevel: Number,
-  isCharging: Boolean
+  isCharging: Boolean,
+  lastGeocodedLocation: {
+    type: { type: String, default: 'Point' },
+    coordinates: [Number]
+  },
+  lastGeocodeTime: { type: Date }
 });
 
 liveStatusSchema.index({ lastLocation: '2dsphere' });

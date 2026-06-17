@@ -11,8 +11,22 @@ const isNode = typeof process !== 'undefined' && process.versions && process.ver
 const socket = io(SOCKET_URL, {
   autoConnect: !isNode,
   reconnection: true,
-  reconnectionAttempts: 5,
+  reconnectionAttempts: Infinity,
   reconnectionDelay: 1000,
+});
+
+// Sync offline queue and rejoin room upon connection/reconnection
+socket.on('connect', async () => {
+  try {
+    const userId = await AsyncStorage.getItem('userId');
+    if (userId) {
+      socket.emit('join', userId);
+    }
+    const { syncQueue } = require('./utils/offlineQueue');
+    await syncQueue();
+  } catch (err) {
+    console.error('[Socket] Connection sync failed:', err);
+  }
 });
 
 // Global Force Logout Listener

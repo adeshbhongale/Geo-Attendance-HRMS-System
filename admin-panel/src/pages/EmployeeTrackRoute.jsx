@@ -132,7 +132,9 @@ const EmployeeTrackRoute = () => {
           const newLogs = payload.path.map(p => ({
             latitude: p.lat,
             longitude: p.lng,
-            time: payload.timestamp
+            time: p.timestamp || payload.timestamp,
+            status: p.status,
+            speed: p.speed
           }));
 
           return {
@@ -169,7 +171,14 @@ const EmployeeTrackRoute = () => {
     let lastValidPoint = null;
 
     pointsToUse.forEach((log) => {
-      const currentPoint = { lat: log.latitude, lng: log.longitude };
+      const currentPoint = {
+        lat: log.latitude,
+        lng: log.longitude,
+        status: log.status,
+        timestamp: log.timestamp || log.time,
+        speed: log.speed,
+        isMock: log.isMock
+      };
 
       if (!lastValidPoint) {
         filteredLogs.push(currentPoint);
@@ -209,6 +218,7 @@ const EmployeeTrackRoute = () => {
   const polylineRef = useRef(null);
   const startMarkerRef = useRef(null);
   const endMarkerRef = useRef(null);
+  const circlesRef = useRef([]);
 
   const initLeafletMap = () => {
     if (!mapContainerRef.current || !window.L || loading) return;

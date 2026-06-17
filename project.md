@@ -1553,6 +1553,44 @@ Geo-Attendance-HRMS-System/
 
 ---
 
-**Last Updated**: June 16, 2026
-**Version**: 3.3.0
-**Status**: Production Hardened, Connection Resilient, Duplicate Login Blocked, Month Dropdown Modal Integrated, Base-60 Hour Format Active, Leave Dashboard Availed Breakdown Configured, Filters Page Reset Active, Global Stats Restored, Timezone-Robust Date Range Filtering Operational, Dynamic Mobile App Download Links Editable, Delete Confirmation Active, Customer Visit System Overhauled, One-Visit-At-A-Time Enforced, GPS Location Confirmation Flow Active, Executed On Column Active, Geofence Mapping Toggle Active, Scheduling Employee dropdown Name-wise Refactored, Attendance Screen Back to Home Nav Active, Selfie verification box hidden initially, Zero Build Errors.
+### 45. Enterprise Location Tracking Overhaul, Kalman Smoothing, Offline Queueing, and Deduplication (June 17, 2026)
+**Changed**: Architected an enterprise-grade high-fidelity tracking system featuring client-side offline buffering, Kalman route smoothing, background geocoding, strict deduplication, and sequential path distance recalculation.
+
+#### 1. 2D Kalman Filter & Route Smoothing
+- **File**: [geoTrackingService.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/services/geoTrackingService.js)
+- **Smoothing Engine**: Implemented a 2D Kalman filter algorithm (`smoothPoints`) to filter out GPS jitter and smooth route polyline coords.
+
+#### 2. GPS Signal Recovery & Accuracy Preservation
+- **File**: [geoTrackingService.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/services/geoTrackingService.js)
+- **Signal Gaps**: Gaps > 120s are parsed as recovery points, starting a fresh segment (setting incremental distance to 0) instead of accumulating large jump distance errors.
+- **Accuracy Preserver**: High-error coordinates (>50m accuracy) are flagged as `'weak'` rather than discarded, keeping the map route continuous without frozen positions.
+
+#### 3. Client-Side Persistent Offline Buffering
+- **File**: [offlineQueue.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/mobile-app/src/utils/offlineQueue.js)
+- **Local Persistence**: Built a local queue using `AsyncStorage` to persistently buffer points when offline, automatically flushing them using Socket.IO (with REST fallback) upon reconnection.
+- **App Entry Task**: Integrated the queue with the mobile background `LOCATION_TRACKING_TASK` and foreground trackers.
+
+#### 4. Decoupled Asynchronous Reverse Geocoding
+- **Files**: [enterpriseTrackingService.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/services/enterpriseTrackingService.js), [googleMaps.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/utils/googleMaps.js)
+- **Background Worker**: Moved reverse geocoding to an asynchronous background worker (`reverseGeocodeAsync`) to prevent blocking socket event loops.
+- **Throttling**: Configured geocoding to trigger only if the user has moved > 100 meters or if 5 minutes have elapsed since the last geocode, reusing cached addresses otherwise.
+
+#### 5. Strict Deduplication, Sorting, and Recalculation
+- **Files**: [enterpriseTrackingService.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/services/enterpriseTrackingService.js), [attendance.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/controllers/attendance.js)
+- **Deduplication**: Filters out duplicate points by timestamp before writing to `RawTrackingPoint` or `trackingLogs`.
+- **Chronological Sorting**: Automatically merges and sorts tracking logs ascending by time before performing distance accumulation.
+- **Sequential Recalculation**: Loops through the sorted array to calculate `distanceFromPrevious` (applying a 5m stationary drift filter) and `totalDistanceTillNow` sequentially. Corrects double-counting and out-of-order jumps.
+
+#### 6. Admin Panel Map Polyline
+- **File**: [EmployeeTrackRoute.jsx](file:///e:/Downloads/Geo-Attendance-HRMS-System/admin-panel/src/pages/EmployeeTrackRoute.jsx)
+- **Polyline Map**: Simplified route lines to render a single continuous red polyline on Leaflet, showing start (blue) and end (red) marker states.
+
+#### 7. Robust Fallbacks & Bug Fixes
+- **Files**: [attendance.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/controllers/attendance.js), [enterpriseTrackingService.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/services/enterpriseTrackingService.js)
+- **Sync 500 Fix**: Resolved 500 internal server errors by changing `reverseGeocodeAsync` into a local scope function (fixing circular module requires) and validating `userId` to fall back to the authenticated user ID (`req.user.id`) if the client sends invalid values (like `"null"`).
+
+---
+
+**Last Updated**: June 17, 2026
+**Version**: 3.4.0
+**Status**: Production Hardened, Connection Resilient, Duplicate Login Blocked, Month Dropdown Modal Integrated, Base-60 Hour Format Active, Leave Dashboard Availed Breakdown Configured, Filters Page Reset Active, Global Stats Restored, Timezone-Robust Date Range Filtering Operational, Dynamic Mobile App Download Links Editable, Delete Confirmation Active, Customer Visit System Overhauled, One-Visit-At-A-Time Enforced, GPS Location Confirmation Flow Active, Executed On Column Active, Geofence Mapping Toggle Active, Scheduling Employee dropdown Name-wise Refactored, Attendance Screen Back to Home Nav Active, Selfie verification box hidden initially, Kalman Smoothing Active, Offline Tracking Queue Active, Tracking Logs Deduplicated and Chronologically Sorted, Distance Calculations Recalculated Sequentially, Zero Build Errors.

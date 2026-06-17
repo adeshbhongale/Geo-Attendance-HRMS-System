@@ -1,5 +1,7 @@
 const { RawTrackingPoint, TrackingSession, TrackingLog, LiveEmployeeStatus } = require('../models/Tracking');
 const geoService = require('./geoTrackingService');
+const { reverseGeocodeLatLng } = require('../utils/googleMaps');
+const Attendance = require('../models/Attendance');
 
 /**
  * Enterprise Tracking Service
@@ -12,10 +14,15 @@ const aggregationBuffer = new Map();
 exports.processTrackingBatch = async (userId, batch, socketIo) => {
   if (!batch || batch.length === 0) return;
 
+  const mongoose = require('mongoose');
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    console.error('[EnterpriseTracking] Invalid or missing userId for tracking batch:', userId);
+    return { success: false, error: 'Invalid userId' };
+  }
+
   try {
     const validPoints = [];
     let batchDistance = 0;
-    let lastValidPoint = null;
 
     // 1. Fetch or create Live Status for real-time broadcast
     let liveStatus = await LiveEmployeeStatus.findOne({ userId });
@@ -23,12 +30,22 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
       liveStatus = new LiveEmployeeStatus({ userId });
     }
 
-    // 2. Process each point in the 10-second batch
-    for (const point of batch) {
+    // Determine the start point for Kalman smoothing
+    const startPoint = liveStatus.lastLocation?.coordinates ? {
+      latitude: liveStatus.lastLocation.coordinates[1],
+      longitude: liveStatus.lastLocation.coordinates[0],
+      accuracy: 10
+    } : null;
+
+    // Apply Kalman Filter route smoothing on incoming batch
+    const smoothedBatch = geoService.smoothPoints(startPoint, batch);
+
+    let lastValidPoint = null;
+
+    // 2. Process each point in the smoothed batch
+    for (const point of smoothedBatch) {
       const { latitude, longitude, accuracy, speed, timestamp, isMock, heading } = point;
 
-      // Basic Validation
-      if (accuracy > 50) continue; // Skip noisy GPS
       if (isMock) {
         // Flag mock location usage
         liveStatus.movementState = 'Suspicious (Mock)';
@@ -45,43 +62,170 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
       };
 
       // Speed & Jump Validation against last known valid point
-      const validation = geoService.validateLocation(lastValidPoint || (liveStatus.lastLocation?.coordinates ? {
+      const lastPointRef = lastValidPoint || (liveStatus.lastLocation?.coordinates ? {
         latitude: liveStatus.lastLocation.coordinates[1],
         longitude: liveStatus.lastLocation.coordinates[0],
         time: liveStatus.lastUpdate
-      } : null), {
+      } : null);
+
+      const validation = geoService.validateLocation(lastPointRef, {
         latitude,
         longitude,
         accuracy,
         time: timestamp
       });
 
+      // Handle GPS Recovery Gap
+      if (validation.isRecovery) {
+        currentPoint.status = 'valid';
+        lastValidPoint = { latitude, longitude, time: timestamp };
+        validPoints.push(currentPoint);
+        continue;
+      }
+
+      // Handle Weak Signal (Don't discard, flag status and skip distance accumulation)
+      if (validation.isWeak) {
+        currentPoint.status = 'weak';
+        validPoints.push(currentPoint);
+        continue;
+      }
+
+      // Handle Invalid / Suspicious points
       if (!validation.isValid) {
         if (validation.isSuspicious) {
           currentPoint.status = 'suspicious';
-        } else {
-          continue; // Skip drift/noise
+          lastValidPoint = { latitude, longitude, time: timestamp }; // Reset baseline to recover tracking instantly
+          validPoints.push(currentPoint);
         }
-      } else {
-        batchDistance += validation.distance;
-        lastValidPoint = { latitude, longitude, time: timestamp };
+        continue; // Skip noise / drift
       }
 
+      // Valid Point
+      batchDistance += validation.distance;
+      lastValidPoint = { latitude, longitude, time: timestamp };
       validPoints.push(currentPoint);
     }
 
-    // 3. Batch insert raw points for route history
+    // 3. Batch insert raw points for route history (preventing duplicates)
     if (validPoints.length > 0) {
-      await RawTrackingPoint.insertMany(validPoints);
+      const timestamps = validPoints.map(p => p.timestamp);
+      const existingRawPoints = await RawTrackingPoint.find({
+        userId,
+        timestamp: { $in: timestamps }
+      });
+      const existingTimes = new Set(existingRawPoints.map(p => p.timestamp.getTime()));
+      const uniqueValidPoints = validPoints.filter(p => !existingTimes.has(p.timestamp.getTime()));
 
-      // 4. Update Live Status
-      const lastPoint = validPoints[validPoints.length - 1];
-      liveStatus.lastLocation = lastPoint.location;
-      liveStatus.currentSpeed = lastPoint.speed;
-      liveStatus.lastUpdate = lastPoint.timestamp;
-      liveStatus.totalDistanceToday += batchDistance;
-      liveStatus.movementState = detectMovementState(lastPoint.speed);
-      liveStatus.currentStatus = 'online';
+      let lastPoint = null;
+      if (uniqueValidPoints.length > 0) {
+        const insertedPoints = await RawTrackingPoint.insertMany(uniqueValidPoints);
+        lastPoint = insertedPoints[insertedPoints.length - 1];
+      } else {
+        lastPoint = await RawTrackingPoint.findOne({ userId }).sort('-timestamp');
+      }
+
+      // Update active Attendance record for distance calculations and dashboard stats
+      const todayStart = new Date();
+      todayStart.setUTCHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setUTCHours(23, 59, 59, 999);
+      
+      const attendance = await Attendance.findOne({
+        user: userId,
+        date: { $gte: todayStart, $lte: todayEnd }
+      }).sort('-date');
+
+      if (attendance) {
+        const logsToPush = uniqueValidPoints.map(p => ({
+          time: p.timestamp,
+          latitude: p.location.coordinates[1],
+          longitude: p.location.coordinates[0],
+          isSuspicious: p.status === 'suspicious',
+          accuracy: p.accuracy,
+          speed: p.speed,
+          heading: p.heading
+        }));
+
+        const mergedLogs = [...attendance.trackingLogs, ...logsToPush];
+        mergedLogs.sort((a, b) => new Date(a.time) - new Date(b.time));
+
+        const deduplicatedLogs = [];
+        const seenTimes = new Set();
+        for (const log of mergedLogs) {
+          const timeMs = new Date(log.time).getTime();
+          if (!seenTimes.has(timeMs)) {
+            seenTimes.add(timeMs);
+            deduplicatedLogs.push(log);
+          }
+        }
+
+        let accumulatedDistance = 0;
+        for (let i = 0; i < deduplicatedLogs.length; i++) {
+          if (i === 0) {
+            deduplicatedLogs[i].distanceFromPrevious = 0;
+            deduplicatedLogs[i].totalDistanceTillNow = 0;
+          } else {
+            const prev = deduplicatedLogs[i - 1];
+            const curr = deduplicatedLogs[i];
+            const dist = geoService.calculateDistance(
+              prev.latitude,
+              prev.longitude,
+              curr.latitude,
+              curr.longitude
+            );
+            const validDist = dist >= 0.005 ? dist : 0;
+            deduplicatedLogs[i].distanceFromPrevious = parseFloat((validDist * 1000).toFixed(2));
+            accumulatedDistance += validDist;
+            deduplicatedLogs[i].totalDistanceTillNow = parseFloat(accumulatedDistance.toFixed(6));
+          }
+        }
+
+        attendance.trackingLogs = deduplicatedLogs;
+        attendance.totalDistance = parseFloat(accumulatedDistance.toFixed(6));
+        attendance.distance = attendance.totalDistance;
+        await attendance.save();
+      }
+
+      if (lastPoint) {
+        // 4. Update Live Status
+        liveStatus.lastLocation = lastPoint.location;
+        liveStatus.currentSpeed = lastPoint.speed;
+        liveStatus.lastUpdate = lastPoint.timestamp;
+        liveStatus.totalDistanceToday = attendance ? attendance.totalDistance : (liveStatus.totalDistanceToday + batchDistance);
+        liveStatus.movementState = detectMovementState(lastPoint.speed);
+        liveStatus.currentStatus = 'online';
+      }
+
+      // Background Geocoding Check (Decouple and throttle to > 100m or > 5 min)
+      const currentCoords = lastPoint.location.coordinates;
+      let shouldGeocode = false;
+
+      if (!liveStatus.lastAddress) {
+        shouldGeocode = true;
+      } else {
+        const lastGeocodedCoords = liveStatus.lastGeocodedLocation?.coordinates || liveStatus.lastLocation?.coordinates;
+        if (lastGeocodedCoords) {
+          const distSinceLastGeocode = geoService.calculateDistance(
+            lastGeocodedCoords[1], lastGeocodedCoords[0],
+            currentCoords[1], currentCoords[0]
+          );
+          const timeSinceLastGeocode = liveStatus.lastGeocodeTime ? (Date.now() - new Date(liveStatus.lastGeocodeTime).getTime()) / 1000 : Infinity;
+
+          if (distSinceLastGeocode > 0.1 || timeSinceLastGeocode > 300) {
+            shouldGeocode = true;
+          }
+        } else {
+          shouldGeocode = true;
+        }
+      }
+
+      if (shouldGeocode) {
+        // Execute background geocoding asynchronously without awaiting
+        reverseGeocodeAsync(userId, lastPoint).catch(err => {
+          console.error('[EnterpriseTracking] Background geocoding invocation failed:', err);
+        });
+      }
+
       await liveStatus.save();
 
       // 5. Real-time broadcast to Admin (Socket.IO)
@@ -94,7 +238,14 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
           distance: liveStatus.totalDistanceToday,
           status: liveStatus.movementState,
           timestamp: lastPoint.timestamp,
-          path: validPoints.map(p => ({ lat: p.location.coordinates[1], lng: p.location.coordinates[0] }))
+          address: liveStatus.lastAddress || 'Live Tracking...',
+          path: validPoints.map(p => ({ 
+            lat: p.location.coordinates[1], 
+            lng: p.location.coordinates[0],
+            status: p.status,
+            speed: p.speed,
+            timestamp: p.timestamp
+          }))
         });
       }
 
@@ -108,6 +259,54 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
     throw err;
   }
 };
+
+/**
+ * Background Asynchronous Geocode Worker
+ */
+async function reverseGeocodeAsync(userId, lastPoint) {
+  try {
+    const [longitude, latitude] = lastPoint.location.coordinates;
+    const address = await reverseGeocodeLatLng(latitude, longitude);
+
+    if (address) {
+      // 1. Update Live Employee Status
+      await LiveEmployeeStatus.updateOne(
+        { userId },
+        { 
+          $set: { 
+            lastAddress: address,
+            lastGeocodedLocation: lastPoint.location,
+            lastGeocodeTime: new Date()
+          } 
+        }
+      );
+
+      // 2. Update the address on the RawTrackingPoint itself
+      await RawTrackingPoint.updateOne(
+        { _id: lastPoint._id },
+        { $set: { address } }
+      );
+
+      // 3. Update active Attendance tracking log
+      const attendance = await Attendance.findOne({
+        user: userId,
+        "punchOut.time": { $exists: false }
+      }).sort('-date');
+
+      if (attendance && attendance.trackingLogs.length > 0) {
+        const lastLogIndex = attendance.trackingLogs.length - 1;
+        await Attendance.updateOne(
+          { _id: attendance._id, "trackingLogs._id": attendance.trackingLogs[lastLogIndex]._id },
+          { $set: { "trackingLogs.$.address": address } }
+        );
+      }
+    }
+  } catch (err) {
+    console.error('[EnterpriseTracking] Asynchronous reverse geocoding task failed:', err.message);
+  }
+}
+
+exports.reverseGeocodeAsync = reverseGeocodeAsync;
 
 /**
  * Buffers points for 1-minute aggregation

@@ -42,43 +42,27 @@ TaskManager.defineTask(LOCATION_TRACKING_TASK, async ({ data, error }) => {
     const { locations } = data;
     if (locations && locations.length > 0) {
       try {
-        const loc = locations[0];
-        const { latitude, longitude, accuracy, speed, heading, mocked, timestamp } = loc.coords;
+        const { addPointToQueue, syncQueue } = require('./src/utils/offlineQueue');
 
-        // 1. Enterprise Validation (Internal 2s check)
-        if (accuracy > 50) return;
-        const speedKmh = (speed || 0) * 3.6;
-        if (speedKmh > 50) return; // Ignore jumps above human speed
+        // Queue all captured locations
+        for (const loc of locations) {
+          const { latitude, longitude, accuracy, speed, heading, mocked, timestamp } = loc.coords;
+          await addPointToQueue({
+            latitude,
+            longitude,
+            accuracy,
+            speed: speed || 0,
+            heading,
+            isMock: mocked,
+            timestamp: timestamp || Date.now()
+          });
+        }
 
-        // 2. Add to internal buffer
-        trackingBuffer.push({
-          latitude,
-          longitude,
-          accuracy,
-          speed: speed || 0,
-          heading,
-          isMock: mocked,
-          timestamp: timestamp || Date.now()
-        });
-
-        // 3. Every 10 seconds: Transmit Batch
+        // Trigger synchronization check every 10 seconds
         const now = Date.now();
-        if (now - lastBatchTime >= 10000 && trackingBuffer.length > 0) {
-          const batch = [...trackingBuffer];
-          trackingBuffer = [];
+        if (now - lastBatchTime >= 10000) {
           lastBatchTime = now;
-
-          // Retrieve User ID from storage
-          const userId = await AsyncStorage.getItem('userId');
-          if (userId) {
-            // Send via Socket for real-time movement
-            if (socket.connected) {
-              socket.emit('trackingBatch', { userId, batch });
-            } else {
-              // REST Fallback if socket is disconnected
-              await api.post('/attendance/track-batch', { userId, batch });
-            }
-          }
+          await syncQueue();
         }
       } catch (err) { }
     }
