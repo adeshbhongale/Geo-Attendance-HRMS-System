@@ -659,8 +659,11 @@ async function flushAggregation(minuteKey) {
     // Build both raw and snapped paths
     const rawPath = points.map(p => p.location?.coordinates || [p.rawLongitude || p.longitude, p.rawLatitude || p.latitude]);
     const snappedPath = points
-      .filter(p => p.snappedLatitude && p.snappedLongitude)
-      .map(p => [p.snappedLongitude, p.snappedLatitude]);
+      .map(p => [
+        p.snappedLongitude || p.rawLongitude || p.location?.coordinates[0] || p.longitude,
+        p.snappedLatitude || p.rawLatitude || p.location?.coordinates[1] || p.latitude
+      ])
+      .filter(p => p[0] !== undefined && p[1] !== undefined && p[0] !== null && p[1] !== null);
 
     const log = new TrackingLog({
       userId,

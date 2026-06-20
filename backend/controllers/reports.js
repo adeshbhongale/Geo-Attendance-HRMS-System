@@ -1309,8 +1309,12 @@ exports.getEmployeeTrackDetails = async (req, res) => {
 
     // Build separate snapped and raw routes
     const snappedRoute = rawPoints
-      .filter(p => p.snappedLatitude && p.snappedLongitude)
-      .map(p => ({ latitude: p.snappedLatitude, longitude: p.snappedLongitude, timestamp: p.timestamp }));
+      .map(p => ({
+        latitude: p.snappedLatitude || p.rawLatitude || p.location.coordinates[1],
+        longitude: p.snappedLongitude || p.rawLongitude || p.location.coordinates[0],
+        timestamp: p.timestamp
+      }))
+      .filter(p => p.latitude !== undefined && p.longitude !== undefined && p.latitude !== null && p.longitude !== null);
 
     const routeReconstructService = require('../services/routeReconstructionService');
     let roadGeometry = [];
@@ -1469,8 +1473,12 @@ exports.getEmployeeTrackDetailsMe = async (req, res) => {
     }));
 
     const snappedRoute = rawPoints
-      .filter(p => p.snappedLatitude && p.snappedLongitude)
-      .map(p => ({ latitude: p.snappedLatitude, longitude: p.snappedLongitude, timestamp: p.timestamp }));
+      .map(p => ({
+        latitude: p.snappedLatitude || p.rawLatitude || p.location.coordinates[1],
+        longitude: p.snappedLongitude || p.rawLongitude || p.location.coordinates[0],
+        timestamp: p.timestamp
+      }))
+      .filter(p => p.latitude !== undefined && p.longitude !== undefined && p.latitude !== null && p.longitude !== null);
 
     const routeReconstructService = require('../services/routeReconstructionService');
     let roadGeometry = [];
@@ -1562,13 +1570,13 @@ exports.getTripDetails = async (req, res) => {
     }));
 
     const snappedRoute = rawPoints
-      .filter(p => p.snappedLatitude && p.snappedLongitude)
       .map(p => ({
-        latitude: p.snappedLatitude,
-        longitude: p.snappedLongitude,
+        latitude: p.snappedLatitude || p.rawLatitude || p.location.coordinates[1],
+        longitude: p.snappedLongitude || p.rawLongitude || p.location.coordinates[0],
         timestamp: p.timestamp,
         speed: p.speed
-      }));
+      }))
+      .filter(p => p.latitude !== undefined && p.longitude !== undefined && p.latitude !== null && p.longitude !== null);
 
     // Calculate statistics
     const geoService = require('../services/geoTrackingService');

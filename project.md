@@ -1637,6 +1637,33 @@ Geo-Attendance-HRMS-System/
 
 ---
 
-**Last Updated**: June 19, 2026
-**Version**: 3.6.0
-**Status**: Production Hardened, Connection Resilient, Duplicate Login Blocked, Month Dropdown Modal Integrated, Base-60 Hour Format Active, Leave Dashboard Availed Breakdown Configured, Filters Page Reset Active, Global Stats Restored, Timezone-Robust Date Range Filtering Operational, Dynamic Mobile App Download Links Editable, Delete Confirmation Active, Customer Visit System Overhauled, One-Visit-At-A-Time Enforced, GPS Location Confirmation Flow Active, Executed On Column Active, Geofence Mapping Toggle Active, Scheduling Employee dropdown Name-wise Refactored, Attendance Screen Back to Home Nav Active, Selfie verification box hidden initially, Kalman Smoothing Active, Offline Tracking Queue Active, Tracking Logs Deduplicated and Chronologically Sorted, Distance Calculations Recalculated Sequentially, SQLite WebAssembly Build Error Resolved, Background Task Metadata Synced, Real-time Telemetry Merged, Premium Replay Playback Animation Integrated, Dual-path Map Rendering Active, Geofence Circle Overlays Display Active, Geofence Multi-Alerts Active, Dynamic Address Resolution & Coordinate Fallbacks Integrated, Zero Build Errors.
+### 48. GPS Validation, Telemetry Cutoffs, and U-Turn Loop Pruning (June 20, 2026)
+**Changed**: Implemented background telemetry continuity updates, increased warning cutoff thresholds, added 2-lane road U-turn loop pruning, and resolved GPS gap coordinate lockout issues.
+
+- **Files**: `backend/services/enterpriseTrackingService.js`, `backend/services/routeReconstructionService.js`, `backend/services/roadValidationService.js`, `backend/server.js`, `admin-panel/src/pages/EmployeeTrackRoute.jsx`
+- **Telemetry & Continuity monitoring**:
+  - Updated `enterpriseTrackingService.js` to refresh `liveStatus.lastUpdate` even when all batch coordinates are filtered out as stationary drift, preventing false-positive telemetry alerts.
+  - Increased telemetry warning monitor cutoff in `server.js` from 2 minutes to 5 minutes to accommodate background process sleeping.
+- **U-Turn Loop Pruning**:
+  - Built a loop/reversal detection algorithm `pruneUturnLoops` in `routeReconstructionService.js` to find and splice out detour/U-turn loops on undivided 2-lane roads.
+- **GPS Lockout Recovery**:
+  - Configured `roadValidationService.js` to trigger a Recovery Mode check when a gap >= 20 seconds is encountered, letting the system immediately accept the new coordinate.
+
+---
+
+### 49. Fail-Safe Route Rendering and Missing Snapped Points Fallbacks (June 20, 2026)
+**Changed**: Added complete coordinate fallbacks for unsnapped tracking points to guarantee route rendering under any condition in the admin panel and mobile app.
+
+- **Files**: `backend/controllers/reports.js`, `backend/services/routeReconstructionService.js`, `backend/services/enterpriseTrackingService.js`, `admin-panel/src/pages/EmployeeTrackRoute.jsx`
+- **Backend Snapped Coordinate Fallbacks**:
+  - Updated `reports.js` and `enterpriseTrackingService.js` to map `snappedRoute` and `snappedPath` using the raw coordinates (`p.rawLatitude || p.location.coordinates[1]`) as a fallback if the database `snappedLatitude` is `null`.
+  - Hardened `routeReconstructionService.js` to return `coords` as the `geometry` fallback instead of an empty array `[]` when the distance is under 10 meters, when routing APIs return insufficient points, or when all providers fail/timeout.
+- **Frontend Fail-Safe Rendering**:
+  - Overhauled `EmployeeTrackRoute.jsx` to render snapped lines by cascading through `roadGeometry`, `snappedRoute`, and raw GPS `path` arrays.
+  - Removed strict checks on `data.reconstructionSuccess` and `totalDistKm >= 0.01` for drawing, ensuring a line is drawn under any condition.
+
+---
+
+**Last Updated**: June 20, 2026
+**Version**: 3.7.0
+**Status**: Production Hardened, Connection Resilient, Duplicate Login Blocked, Month Dropdown Modal Integrated, Base-60 Hour Format Active, Leave Dashboard Availed Breakdown Configured, Filters Page Reset Active, Global Stats Restored, Timezone-Robust Date Range Filtering Operational, Dynamic Mobile App Download Links Editable, Delete Confirmation Active, Customer Visit System Overhauled, One-Visit-At-A-Time Enforced, GPS Location Confirmation Flow Active, Executed On Column Active, Geofence Mapping Toggle Active, Scheduling Employee dropdown Name-wise Refactored, Attendance Screen Back to Home Nav Active, Selfie verification box hidden initially, Kalman Smoothing Active, Offline Tracking Queue Active, Tracking Logs Deduplicated and Chronologically Sorted, Distance Calculations Recalculated Sequentially, SQLite WebAssembly Build Error Resolved, Background Task Metadata Synced, Real-time Telemetry Merged, Premium Replay Playback Animation Integrated, Dual-path Map Rendering Active, Geofence Circle Overlays Display Active, Geofence Multi-Alerts Active, Dynamic Address Resolution & Coordinate Fallbacks Integrated, Telemetry Monitor Hardened, 2-Lane Road U-Turn Snapping Fix Active, GPS Gap Recovery Mode Active, Snapped Coordinate Fallbacks Active, Fail-safe Route Line Rendering Active, Zero Build Errors.
