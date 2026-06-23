@@ -8,16 +8,19 @@ import { syncPendingPoints } from './sync.service';
 
 /**
  * Enterprise Location/Tracking Service
- * Single responsibility: Collect GPS data every 5 seconds
- * Validates, enriches, and stores to SQLite
+ * 
+ * ARCHITECTURE (Post-Fix):
+ * - This service manages trip state and provides the collectPoint() utility.
+ * - All continuous GPS collection is handled by a SINGLE system:
+ *   startLocationUpdatesAsync() in trackingManager.js (works in BOTH foreground & background).
+ * - watchPositionAsync has been REMOVED to prevent dual-system conflicts
+ *   that caused GPS to silently die on Realme/OPPO/ColorOS devices.
  */
 
-let watchSubscription = null;
-let foregroundInterval = null;
 let currentTripId = null;
 let deviceId = null;
 let isCollecting = false;
-let currentIntervalSetting = 5000;
+let isTrackingFlag = false;
 let savedOnPointCollected = null;
 
 // Validation thresholds
@@ -26,64 +29,6 @@ const MIN_MOVEMENT_METERS = 3;  // ignore stationary drift
 const MAX_SPEED_KMH = 150;     // reject teleportation jumps
 
 let lastPoint = null;
-
-const startWatchPosition = async (timeInterval) => {
-  if (watchSubscription) {
-    try {
-      await watchSubscription.remove();
-    } catch (e) {
-      console.warn('[LocationService] Failed to remove watch subscription:', e.message);
-    }
-  }
-
-  currentIntervalSetting = timeInterval;
-  console.log(`[LocationService] Starting watchPositionAsync with interval: ${timeInterval}ms`);
-
-  try {
-    watchSubscription = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.High,
-        timeInterval: timeInterval,
-        distanceInterval: 1, // use 1m so timeInterval takes precedence
-      },
-      async (loc) => {
-        const point = await collectPoint(loc);
-        if (point && savedOnPointCollected) {
-          savedOnPointCollected(point);
-        }
-
-        // Dynamically adjust interval based on current speed
-        const speedMps = loc.coords.speed || 0;
-        const speedKmh = speedMps * 3.6;
-        let desiredInterval = 5000;
-
-        if (speedKmh >= 15) {
-          desiredInterval = 2000;  // High speed (bike/car): 2s
-        } else if (speedKmh > 1) {
-          desiredInterval = 5000;  // Walk/small speed: 5s
-        } else {
-          desiredInterval = 10000; // Stationary/idle: 10s
-        }
-
-        if (desiredInterval !== currentIntervalSetting) {
-          startWatchPosition(desiredInterval).catch(err => {
-            console.error('[LocationService] Dynamic watcher adjustment failed:', err.message);
-          });
-
-          // Propagate this new interval setting to the background manager
-          try {
-            const { updateBackgroundInterval } = require('./trackingManager');
-            updateBackgroundInterval(desiredInterval);
-          } catch (bgErr) {
-            console.warn('[LocationService] Could not update background interval:', bgErr.message);
-          }
-        }
-      }
-    );
-  } catch (err) {
-    console.error('[LocationService] Failed to start watchPositionAsync:', err.message);
-  }
-};
 
 /**
  * Get unique device identifier
@@ -150,9 +95,10 @@ const validatePoint = (point) => {
 };
 
 /**
- * Collect a single GPS point, validate, and store to SQLite
+ * Collect a single GPS point, validate, and store to SQLite.
+ * Called by the background task (App.js) and for immediate first-point seeding.
  */
-const collectPoint = async (loc = null) => {
+export const collectPoint = async (loc = null) => {
   if (isCollecting) return null;
   
   try {
@@ -217,6 +163,18 @@ const collectPoint = async (loc = null) => {
 
     console.log(`[LocationService] Point saved: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (acc: ${accuracy?.toFixed(0)}m, status: ${validation.status})`);
 
+    // Notify UI callback if registered
+    if (savedOnPointCollected) {
+      savedOnPointCollected({
+        latitude,
+        longitude,
+        accuracy,
+        speed,
+        heading,
+        status: validation.status
+      });
+    }
+
     return {
       latitude,
       longitude,
@@ -234,7 +192,10 @@ const collectPoint = async (loc = null) => {
 };
 
 /**
- * Start GPS tracking for a trip
+ * Start GPS tracking for a trip.
+ * This only sets up trip state and collects the first point.
+ * Continuous collection is handled by startLocationUpdatesAsync in trackingManager.js.
+ * 
  * @param {string} tripId - Attendance/session ID to associate points with
  * @param {Function} onPointCollected - Callback when a point is successfully collected
  * @returns {boolean} Whether tracking started successfully
@@ -254,6 +215,7 @@ export const startTracking = async (tripId, onPointCollected = null) => {
     currentTripId = tripId;
     lastPoint = null;
     savedOnPointCollected = onPointCollected;
+    isTrackingFlag = true;
 
     // Cache trip ID and device ID in AsyncStorage for the background task to access
     const devId = await getDeviceId();
@@ -278,8 +240,9 @@ export const startTracking = async (tripId, onPointCollected = null) => {
       console.warn('[LocationService] First point getCurrentPositionAsync warning:', e.message);
     }
 
-    // Start watch subscription dynamically
-    await startWatchPosition(5000);
+    // NOTE: No watchPositionAsync here!
+    // GPS collection is handled entirely by startLocationUpdatesAsync
+    // in trackingManager.js, which works in BOTH foreground and background.
 
     return true;
   } catch (err) {
@@ -293,21 +256,12 @@ export const startTracking = async (tripId, onPointCollected = null) => {
  */
 export const stopTracking = async () => {
   try {
-    if (foregroundInterval) {
-      clearInterval(foregroundInterval);
-      foregroundInterval = null;
-    }
-
-    if (watchSubscription) {
-      await watchSubscription.remove();
-      watchSubscription = null;
-    }
-
     console.log(`[LocationService] Tracking stopped for trip: ${currentTripId}`);
     
     currentTripId = null;
     lastPoint = null;
     savedOnPointCollected = null;
+    isTrackingFlag = false;
   } catch (err) {
     console.error('[LocationService] Stop tracking failed:', err);
   }
@@ -318,7 +272,7 @@ export const stopTracking = async () => {
  * @returns {boolean}
  */
 export const isTrackingActive = () => {
-  return watchSubscription !== null;
+  return isTrackingFlag;
 };
 
 /**
@@ -352,27 +306,21 @@ export const getLastGpsPoint = () => {
 };
 
 /**
- * Silently restart the GPS watcher subscription
+ * Force-collect a fresh GPS point (used by watchdog for recovery).
+ * Does NOT restart any watcher — just gets one point via getCurrentPositionAsync.
  * @returns {Promise<boolean>}
  */
-export const restartGpsWatcher = async () => {
-  console.log('[LocationService] restartGpsWatcher called');
+export const forceCollectPoint = async () => {
+  console.log('[LocationService] forceCollectPoint called');
   try {
-    await startWatchPosition(currentIntervalSetting);
-    
-    // Try collecting a fresh point immediately to force recovery update
-    try {
-      const freshLoc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-        timeout: 4000,
-      });
-      await collectPoint(freshLoc);
-    } catch (e) {
-      console.warn('[LocationService] Quick recovery point capture warning:', e.message);
-    }
+    const freshLoc = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High,
+      timeout: 4000,
+    });
+    await collectPoint(freshLoc);
     return true;
-  } catch (err) {
-    console.error('[LocationService] Failed to restart GPS watcher:', err.message);
+  } catch (e) {
+    console.warn('[LocationService] forceCollectPoint failed:', e.message);
     return false;
   }
 };

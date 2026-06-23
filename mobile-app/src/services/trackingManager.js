@@ -6,11 +6,28 @@ import { startHeartbeat, stopHeartbeat } from './heartbeat.service';
 import { startSelfHealingWatchdog, stopSelfHealingWatchdog } from './selfHealingWatchdog';
 
 const LOCATION_TRACKING_TASK = 'background-location-tracking';
+
+/**
+ * Fixed GPS collection interval (5 seconds).
+ * 
+ * WHY FIXED? On Realme/OPPO/ColorOS, dynamically restarting
+ * startLocationUpdatesAsync() is interpreted as "battery abuse"
+ * and the OS kills the foreground service. A fixed interval
+ * avoids this entirely. Speed-based filtering happens server-side.
+ */
+const GPS_INTERVAL_MS = 5000;
+
 let isManagerActive = false;
 
 /**
  * Global Tracking Manager Service
  * Manages location tracking lifecycle independently of the UI.
+ * 
+ * ARCHITECTURE (Post-Fix):
+ * - startFgTracking() sets up trip state + collects first point (NO watcher)
+ * - startLocationUpdatesAsync() is the SINGLE GPS collection mechanism
+ *   that works in both foreground and background via foreground service.
+ * - No dynamic interval changes to avoid OS killing the service.
  */
 
 export const initializeTracking = async () => {
@@ -65,25 +82,30 @@ export const startTrackingSession = async (tripId) => {
     const { status: bg } = await Location.requestBackgroundPermissionsAsync();
 
     if (fg === 'granted') {
-      // 3. Start foreground tracking
+      // 3. Start foreground tracking (sets trip state + first point, NO watcher)
       await startFgTracking(tripId);
       // 4. Start synchronization background loop
       startSyncLoop();
     }
 
     if (fg === 'granted' && bg === 'granted') {
-      // 5. Register and start standard background tracking updates
-      // Always call startLocationUpdatesAsync to ensure the foreground service is active
+      // 5. Start the SINGLE GPS collection system: startLocationUpdatesAsync
+      // This works in BOTH foreground and background via foreground service notification.
+      // Uses a FIXED interval to prevent Realme/OPPO from killing the service.
       await Location.startLocationUpdatesAsync(LOCATION_TRACKING_TASK, {
         accuracy: Location.Accuracy.High,
-        timeInterval: 10000,
-        distanceInterval: 5,
+        timeInterval: GPS_INTERVAL_MS,
+        distanceInterval: 3,
         foregroundService: {
           notificationTitle: "Geo-Track HRMS",
           notificationBody: "Tracking active until punch out",
           notificationColor: "#4f46e5"
-        }
+        },
+        // Android-specific: keep alive in background
+        activityType: Location.ActivityType.AutomotiveNavigation,
+        showsBackgroundLocationIndicator: true,
       });
+      console.log(`[TrackingManager] Background location updates started (fixed ${GPS_INTERVAL_MS}ms interval)`);
     }
 
     // Start tracking health monitoring services (heartbeat + local watchdog)
@@ -105,7 +127,7 @@ export const stopTrackingSession = async () => {
     // 1. Force uploading remaining points in SQLite before stop
     await forceSyncAll();
 
-    // 2. Stop foreground watching
+    // 2. Stop foreground tracking state
     await stopFgTracking();
 
     // 3. Stop sync loops
@@ -133,28 +155,4 @@ export const clearTrackingSession = async () => {
   await stopTrackingSession();
   await AsyncStorage.removeItem('activeTripId');
   console.log('[TrackingManager] Active trip ID cleared persistently');
-};
-
-export const updateBackgroundInterval = async (timeInterval) => {
-  try {
-    const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TRACKING_TASK);
-    if (!hasStarted) return;
-
-    console.log(`[TrackingManager] Adjusting background tracking interval to ${timeInterval}ms`);
-    
-    await AsyncStorage.setItem('currentBgInterval', String(timeInterval));
-
-    await Location.startLocationUpdatesAsync(LOCATION_TRACKING_TASK, {
-      accuracy: Location.Accuracy.High,
-      timeInterval: timeInterval,
-      distanceInterval: 1, // smaller distance interval so time interval takes precedence
-      foregroundService: {
-        notificationTitle: "Geo-Track HRMS",
-        notificationBody: "Tracking active until punch out",
-        notificationColor: "#4f46e5"
-      }
-    });
-  } catch (err) {
-    console.error('[TrackingManager] Failed to update background interval:', err);
-  }
 };

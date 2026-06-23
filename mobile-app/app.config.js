@@ -3,7 +3,12 @@ module.exports = ({ config }) => {
     ...config,
     plugins: [
       ...(config.plugins || []),
-      "expo-sqlite"
+      "expo-sqlite",
+      ["expo-location", {
+        locationAlwaysAndWhenInUsePermission: "Allow Geo-Track HRMS to access your location for attendance tracking.",
+        isAndroidBackgroundLocationEnabled: true,
+        isAndroidForegroundServiceEnabled: true
+      }]
     ],
     android: {
       ...config.android,

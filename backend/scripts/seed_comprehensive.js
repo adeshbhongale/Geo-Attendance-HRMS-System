@@ -13,6 +13,7 @@ const CustomerVisit = require('../models/CustomerVisit');
 const Notification = require('../models/Notification');
 const NotificationLog = require('../models/NotificationLog');
 const EmployeeNotification = require('../models/EmployeeNotification');
+const { RawTrackingPoint, TrackingSession, TrackingLog, LiveEmployeeStatus } = require('../models/Tracking');
 const statsService = require('../services/attendanceStatsService');
 const geoService = require('../services/geoTrackingService');
 const dotenv = require('dotenv');
@@ -827,6 +828,233 @@ const seedData = async () => {
     // Safe Chunked Insertions to prevent connection timeouts/drops
     console.log(`Saving ${attendanceRecords.length} Attendance records in batches...`);
     await saveInBatches(Attendance, attendanceRecords, 50);
+
+    // --- Seed Tracking Data ---
+    console.log('Seeding Tracking Data (RawTrackingPoint, TrackingSession, LiveEmployeeStatus)...');
+    const rawTrackingPoints = [];
+    const trackingSessions = [];
+    const liveEmployeeStatuses = [];
+
+    // Generate LiveEmployeeStatus for all employees
+    for (const emp of employees) {
+      liveEmployeeStatuses.push({
+        userId: emp._id,
+        lastLocation: {
+          type: 'Point',
+          coordinates: [office.longitude, office.latitude]
+        },
+        lastRawLocation: {
+          type: 'Point',
+          coordinates: [office.longitude, office.latitude]
+        },
+        lastSnappedLocation: {
+          type: 'Point',
+          coordinates: [office.longitude, office.latitude]
+        },
+        lastAddress: office.address,
+        currentSpeed: 0,
+        avgSpeed: 0,
+        currentStatus: 'offline',
+        trackingStatus: 'offline',
+        movementState: 'Idle',
+        totalDistanceToday: 0,
+        travelTime: 0,
+        stops: 0,
+        lastUpdate: new Date(),
+        batteryLevel: 85,
+        isCharging: false,
+        signalQuality: 'strong',
+        tripId: null,
+        lastGeocodedLocation: {
+          type: 'Point',
+          coordinates: [office.longitude, office.latitude]
+        },
+        lastGeocodeTime: new Date(),
+        trackingHealth: 'healthy',
+        trackingHealthReason: 'Seeded status',
+        lastHeartbeat: new Date(),
+        lastGpsTime: new Date(),
+        heartbeatNetwork: 'wifi',
+        heartbeatBattery: 85,
+        recoveryAttempts: 0,
+        lastRecoveryTime: null
+      });
+    }
+
+    // Generate TrackingSession and RawTrackingPoint for each attendance record
+    for (const attendance of attendanceRecords) {
+      // Create TrackingSession
+      const sessionStartTime = attendance.punchIn?.time || attendance.date;
+      const sessionEndTime = attendance.punchOut?.time || null;
+      const trackingSession = {
+        userId: attendance.user,
+        tripId: attendance._id.toString(),
+        startTime: sessionStartTime,
+        endTime: sessionEndTime,
+        totalDistance: attendance.totalDistance || 0,
+        totalRawDistance: attendance.totalDistance || 0,
+        maxSpeed: 0,
+        avgSpeed: 0,
+        stops: 0,
+        status: sessionEndTime ? 'completed' : 'active',
+        provider: 'osrm'
+      };
+      trackingSessions.push(trackingSession);
+
+      // Generate RawTrackingPoints along the trackingLogs path
+      if (attendance.trackingLogs && attendance.trackingLogs.length > 0) {
+        for (let i = 0; i < attendance.trackingLogs.length; i++) {
+          const log = attendance.trackingLogs[i];
+          const lat = log.latitude || office.latitude;
+          const lng = log.longitude || office.longitude;
+          const prevLog = i > 0 ? attendance.trackingLogs[i - 1] : null;
+
+          // Generate multiple points between consecutive logs for smoother path
+          const numPointsBetween = 3; // 3 extra points between each log entry
+          if (prevLog) {
+            for (let j = 0; j < numPointsBetween; j++) {
+              const ratio = (j + 1) / (numPointsBetween + 1);
+              const interpLat = prevLog.latitude + (lat - prevLog.latitude) * ratio;
+              const interpLng = prevLog.longitude + (lng - prevLog.longitude) * ratio;
+              const interpTime = new Date(prevLog.time.getTime() + (log.time.getTime() - prevLog.time.getTime()) * ratio);
+
+              const speed = 5 + Math.random() * 10; // 5-15 km/h
+              const heading = Math.random() * 360;
+              const accuracy = 5 + Math.random() * 15; // 5-20m accuracy
+
+              rawTrackingPoints.push({
+                userId: attendance.user,
+                sessionId: attendance._id,
+                tripId: attendance._id.toString(),
+                deviceId: `device-${attendance.user}`,
+                location: {
+                  type: 'Point',
+                  coordinates: [interpLng, interpLat]
+                },
+                rawLatitude: interpLat,
+                rawLongitude: interpLng,
+                snappedLatitude: interpLat, // Simulate snapped coordinates
+                snappedLongitude: interpLng,
+                accuracy: accuracy,
+                speed: speed,
+                heading: heading,
+                altitude: 100 + Math.random() * 50,
+                battery: 70 + Math.random() * 30,
+                timestamp: interpTime,
+                status: 'valid',
+                isMock: false,
+                isOffline: false,
+                address: office.address,
+                routeStatus: 'snapped',
+                processedTime: new Date(),
+                provider: 'osrm',
+                roadId: `road-${Math.floor(Math.random() * 100)}`,
+                roadSegmentId: `seg-${Math.floor(Math.random() * 1000)}`,
+                roadName: 'Main Road',
+                travelDirection: heading < 180 ? 'N' : 'S',
+                previousRoadId: null,
+                previousSegmentId: null,
+                matchedRoadConfidence: 0.95,
+                transitionReason: null,
+                gpsConfidence: 0.98,
+                roadConfidence: 0.92,
+                candidateRoads: [
+                  {
+                    placeId: `place-${Math.random()}`,
+                    roadName: 'Main Road',
+                    heading: heading,
+                    distance: 2,
+                    latitude: interpLat,
+                    longitude: interpLng
+                  }
+                ],
+                acceptedRoadId: `road-${Math.floor(Math.random() * 100)}`,
+                acceptedSegmentId: `seg-${Math.floor(Math.random() * 1000)}`,
+                visitNumber: 1,
+                previousAcceptedRoad: null,
+                roadTransitionType: null,
+                gpsGap: null,
+                isRecoveryPoint: false,
+                qualityScore: 0.95,
+                decisionReason: 'Seeded data'
+              });
+            }
+          }
+
+          // Add the actual log point
+          const speed = 5 + Math.random() * 10; // 5-15 km/h
+          const heading = Math.random() * 360;
+          const accuracy = 5 + Math.random() * 15; // 5-20m accuracy
+
+          rawTrackingPoints.push({
+            userId: attendance.user,
+            sessionId: attendance._id,
+            tripId: attendance._id.toString(),
+            deviceId: `device-${attendance.user}`,
+            location: {
+              type: 'Point',
+              coordinates: [lng, lat]
+            },
+            rawLatitude: lat,
+            rawLongitude: lng,
+            snappedLatitude: lat,
+            snappedLongitude: lng,
+            accuracy: accuracy,
+            speed: speed,
+            heading: heading,
+            altitude: 100 + Math.random() * 50,
+            battery: 70 + Math.random() * 30,
+            timestamp: log.time,
+            status: 'valid',
+            isMock: false,
+            isOffline: false,
+            address: log.address || office.address,
+            routeStatus: 'snapped',
+            processedTime: new Date(),
+            provider: 'osrm',
+            roadId: `road-${Math.floor(Math.random() * 100)}`,
+            roadSegmentId: `seg-${Math.floor(Math.random() * 1000)}`,
+            roadName: 'Main Road',
+            travelDirection: heading < 180 ? 'N' : 'S',
+            previousRoadId: null,
+            previousSegmentId: null,
+            matchedRoadConfidence: 0.95,
+            transitionReason: null,
+            gpsConfidence: 0.98,
+            roadConfidence: 0.92,
+            candidateRoads: [
+              {
+                placeId: `place-${Math.random()}`,
+                roadName: 'Main Road',
+                heading: heading,
+                distance: 2,
+                latitude: lat,
+                longitude: lng
+              }
+            ],
+            acceptedRoadId: `road-${Math.floor(Math.random() * 100)}`,
+            acceptedSegmentId: `seg-${Math.floor(Math.random() * 1000)}`,
+            visitNumber: 1,
+            previousAcceptedRoad: null,
+            roadTransitionType: null,
+            gpsGap: null,
+            isRecoveryPoint: false,
+            qualityScore: 0.95,
+            decisionReason: 'Seeded data'
+          });
+        }
+      }
+    }
+
+    // Save tracking data in batches
+    console.log(`Saving ${trackingSessions.length} TrackingSession records...`);
+    await saveInBatches(TrackingSession, trackingSessions, 50);
+
+    console.log(`Saving ${rawTrackingPoints.length} RawTrackingPoint records...`);
+    await saveInBatches(RawTrackingPoint, rawTrackingPoints, 100);
+
+    console.log(`Saving ${liveEmployeeStatuses.length} LiveEmployeeStatus records...`);
+    await saveInBatches(LiveEmployeeStatus, liveEmployeeStatuses, 50);
 
     console.log(`Saving ${leaveRecords.length} Leave records in batches...`);
     await saveInBatches(Leave, leaveRecords, 50);

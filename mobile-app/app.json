@@ -46,7 +46,8 @@
         "RECEIVE_BOOT_COMPLETED",
         "ACCESS_NETWORK_STATE",
         "ACCESS_WIFI_STATE",
-        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "POST_NOTIFICATIONS"
       ],
       "edgeToEdgeEnabled": true
     },

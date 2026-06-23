@@ -1217,6 +1217,49 @@ Geo-Attendance-HRMS-System/
 - **Aligning Default Start Date**: Updated default `fromDate` filter state to `'2024-01-01'` to align with the Dashboard page and historical database telemetry.
 - **Date Comparison Fix**: Fixed date parsed checks inside `NotificationReports.jsx` by checking dynamic Mongoose fields (`log.sentAt || log.sentTime || log.createdAt`) to prevent `NaN` date evaluations that filtered out all log records.
 - **CSV Data Exporter**: Formatted exporting schema to download full titles, employee credentials, departments, delivery status, and timestamps.
+
+---
+
+### 26. Continuous GPS Tracking, Road Snapping & Seed Data Enhancement (June 2026)
+
+**Changed**: Implemented fixed-interval continuous GPS tracking with robust permissions, added enterprise-level road snapping, and enhanced seed data to include RawTrackingPoint records for perfect route visualization.
+
+#### Mobile App — Continuous GPS Tracking:
+- **Files**: `mobile-app/src/services/trackingManager.js`, `mobile-app/App.js`, `mobile-app/app.json`, `mobile-app/app.config.js`
+- **Architecture Overview**:
+  - Removed dynamic interval changes to prevent OS killing the service on Realme/OPPO devices.
+  - Uses fixed 5-second interval for GPS sampling via `Location.startLocationUpdatesAsync`.
+  - Foreground service notification keeps app alive in background.
+- **Permissions Setup**:
+  - Android: All required permissions in `app.json` (ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION, ACCESS_BACKGROUND_LOCATION, FOREGROUND_SERVICE, FOREGROUND_SERVICE_LOCATION, WAKE_LOCK, RECEIVE_BOOT_COMPLETED, ACCESS_NETWORK_STATE, ACCESS_WIFI_STATE, REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, POST_NOTIFICATIONS).
+  - iOS: Required InfoPlist entries for foreground and background location, background modes enabled.
+  - Permission lock screen in App.js ensures both foreground and background permissions are granted before app proceeds.
+- **Background Task**: Defined in App.js, processes GPS points, validates, saves to SQLite, and syncs to backend.
+- **Tracking Manager**: Manages start/stop of tracking, auto-resumes on app restart if active trip exists, checks server for active attendance session on login.
+
+#### Backend — Enterprise Tracking Pipeline:
+- **Files**: `backend/services/enterpriseTrackingService.js`, `backend/services/geoTrackingService.js`, `backend/services/gpsFilterService.js`, `backend/services/roadSnapService.js`, `backend/services/roadValidationService.js`, `backend/models/Tracking.js`
+- **RawTrackingPoint Model**: Stores raw and snapped GPS coordinates, accuracy, speed, heading, battery, tripId, deviceId, timestamp, status, isMock, isOffline, routeStatus, processedTime, provider, road metadata.
+- **TrackingSession Model**: Groups RawTrackingPoint records by attendance session.
+- **TrackingLog Model**: 1-minute aggregated summaries for efficient reporting.
+- **LiveEmployeeStatus Model**: Real-time status tracking with health monitoring.
+- **Road Snapping Service**:
+  - Primary: Google Roads API.
+  - Fallback: OSRM Match Service.
+  - Both generate candidate roads and snapped coordinates.
+- **GPS Filtering & Smoothing**: Kalman filter for coordinate smoothing, outlier detection for GPS glitches, accuracy validation.
+
+#### Seed Data Enhancement:
+- **File**: `backend/scripts/seed_comprehensive.js`
+- Added seeding of RawTrackingPoint records for all employees with attendance records, generating realistic road-aligned GPS trails.
+- Seeded LiveEmployeeStatus for all employees.
+- Seeded TrackingSession records linked to attendance.
+
+#### Mobile App Requirements for Continuous GPS:
+- **Permissions**: User must grant "Allow all the time" location permission on Android, "Always Allow" on iOS.
+- **Notifications**: User must allow notifications for the foreground service to work.
+- **Battery Optimization**: User should exempt the app from battery optimization (requested via REQUEST_IGNORE_BATTERY_OPTIMIZATIONS permission).
+- **Background Refresh**: Enabled on iOS (handled by Expo Location background mode).
 - **Unified Design Theme**: Replaced ad-hoc layout tables with premium styled tailwind components matching the core admin system.
 
 #### 3. Real-time Telemetry Analytics & Mongoose Resolvers:
