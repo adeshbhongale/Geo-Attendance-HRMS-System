@@ -271,11 +271,8 @@ const EmployeeTrackRoute = () => {
 
     const pointsToUse = rawData.length > 0 ? rawData : logData;
 
-    const filteredLogs = [];
-    let lastValidPoint = null;
-
-    pointsToUse.forEach((log) => {
-      const currentPoint = {
+    const filteredLogs = pointsToUse.map((log) => {
+      return {
         lat: log.latitude,
         lng: log.longitude,
         rawLatitude: log.rawLatitude,
@@ -289,23 +286,6 @@ const EmployeeTrackRoute = () => {
         address: log.address,
         isSuspicious: log.isSuspicious || log.status === 'suspicious'
       };
-
-      if (!lastValidPoint) {
-        filteredLogs.push(currentPoint);
-        lastValidPoint = currentPoint;
-      } else {
-        const lat1 = lastValidPoint.snappedLatitude || lastValidPoint.lat;
-        const lng1 = lastValidPoint.snappedLongitude || lastValidPoint.lng;
-        const lat2 = currentPoint.snappedLatitude || currentPoint.lat;
-        const lng2 = currentPoint.snappedLongitude || currentPoint.lng;
-
-        const dist = getDistanceBetween(lat1, lng1, lat2, lng2);
-
-        if (dist < 5) return;
-
-        filteredLogs.push(currentPoint);
-        lastValidPoint = currentPoint;
-      }
     });
 
     return filteredLogs;
@@ -321,7 +301,7 @@ const EmployeeTrackRoute = () => {
       result = geoPoints.map(geoPoint => {
         let closestPoint = null;
         let minDistance = Infinity;
-        
+
         path.forEach(p => {
           const dist = getDistanceBetween(geoPoint.latitude, geoPoint.longitude, p.snappedLatitude || p.lat, p.snappedLongitude || p.lng);
           if (dist < minDistance) {
@@ -329,7 +309,7 @@ const EmployeeTrackRoute = () => {
             closestPoint = p;
           }
         });
-        
+
         if (closestPoint) {
           return {
             lat: geoPoint.latitude,
@@ -346,7 +326,7 @@ const EmployeeTrackRoute = () => {
             isSuspicious: closestPoint.isSuspicious
           };
         }
-        
+
         return {
           lat: geoPoint.latitude,
           lng: geoPoint.longitude,
@@ -569,7 +549,6 @@ const EmployeeTrackRoute = () => {
 
     // 2. Draw Snapped Route (thick indigo line) - Fail-safe snapped route drawing
     const snappedLatLngs = simulationPath
-      .filter(p => p.status !== 'suspicious' && !p.isSuspicious)
       .map(p => [p.lat, p.lng]);
 
     if (showSnapped && snappedLatLngs.length >= 2) {
@@ -627,7 +606,7 @@ const EmployeeTrackRoute = () => {
 
       const endPoint = simulationPath[simulationPath.length - 1];
       const endCoords = [endPoint.lat, endPoint.lng];
-      
+
       // Draw Last Location Marker (Orange) at the end of the route path
       endMarkerRef.current = window.L.marker(endCoords, { icon: orangeIcon })
         .addTo(leafletMap.current)

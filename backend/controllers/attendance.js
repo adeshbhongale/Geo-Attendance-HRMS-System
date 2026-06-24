@@ -558,7 +558,7 @@ exports.trackLocation = async (req, res, next) => {
     attendance.lastTrackingTime = now;
     if (battery) attendance.battery = battery;
 
-    const isDuplicate = attendance.trackingLogs.some(log => 
+    const isDuplicate = attendance.trackingLogs.some(log =>
       new Date(log.time).getTime() === now.getTime()
     );
 
@@ -602,10 +602,10 @@ exports.trackLocation = async (req, res, next) => {
             curr.latitude,
             curr.longitude
           );
-          
+
           const isPointSuspicious = curr.isSuspicious || curr.status === 'suspicious' || curr.status === 'idle';
           const validDist = (dist >= 0.005 && !isPointSuspicious) ? dist : 0;
-          
+
           deduplicatedLogs[i].distanceFromPrevious = parseFloat((validDist * 1000).toFixed(2));
           accumulatedDistance += validDist;
           deduplicatedLogs[i].totalDistanceTillNow = parseFloat(accumulatedDistance.toFixed(6));
@@ -621,11 +621,17 @@ exports.trackLocation = async (req, res, next) => {
     // Also write to RawTrackingPoint (Enterprise tracking history)
     const rawPoint = await RawTrackingPoint.create({
       userId,
+      sessionId: attendance._id,
+      tripId: attendance._id.toString(),
+      deviceId: req.body.deviceId || 'unknown',
       location: { type: 'Point', coordinates: [longitude, latitude] },
+      rawLatitude: latitude,
+      rawLongitude: longitude,
       accuracy,
       speed,
       heading,
       altitude,
+      battery,
       timestamp: now,
       status: pointStatus,
       isMock: req.body.isMocked
@@ -636,12 +642,12 @@ exports.trackLocation = async (req, res, next) => {
     if (!liveStatus) {
       liveStatus = new LiveEmployeeStatus({ userId });
     }
-    
+
     liveStatus.lastLocation = rawPoint.location;
     liveStatus.currentSpeed = speed || 0;
     liveStatus.lastUpdate = now;
     liveStatus.totalDistanceToday = attendance.totalDistance;
-    
+
     // Detect movement state based on speed
     const speedMs = speed || 0;
     const speedKmh = speedMs * 3.6;
@@ -651,7 +657,7 @@ exports.trackLocation = async (req, res, next) => {
     else if (speedKmh < 25) moveState = 'Bike';
     else if (speedKmh < 100) moveState = 'Vehicle';
     else moveState = 'Suspicious';
-    
+
     liveStatus.movementState = moveState;
     liveStatus.currentStatus = 'online';
     if (battery) liveStatus.batteryLevel = battery;
