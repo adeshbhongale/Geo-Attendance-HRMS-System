@@ -184,28 +184,38 @@ const syncViaREST = async (userId, batch) => {
  * Force an immediate sync (called on demand, e.g., before punch-out)
  */
 export const forceSyncAll = async () => {
-  let totalSynced = 0;
-  let hasMore = true;
+  const startCount = await getPendingCount();
+  let remaining = startCount;
+  let consecutiveNoProgress = 0;
+  let loopCount = 0;
 
-  while (hasMore) {
-    const count = await getPendingCount();
-    if (count === 0) {
-      hasMore = false;
-      break;
+  while (remaining > 0 && loopCount < 12) {
+    await syncPendingPoints();
+    await new Promise(resolve => setTimeout(resolve, 1200));
+
+    const nextRemaining = await getPendingCount();
+    if (nextRemaining === remaining) {
+      consecutiveNoProgress++;
+    } else {
+      consecutiveNoProgress = 0;
     }
 
-    await syncPendingPoints();
-    totalSynced += Math.min(count, MAX_BATCH_SIZE);
+    remaining = nextRemaining;
+    loopCount++;
 
-    // Safety limit — don't loop forever
-    if (totalSynced > 15000) {
-      console.warn('[SyncService] Force sync safety limit reached');
+    if (consecutiveNoProgress >= 3) {
+      console.warn('[SyncService] Force sync stopping after repeated no-progress cycles');
       break;
     }
   }
 
-  console.log(`[SyncService] Force sync complete: ${totalSynced} points processed`);
-  return totalSynced;
+  const synced = startCount - remaining;
+  if (remaining > 0) {
+    console.warn(`[SyncService] Force sync completed with ${remaining} remaining points`);
+  }
+
+  console.log(`[SyncService] Force sync complete: ${synced} points processed`);
+  return synced;
 };
 
 /**

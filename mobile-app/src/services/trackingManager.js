@@ -19,6 +19,42 @@ const LOCATION_TRACKING_TASK = 'background-location-tracking';
 const GPS_INTERVAL_MS = 5000;
 
 let isManagerActive = false;
+let netInfoUnsubscribe = null;
+
+const setupNetInfoListener = () => {
+  if (netInfoUnsubscribe) return;
+
+  try {
+    netInfoUnsubscribe = NetInfo.addEventListener(async (state) => {
+      if (!state.isConnected) return;
+
+      try {
+        const activeTripId = await AsyncStorage.getItem('activeTripId');
+        if (!activeTripId) return;
+
+        const isBgTaskRunning = await Location.hasStartedLocationUpdatesAsync(LOCATION_TRACKING_TASK);
+        if (isBgTaskRunning && isManagerActive) return;
+
+        console.log('[TrackingManager] Network reconnected — recovering tracking for trip:', activeTripId);
+        await restartTracking();
+      } catch (e) {
+        console.warn('[TrackingManager] NetInfo handler error:', e.message);
+      }
+    });
+  } catch (netErr) {
+    console.warn('[TrackingManager] Failed to subscribe NetInfo:', netErr.message);
+  }
+};
+
+const removeNetInfoListener = () => {
+  if (!netInfoUnsubscribe) return;
+  try {
+    netInfoUnsubscribe();
+  } catch (err) {
+    console.warn('[TrackingManager] Failed to remove NetInfo listener:', err.message);
+  }
+  netInfoUnsubscribe = null;
+};
 
 /**
  * Global Tracking Manager Service
@@ -32,6 +68,8 @@ let isManagerActive = false;
  */
 
 export const initializeTracking = async () => {
+  setupNetInfoListener();
+
   try {
     // Ensure socket room is joined immediately on startup or login
     const userId = await AsyncStorage.getItem('userId');
@@ -68,29 +106,10 @@ export const initializeTracking = async () => {
   } catch (err) {
     console.error('[TrackingManager] Initialization failed:', err);
   }
-  // Listen for network reconnection and try to restart tracking
-  try {
-    NetInfo.addEventListener(async (state) => {
-      if (state.isConnected) {
-        try {
-          const activeTripId = await AsyncStorage.getItem('activeTripId');
-          if (activeTripId) {
-            console.log('[TrackingManager] Network reconnected — ensuring tracking is running for trip:', activeTripId);
-            await restartTracking();
-          }
-        } catch (e) {
-          console.warn('[TrackingManager] NetInfo handler error:', e.message);
-        }
-      }
-    });
-  } catch (netErr) {
-    console.warn('[TrackingManager] Failed to subscribe NetInfo:', netErr.message);
-  }
 };
 
 export const startTrackingSession = async (tripId) => {
   if (isManagerActive) return;
-  isManagerActive = true;
 
   try {
     // 1. Cache the trip ID persistently
@@ -100,21 +119,25 @@ export const startTrackingSession = async (tripId) => {
     const { status: fg } = await Location.requestForegroundPermissionsAsync();
     const { status: bg } = await Location.requestBackgroundPermissionsAsync();
 
-    if (fg === 'granted') {
-      // 3. Start foreground tracking (sets trip state + first point, NO watcher)
-      await startFgTracking(tripId);
-      // 4. Start synchronization background loop
-      startSyncLoop();
+    if (fg !== 'granted' || bg !== 'granted') {
+      console.warn('[TrackingManager] Cannot start tracking: location permissions missing', { fg, bg });
+      return false;
     }
 
-    if (fg === 'granted' && bg === 'granted') {
-      // 5. Start the SINGLE GPS collection system: startLocationUpdatesAsync
-      // This works in BOTH foreground and background via foreground service notification.
-      // Uses a FIXED interval to prevent Realme/OPPO from killing the service.
+    // 3. Start foreground tracking (sets trip state + first point, NO watcher)
+    await startFgTracking(tripId);
+    // 4. Start synchronization background loop
+    startSyncLoop();
+
+    // 5. Start the SINGLE GPS collection system: startLocationUpdatesAsync
+    // This works in BOTH foreground and background via foreground service notification.
+    // Uses a FIXED interval to prevent Realme/OPPO from killing the service.
+    const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TRACKING_TASK);
+    if (!hasStarted) {
       await Location.startLocationUpdatesAsync(LOCATION_TRACKING_TASK, {
         accuracy: Location.Accuracy.High,
         timeInterval: GPS_INTERVAL_MS,
-        distanceInterval: 3,
+        distanceInterval: 0,
         foregroundService: {
           notificationTitle: "Geo-Track HRMS",
           notificationBody: "Tracking active until punch out",
@@ -125,7 +148,12 @@ export const startTrackingSession = async (tripId) => {
         showsBackgroundLocationIndicator: true,
       });
       console.log(`[TrackingManager] Background location updates started (fixed ${GPS_INTERVAL_MS}ms interval)`);
+    } else {
+      console.log('[TrackingManager] Background location updates already running.');
     }
+
+    // Mark the manager active only after background tracking starts successfully
+    isManagerActive = true;
 
     // Start tracking health monitoring services (heartbeat + local watchdog)
     const userId = await AsyncStorage.getItem('userId');
@@ -135,9 +163,11 @@ export const startTrackingSession = async (tripId) => {
     }
 
     console.log('[TrackingManager] Tracking session started successfully for trip:', tripId);
+    return true;
   } catch (err) {
     console.error('[TrackingManager] Failed to start tracking session:', err);
     isManagerActive = false;
+    return false;
   }
 };
 
@@ -161,6 +191,7 @@ export const stopTrackingSession = async () => {
     // Stop tracking health monitoring services
     stopHeartbeat();
     stopSelfHealingWatchdog();
+    removeNetInfoListener();
 
     console.log('[TrackingManager] Tracking session stopped');
   } catch (err) {
@@ -182,9 +213,42 @@ export const clearTrackingSession = async () => {
 export const restartTracking = async () => {
   console.log('[TrackingManager] restartTracking called');
   const activeTripId = await AsyncStorage.getItem('activeTripId');
-  if (activeTripId) {
-    await stopTrackingSession();
+  if (!activeTripId) return false;
+
+  try {
+    const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TRACKING_TASK);
+    if (hasStarted) {
+      await Location.stopLocationUpdatesAsync(LOCATION_TRACKING_TASK);
+    }
+
     await new Promise(resolve => setTimeout(resolve, 500));
-    await startTrackingSession(activeTripId);
+
+    await Location.startLocationUpdatesAsync(LOCATION_TRACKING_TASK, {
+      accuracy: Location.Accuracy.High,
+      timeInterval: GPS_INTERVAL_MS,
+      distanceInterval: 0,
+      foregroundService: {
+        notificationTitle: "Geo-Track HRMS",
+        notificationBody: "Tracking active until punch out",
+        notificationColor: "#4f46e5"
+      },
+      activityType: Location.ActivityType.AutomotiveNavigation,
+      showsBackgroundLocationIndicator: true,
+    });
+
+    isManagerActive = true;
+
+    const userId = await AsyncStorage.getItem('userId');
+    if (userId) {
+      startHeartbeat(userId, activeTripId);
+      startSelfHealingWatchdog(userId);
+    }
+
+    console.log('[TrackingManager] GPS tracking restarted successfully');
+    return true;
+  } catch (err) {
+    console.error('[TrackingManager] restartTracking failed:', err);
+    isManagerActive = false;
+    return false;
   }
 };

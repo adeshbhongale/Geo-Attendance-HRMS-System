@@ -23,7 +23,7 @@ export const initDatabase = async () => {
   dbPromise = (async () => {
     try {
       db = await SQLite.openDatabaseAsync(DB_NAME);
-      
+
       // Create tracking_points table
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS tracking_points (
@@ -85,7 +85,7 @@ export const initDatabase = async () => {
 export const insertTrackingPoint = async (point) => {
   try {
     const database = await initDatabase();
-    
+
     const result = await database.runAsync(
       `INSERT INTO tracking_points 
         (tripId, deviceId, latitude, longitude, speed, heading, accuracy, altitude, battery, timestamp, syncStatus, roadStatus, isOffline, isMock)
@@ -121,7 +121,7 @@ export const insertTrackingPoint = async (point) => {
 export const getPendingPoints = async (limit = 100) => {
   try {
     const database = await initDatabase();
-    
+
     const rows = await database.getAllAsync(
       `SELECT * FROM tracking_points 
        WHERE syncStatus = 'pending' OR syncStatus = 'failed'
@@ -145,7 +145,7 @@ export const markPointsSynced = async (ids) => {
   try {
     if (!ids || ids.length === 0) return;
     const database = await initDatabase();
-    
+
     const placeholders = ids.map(() => '?').join(',');
     await database.runAsync(
       `UPDATE tracking_points SET syncStatus = 'synced' WHERE id IN (${placeholders})`,
@@ -164,7 +164,7 @@ export const markPointsFailed = async (ids) => {
   try {
     if (!ids || ids.length === 0) return;
     const database = await initDatabase();
-    
+
     const placeholders = ids.map(() => '?').join(',');
     await database.runAsync(
       `UPDATE tracking_points SET syncStatus = 'failed', retryCount = retryCount + 1 WHERE id IN (${placeholders})`,
@@ -183,7 +183,7 @@ export const cleanupSyncedPoints = async (hours = 24) => {
   try {
     const database = await initDatabase();
     const cutoffMs = Date.now() - (hours * 60 * 60 * 1000);
-    
+
     await database.runAsync(
       `DELETE FROM tracking_points WHERE syncStatus = 'synced' AND timestamp < ?`,
       [cutoffMs]
@@ -201,7 +201,7 @@ export const getPendingCount = async () => {
   try {
     const database = await initDatabase();
     const result = await database.getFirstAsync(
-      `SELECT COUNT(*) as count FROM tracking_points WHERE syncStatus = 'pending'`
+      `SELECT COUNT(*) as count FROM tracking_points WHERE syncStatus = 'pending' OR syncStatus = 'failed'`
     );
     return result?.count || 0;
   } catch (err) {

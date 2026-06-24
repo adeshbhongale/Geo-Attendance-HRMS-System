@@ -1,11 +1,10 @@
 import * as Location from 'expo-location';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import socket from '../socket';
-import { 
-  getLastGpsTimestamp, 
-  getLastGpsPoint, 
-  isTrackingActive, 
-  restartGpsWatcher 
+import {
+  getLastGpsPoint,
+  getLastGpsTimestamp,
+  isTrackingActive,
+  restartGpsWatcher
 } from './tracking.service';
 
 let watchdogInterval = null;
@@ -59,26 +58,29 @@ const runSelfHealingCheck = async () => {
     if (!isBgTaskRunning) {
       console.warn('[SelfHealingWatchdog] Background tracking task is not running! Restarting background service...');
       try {
-        const intervalStr = await AsyncStorage.getItem('currentBgInterval') || '5000';
-        const interval = parseInt(intervalStr);
-        await Location.startLocationUpdatesAsync(LOCATION_TRACKING_TASK, {
-          accuracy: Location.Accuracy.High,
-          timeInterval: interval,
-          distanceInterval: 1,
-          foregroundService: {
-            notificationTitle: "Geo-Track HRMS",
-            notificationBody: "Tracking active until punch out",
-            notificationColor: "#4f46e5"
-          }
-        });
-        
-        socket.emit('trackingHealthUpdate', {
-          userId: currentUserId,
-          trackingHealth: 'service_restarting',
-          trackingHealthReason: 'Background task was dead. Watchdog auto-restarted it.'
-        });
+        const { status: bg } = await Location.getBackgroundPermissionsAsync();
+        if (bg !== 'granted') {
+          console.warn('[SelfHealingWatchdog] Background permission revoked. Cannot restart background location task.');
+          socket.emit('trackingHealthUpdate', {
+            userId: currentUserId,
+            trackingHealth: 'permission_lost',
+            trackingHealthReason: 'Background location permission was revoked.'
+          });
+          return;
+        }
+
+        const restarted = await restartGpsWatcher();
+        if (restarted) {
+          socket.emit('trackingHealthUpdate', {
+            userId: currentUserId,
+            trackingHealth: 'service_restarting',
+            trackingHealthReason: 'Background task was dead. Watchdog auto-restarted it.'
+          });
+        } else {
+          console.warn('[SelfHealingWatchdog] restartGpsWatcher failed to recover background task');
+        }
       } catch (bgErr) {
-        console.error('[SelfHealingWatchdog] Failed to restart background task:', bgErr.message);
+        console.error('[SelfHealingWatchdog] Failed to restart background task via restartGpsWatcher:', bgErr.message);
       }
     }
 
@@ -101,7 +103,7 @@ const runSelfHealingCheck = async () => {
       const latFixed = parseFloat(lastPoint.latitude.toFixed(6));
       const lngFixed = parseFloat(lastPoint.longitude.toFixed(6));
       const ptKey = `${latFixed},${lngFixed}`;
-      
+
       // Add if new point or empty
       if (recentPoints.length === 0 || recentPoints[recentPoints.length - 1].timestamp !== lastPoint.timestamp) {
         recentPoints.push({
@@ -122,9 +124,9 @@ const runSelfHealingCheck = async () => {
       const timeElapsed = lastPoint.timestamp - firstPoint.timestamp;
 
       if (allIdentical && timeElapsed >= STUCK_GPS_TIMEOUT_MS) {
-        console.warn(`[SelfHealingWatchdog] Stuck GPS detected! Lat/Lng unchanged for ${Math.round(timeElapsed/60000)} minutes.`);
+        console.warn(`[SelfHealingWatchdog] Stuck GPS detected! Lat/Lng unchanged for ${Math.round(timeElapsed / 60000)} minutes.`);
         recentPoints = []; // reset queue
-        
+
         socket.emit('trackingHealthUpdate', {
           userId: currentUserId,
           trackingHealth: 'recovering',
@@ -140,16 +142,16 @@ const runSelfHealingCheck = async () => {
     // B. Check for GPS Freshness (No coordinates collected for > 60s)
     const timeSinceLastGps = lastGpsTime > 0 ? (now - lastGpsTime) : (now - lastGpsResetTimestamp);
     if (timeSinceLastGps > 60000) {
-      console.warn(`[SelfHealingWatchdog] GPS is stale. No new points for ${Math.round(timeSinceLastGps/1000)} seconds.`);
-      
+      console.warn(`[SelfHealingWatchdog] GPS is stale. No new points for ${Math.round(timeSinceLastGps / 1000)} seconds.`);
+
       if (localRestartAttempts < 3) {
         localRestartAttempts++;
         console.log(`[SelfHealingWatchdog] Attempting local GPS watcher restart #${localRestartAttempts}...`);
-        
+
         socket.emit('trackingHealthUpdate', {
           userId: currentUserId,
           trackingHealth: 'recovering',
-          trackingHealthReason: `Local GPS stale for ${Math.round(timeSinceLastGps/1000)}s. Restart attempt #${localRestartAttempts}`
+          trackingHealthReason: `Local GPS stale for ${Math.round(timeSinceLastGps / 1000)}s. Restart attempt #${localRestartAttempts}`
         });
 
         await restartGpsWatcher();

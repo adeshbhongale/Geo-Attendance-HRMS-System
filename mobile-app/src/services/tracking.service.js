@@ -25,7 +25,7 @@ let savedOnPointCollected = null;
 
 // Validation thresholds
 const ACCURACY_THRESHOLD = 100; // meters — points above this are marked 'weak' but NOT discarded
-const MIN_MOVEMENT_METERS = 3;  // ignore stationary drift
+const MIN_MOVEMENT_METERS = 0;  // ignore stationary drift
 const MAX_SPEED_KMH = 150;     // reject teleportation jumps
 
 let lastPoint = null;
