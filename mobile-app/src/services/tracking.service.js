@@ -1,9 +1,9 @@
-import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import * as Battery from 'expo-battery';
+import * as Location from 'expo-location';
 import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { insertTrackingPoint, initDatabase } from './database.service';
+import { initDatabase, insertTrackingPoint } from './database.service';
 import { syncPendingPoints } from './sync.service';
 
 /**
@@ -71,8 +71,8 @@ const haversineDistance = (lat1, lon1, lat2, lon2) => {
  */
 const validatePoint = (point) => {
   // 1. Null coordinate check
-  if (!point.latitude || !point.longitude || 
-      isNaN(point.latitude) || isNaN(point.longitude)) {
+  if (!point.latitude || !point.longitude ||
+    isNaN(point.latitude) || isNaN(point.longitude)) {
     return { valid: false, status: 'rejected', reason: 'Null or invalid coordinates' };
   }
 
@@ -100,7 +100,7 @@ const validatePoint = (point) => {
  */
 export const collectPoint = async (loc = null) => {
   if (isCollecting) return null;
-  
+
   try {
     isCollecting = true;
 
@@ -257,7 +257,7 @@ export const startTracking = async (tripId, onPointCollected = null) => {
 export const stopTracking = async () => {
   try {
     console.log(`[LocationService] Tracking stopped for trip: ${currentTripId}`);
-    
+
     currentTripId = null;
     lastPoint = null;
     savedOnPointCollected = null;
@@ -322,5 +322,41 @@ export const forceCollectPoint = async () => {
   } catch (e) {
     console.warn('[LocationService] forceCollectPoint failed:', e.message);
     return false;
+  }
+};
+
+/**
+ * Explicitly set the lastPoint (used by background task to update last known GPS time)
+ */
+export const setLastPoint = (point) => {
+  lastPoint = point;
+};
+
+/**
+ * Restart GPS watcher (used by heartbeat and self-healing watchdog)
+ * For this architecture, it restarts the location updates via trackingManager
+ */
+export const restartGpsWatcher = async () => {
+  console.log('[LocationService] restartGpsWatcher called');
+  try {
+    // Import trackingManager dynamically to avoid circular dependencies
+    const { restartTracking } = require('./trackingManager');
+    if (restartTracking) {
+      await restartTracking();
+    } else {
+      // Fallback to forceCollectPoint if restartTracking doesn't exist
+      await forceCollectPoint();
+    }
+    return true;
+  } catch (e) {
+    console.warn('[LocationService] restartGpsWatcher failed:', e.message);
+    // Fallback to forceCollectPoint
+    try {
+      await forceCollectPoint();
+      return true;
+    } catch (fallbackErr) {
+      console.error('[LocationService] restartGpsWatcher fallback also failed:', fallbackErr.message);
+      return false;
+    }
   }
 };

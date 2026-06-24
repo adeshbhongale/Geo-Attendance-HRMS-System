@@ -1405,9 +1405,8 @@ exports.getEmployeeTrackDetails = async (req, res) => {
     }
     const provider = rawPoints.find(p => p.provider && p.provider !== 'none')?.provider || 'none';
 
-    // Apply in-memory outlier filtering to resolve highway deviations
-    const geoService = require('../services/geoTrackingService');
-    const cleanedPoints = geoService.filterOutliers(rawPoints);
+    // No filtering: use all raw points as per user requirement
+    const cleanedPoints = rawPoints;
 
     const rawPath = cleanedPoints.map(p => ({
       latitude: p.snappedLatitude || p.location.coordinates[1],
@@ -1641,9 +1640,8 @@ exports.getEmployeeTrackDetailsMe = async (req, res) => {
     }
     const provider = rawPoints.find(p => p.provider && p.provider !== 'none')?.provider || 'none';
 
-    // Apply in-memory outlier filtering to resolve highway deviations
-    const geoService = require('../services/geoTrackingService');
-    const cleanedPoints = geoService.filterOutliers(rawPoints);
+    // No filtering: use all raw points as per user requirement
+    const cleanedPoints = rawPoints;
 
     const rawPath = cleanedPoints.map(p => ({
       latitude: p.snappedLatitude || p.location.coordinates[1],
@@ -1791,9 +1789,8 @@ exports.getTripDetails = async (req, res) => {
     const firstPoint = rawPoints[0];
     const lastPoint = rawPoints[rawPoints.length - 1];
 
-    // Apply in-memory outlier filtering to resolve highway deviations
-    const geoService = require('../services/geoTrackingService');
-    const cleanedPoints = geoService.filterOutliers(rawPoints);
+    // No filtering: use all raw points as per user requirement
+    const cleanedPoints = rawPoints;
 
     // Build routes
     const rawRoute = cleanedPoints.map(p => ({

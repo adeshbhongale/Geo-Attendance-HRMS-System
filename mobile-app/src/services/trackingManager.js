@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
 import * as Location from 'expo-location';
-import { startTracking as startFgTracking, stopTracking as stopFgTracking } from './tracking.service';
-import { startSyncLoop, stopSyncLoop, forceSyncAll } from './sync.service';
 import { startHeartbeat, stopHeartbeat } from './heartbeat.service';
 import { startSelfHealingWatchdog, stopSelfHealingWatchdog } from './selfHealingWatchdog';
+import { forceSyncAll, startSyncLoop, stopSyncLoop } from './sync.service';
+import { startTracking as startFgTracking, stopTracking as stopFgTracking } from './tracking.service';
 
 const LOCATION_TRACKING_TASK = 'background-location-tracking';
 
@@ -66,6 +67,24 @@ export const initializeTracking = async () => {
     }
   } catch (err) {
     console.error('[TrackingManager] Initialization failed:', err);
+  }
+  // Listen for network reconnection and try to restart tracking
+  try {
+    NetInfo.addEventListener(async (state) => {
+      if (state.isConnected) {
+        try {
+          const activeTripId = await AsyncStorage.getItem('activeTripId');
+          if (activeTripId) {
+            console.log('[TrackingManager] Network reconnected — ensuring tracking is running for trip:', activeTripId);
+            await restartTracking();
+          }
+        } catch (e) {
+          console.warn('[TrackingManager] NetInfo handler error:', e.message);
+        }
+      }
+    });
+  } catch (netErr) {
+    console.warn('[TrackingManager] Failed to subscribe NetInfo:', netErr.message);
   }
 };
 
@@ -155,4 +174,17 @@ export const clearTrackingSession = async () => {
   await stopTrackingSession();
   await AsyncStorage.removeItem('activeTripId');
   console.log('[TrackingManager] Active trip ID cleared persistently');
+};
+
+/**
+ * Restart tracking session (used for recovery)
+ */
+export const restartTracking = async () => {
+  console.log('[TrackingManager] restartTracking called');
+  const activeTripId = await AsyncStorage.getItem('activeTripId');
+  if (activeTripId) {
+    await stopTrackingSession();
+    await new Promise(resolve => setTimeout(resolve, 500));
+    await startTrackingSession(activeTripId);
+  }
 };

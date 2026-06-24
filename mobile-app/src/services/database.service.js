@@ -124,7 +124,7 @@ export const getPendingPoints = async (limit = 100) => {
     
     const rows = await database.getAllAsync(
       `SELECT * FROM tracking_points 
-       WHERE syncStatus = 'pending' OR (syncStatus = 'failed' AND retryCount < 5)
+       WHERE syncStatus = 'pending' OR syncStatus = 'failed'
        ORDER BY timestamp ASC 
        LIMIT ?`,
       [limit]

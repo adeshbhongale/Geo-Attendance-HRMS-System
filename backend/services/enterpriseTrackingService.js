@@ -517,22 +517,48 @@ async function reverseGeocodeAsync(userId, points, lastPoint = null, socketIo = 
     if (pointsToProcess.length === 0) return;
 
     // Filter points in the batch to geocode:
-    // Always include targetLastPoint.
-    // Also include points that represent a different minute.
+    // - Always include targetLastPoint
+    // - Only include points that are > 150 meters from last geocoded point (save costs!)
+    // - Also include points that represent a different minute
     const pointsToGeocode = [];
     const seenMinutes = new Set();
+    let lastGeocodedPoint = null;
+
+    // Get last geocoded point from LiveEmployeeStatus or RawTrackingPoint
+    const liveStatus = await LiveEmployeeStatus.findOne({ userId });
+    if (liveStatus?.lastGeocodedLocation?.coordinates) {
+      lastGeocodedPoint = {
+        latitude: liveStatus.lastGeocodedLocation.coordinates[1],
+        longitude: liveStatus.lastGeocodedLocation.coordinates[0]
+      };
+    }
 
     // Loop from last to first so we prioritize geocoding the latest points first
     for (let i = pointsToProcess.length - 1; i >= 0; i--) {
       const p = pointsToProcess[i];
       const time = new Date(p.timestamp || p.processedTime);
       const minuteKey = `${time.getFullYear()}-${time.getMonth()}-${time.getDate()} ${time.getHours()}:${time.getMinutes()}`;
+      const currentLat = p.snappedLatitude || p.rawLatitude || p.location.coordinates[1];
+      const currentLng = p.snappedLongitude || p.rawLongitude || p.location.coordinates[0];
 
       const isLast = (p.timestamp && targetLastPoint && new Date(p.timestamp).getTime() === new Date(targetLastPoint.timestamp).getTime());
+      
+      // Calculate distance from last geocoded point (meters)
+      let distanceFromLastGeocoded = Infinity;
+      if (lastGeocodedPoint) {
+        const geoService = require('./geoTrackingService');
+        distanceFromLastGeocoded = geoService.calculateDistance(
+          lastGeocodedPoint.latitude, lastGeocodedPoint.longitude,
+          currentLat, currentLng
+        ) * 1000; // convert km to meters
+      }
 
-      if (isLast || !seenMinutes.has(minuteKey)) {
+      // Only geocode if it's the last point OR new minute AND more than 150m from last geocoded point
+      if (isLast || (!seenMinutes.has(minuteKey) && distanceFromLastGeocoded > 150)) {
         pointsToGeocode.push(p);
         seenMinutes.add(minuteKey);
+        // Update last geocoded point so we don't geocode nearby points
+        lastGeocodedPoint = { latitude: currentLat, longitude: currentLng };
       }
     }
 

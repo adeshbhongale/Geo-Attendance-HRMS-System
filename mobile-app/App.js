@@ -44,6 +44,7 @@ TaskManager.defineTask(LOCATION_TRACKING_TASK, async ({ data, error }) => {
       try {
         const { insertTrackingPoint, initDatabase } = require('./src/services/database.service');
         const { syncPendingPoints } = require('./src/services/sync.service');
+        const { setLastPoint } = require('./src/services/tracking.service');
         
         await initDatabase();
 
@@ -76,6 +77,14 @@ TaskManager.defineTask(LOCATION_TRACKING_TASK, async ({ data, error }) => {
             battery: batteryLevel,
             isOffline: accuracy > 50,
             isMock: mocked || false
+          });
+
+          // Update lastPoint in tracking.service.js so heartbeat knows GPS is active
+          setLastPoint({
+            latitude,
+            longitude,
+            timestamp,
+            tripId: activeTripId
           });
         }
 
