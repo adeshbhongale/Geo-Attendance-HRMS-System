@@ -15,7 +15,7 @@ const NotificationSchema = new mongoose.Schema({
     required: [true, 'Please specify the notification type'],
     enum: [
       'general notification',
-      'emergancy notification',
+      'emergency notification',
       'hr announcement',
       'attendance notification',
       'tracing notification',

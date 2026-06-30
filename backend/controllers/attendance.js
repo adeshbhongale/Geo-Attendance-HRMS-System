@@ -1054,7 +1054,7 @@ exports.gpsStatusUpdate = async (req, res, next) => {
       await notificationService.createAndSendNotification({
         title: 'Location Service Disabled 🚨',
         description: `Employee ${user.name} (${user.email}) has turned off their device location service or revoked permissions.`,
-        type: 'emergancy notification',
+        type: 'emergency notification',
         frequency: 'Instant',
         targetType: 'Role-based Employees',
         targetRole: 'admin',

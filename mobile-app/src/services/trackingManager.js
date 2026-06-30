@@ -216,12 +216,16 @@ export const restartTracking = async () => {
   if (!activeTripId) return false;
 
   try {
-    const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TRACKING_TASK);
-    if (hasStarted) {
+    // FIX #28: Replace arbitrary 500ms timeout with active verification check loop
+    let isRunning = await Location.hasStartedLocationUpdatesAsync(LOCATION_TRACKING_TASK);
+    if (isRunning) {
       await Location.stopLocationUpdatesAsync(LOCATION_TRACKING_TASK);
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        isRunning = await Location.hasStartedLocationUpdatesAsync(LOCATION_TRACKING_TASK);
+        if (!isRunning) break;
+        await new Promise(resolve => setTimeout(resolve, attempt * 150));
+      }
     }
-
-    await new Promise(resolve => setTimeout(resolve, 500));
 
     await Location.startLocationUpdatesAsync(LOCATION_TRACKING_TASK, {
       accuracy: Location.Accuracy.High,

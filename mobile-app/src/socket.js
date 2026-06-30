@@ -8,12 +8,29 @@ const cleanApiUrl = rawApiUrl.trim().replace(/^["']|["']$/g, '').replace(/\/+$/,
 const SOCKET_URL = cleanApiUrl.replace('/api', '');
 
 const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
+
+/**
+ * Create socket with JWT authentication (#11 fix)
+ * Token is sent in socket.handshake.auth for server-side verification.
+ * This prevents fake/wrong userId attacks.
+ */
+let authToken = null;
+
 const socket = io(SOCKET_URL, {
   autoConnect: !isNode,
   reconnection: true,
   reconnectionAttempts: Infinity,
   reconnectionDelay: 1000,
   transports: ['websocket'], // Force WebSocket for speed & connection stability
+  auth: (cb) => {
+    // Dynamic auth: fetch token from AsyncStorage on each connection attempt
+    AsyncStorage.getItem('token')
+      .then(token => {
+        authToken = token;
+        cb({ token: token || '' });
+      })
+      .catch(() => cb({ token: '' }));
+  }
 });
 
 // Sync offline queue and rejoin room upon connection/reconnection

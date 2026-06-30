@@ -171,11 +171,14 @@ exports.smoothPoints = (lastPoint, points, processNoise = 0.0000001) => {
 
 /**
  * Filter out 1-2 outlier GPS points (spikes/glitches) from a sequence of points.
+ * @deprecated This is a no-op. Use gpsFilterService.classifyBatch() instead,
+ * which classifies points as valid/weak/suspicious/idle without deleting them.
  * @param {Array} points - Array of points with latitude/longitude
- * @returns {Array} Cleaned array of points
+ * @returns {Array} Returns all points unchanged (no-op)
  */
 exports.filterOutliers = (points) => {
   // Return ALL points, no filtering!
+  // Real classification happens in gpsFilterService.classifyBatch()
   return points;
 };
 

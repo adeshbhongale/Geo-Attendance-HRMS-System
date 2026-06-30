@@ -2071,6 +2071,34 @@ Geo-Attendance-HRMS-System/
 
 ---
 
-**Last Updated**: June 26, 2026
-**Version**: 3.9.0
-**Status**: Production Hardened, Connection Resilient, Duplicate Login Blocked, Month Dropdown Modal Integrated, Base-60 Hour Format Active, Leave Dashboard Availed Breakdown Configured, Filters Page Reset Active, Global Stats Restored, Timezone-Robust Date Range Filtering Operational, Dynamic Mobile App Download Links Editable, Delete Confirmation Active, Customer Visit System Overhauled, One-Visit-At-A-Time Enforced, GPS Location Confirmation Flow Active, Executed On Column Active, Geofence Mapping Toggle Active, Scheduling Employee dropdown Name-wise Refactored, Attendance Screen Back to Home Nav Active, Selfie verification box hidden initially, Kalman Smoothing Active, Offline Tracking Queue Active, Tracking Logs Deduplicated and Chronologically Sorted, Distance Calculations Recalculated Sequentially, SQLite WebAssembly Build Error Resolved, Background Task Metadata Synced, Real-time Telemetry Merged, Premium Replay Playback Animation Integrated, Dual-path Map Rendering Active, Geofence Circle Overlays Display Active, Geofence Multi-Alerts Active, Dynamic Address Resolution & Coordinate Fallbacks Integrated, Telemetry Monitor Hardened, 2-Lane Road U-Turn Snapping Fix Active, GPS Gap Recovery Mode Active, Snapped Coordinate Fallbacks Active, Fail-safe Route Line Rendering Active, 7-Stage Tracking Pipeline Active, Jitter-Resistant Road Consensus Active, Highway Flyover Snapping Penalty Active, Offline Route Bulk Refinement Complete, Mobile Permissions Enforced, Raw GPS Switch Active, GPS Classification System Active, Classify-Don't-Delete Pipeline Active, Zero Build Errors.
+### 51. Comprehensive Seed Fixes, Expo Go Launch Support, and GPS Snapping Jitter Restraints (June 30, 2026)
+
+**Changed**: Resolved all seeding script crashes, integrated Expo Go deep-linking configurations, added dual-protocol Socket.IO transport fallbacks, and optimized road snapping to prevent location lockouts and side-road drift line drawings.
+
+#### 1. Seeding Data Engine Repair
+- **File**: [seed_comprehensive.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/scripts/seed_comprehensive.js)
+- **Pre-assigned Attendance ObjectIds**: Pre-allocated unique `_id` values using `new mongoose.Types.ObjectId()` for all generated attendance records (Present, Late, Half Day, and Absent) before DB insertion. This resolves downstream relationship crashes where `att._id.toString()` evaluated as undefined.
+- **NaN Speed Calculation Guard**: Added default value fallbacks for undefined speeds during intermediate raw point interpolation, preventing `NaN` speed values from triggering database schema validation rejects.
+- **Notification Type Alignment**: Corrected the template type `'emergancy notification'` to `'emergency notification'` to align with the database model schema validation enum constraints.
+
+#### 2. Expo Go Deep Linking & Launch Configurations
+- **File**: [app.json](file:///e:/Downloads/Geo-Attendance-HRMS-System/mobile-app/app.json)
+- **Custom URI Scheme**: Added `"scheme": "trackflow"` under the `"expo"` block to register deep linking schemes and resolve Expo CLI startup warnings for native Android builds.
+- **File**: [package.json](file:///e:/Downloads/Geo-Attendance-HRMS-System/mobile-app/package.json)
+- **Expo Go Launch Scripts**: Added `dev:lan` (`expo start -c --go --lan`) and `dev:tunnel` (`expo start -c --go --tunnel`) commands. This allows users to start the bundler in Expo Go mode directly and bypass default development client settings, resolving phone QR scanning redirect failures.
+
+#### 3. Dual-Protocol Socket.IO Transports
+- **Files**: [server.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/server.js), [socket.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/admin-panel/src/socket.js)
+- **Transport Handshake Fallbacks**: Reconfigured backend Socket.IO transports to accept both `polling` and `websocket` values. Updated the admin panel client to explicitly allow both transports. This resolves `400 (Bad Request)` handshake errors on admin dashboards while maintaining fast mobile websocket channels.
+
+#### 4. GPS Snapping Raw Fallback & Jitter Restraints
+- **File**: [roadValidationService.js](file:///e:/Downloads/Geo-Attendance-HRMS-System/backend/services/roadValidationService.js)
+- **Raw Location Fallback**: Implemented an explicit fallback block to use raw coordinates if the snapping candidate list is empty (`bestCandidate === null`). This prevents the snapping engine from locking the user's coordinates to their initial location (the office) when snapping services are offline or not matched.
+- **Stationary Jitter Suppression**: Added a `3 km/h` speed threshold gate in the consensus evaluation. Road switches are now blocked when the user is stationary or moving at slow walking speeds, eliminating random "zigzag" line drawings to adjacent side streets caused by indoor office GPS drift.
+
+---
+
+**Last Updated**: June 30, 2026
+**Version**: 4.0.0
+**Status**: Production Hardened, Connection Resilient, Duplicate Login Blocked, Month Dropdown Modal Integrated, Base-60 Hour Format Active, Leave Dashboard Availed Breakdown Configured, Filters Page Reset Active, Global Stats Restored, Timezone-Robust Date Range Filtering Operational, Dynamic Mobile App Download Links Editable, Delete Confirmation Active, Customer Visit System Overhauled, One-Visit-At-A-Time Enforced, GPS Location Confirmation Flow Active, Executed On Column Active, Geofence Mapping Toggle Active, Scheduling Employee dropdown Name-wise Refactored, Attendance Screen Back to Home Nav Active, Selfie verification box hidden initially, Kalman Smoothing Active, Offline Tracking Queue Active, Tracking Logs Deduplicated and Chronologically Sorted, Distance Calculations Recalculated Sequentially, SQLite WebAssembly Build Error Resolved, Background Task Metadata Synced, Real-time Telemetry Merged, Premium Replay Playback Animation Integrated, Dual-path Map Rendering Active, Geofence Circle Overlays Display Active, Geofence Multi-Alerts Active, Dynamic Address Resolution & Coordinate Fallbacks Integrated, Telemetry Monitor Hardened, 2-Lane Road U-Turn Snapping Fix Active, GPS Gap Recovery Mode Active, Snapped Coordinate Fallbacks Active, Fail-safe Route Line Rendering Active, 7-Stage Tracking Pipeline Active, Jitter-Resistant Road Consensus Active, Highway Flyover Snapping Penalty Active, Offline Route Bulk Refinement Complete, Mobile Permissions Enforced, Raw GPS Switch Active, GPS Classification System Active, Classify-Don't-Delete Pipeline Active, Comprehensive Seeding Script Repaired, Expo Go Launch Configurations Added, Multi-Transport Socket.IO Handshake Active, GPS Drift Lockout Resolved, Stationary Jitter Suppression Active, Zero Build Errors.
+

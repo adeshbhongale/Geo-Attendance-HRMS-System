@@ -528,6 +528,7 @@ const seedData = async () => {
             const finalLog = trackingLogs[trackingLogs.length - 1];
 
             attendanceRecords.push({
+              _id: new mongoose.Types.ObjectId(),
               user: emp._id,
               date: date,
               status: 'Half Day',
@@ -597,6 +598,7 @@ const seedData = async () => {
 
         else if (rand < 0.18) { // 6% no-show — seed explicit Absent record
           attendanceRecords.push({
+            _id: new mongoose.Types.ObjectId(),
             user: emp._id,
             date: date,
             punchIn: null,
@@ -785,6 +787,7 @@ const seedData = async () => {
         const finalLog = trackingLogs[trackingLogs.length - 1];
 
         attendanceRecords.push({
+          _id: new mongoose.Types.ObjectId(),
           user: emp._id,
           date: date,
           status: status,
@@ -913,7 +916,9 @@ const seedData = async () => {
             const interpLat = prevLog.latitude + (log.latitude - prevLog.latitude) * ratio;
             const interpLng = prevLog.longitude + (log.longitude - prevLog.longitude) * ratio;
             const interpTime = new Date(prevLog.time.getTime() + (log.time.getTime() - prevLog.time.getTime()) * ratio);
-            const interpSpeed = prevLog.speed + (log.speed - prevLog.speed) * ratio;
+            const prevSpeed = prevLog.speed || 0;
+            const currentSpeed = log.speed || 0;
+            const interpSpeed = prevSpeed + (currentSpeed - prevSpeed) * ratio;
             const interpAccuracy = 5 + Math.random() * 15; // 5-20m accuracy
 
             rawTrackingPointRecords.push({
@@ -1686,7 +1691,7 @@ const seedData = async () => {
           autoType: null
         },
         {
-          type: 'emergancy notification',
+          type: 'emergency notification',
           title: 'Emergency Evacuation Drill',
           description: 'Critical Alert: The annual building safety evacuation drill is scheduled for this week. Please follow instructions.',
           targetType: 'All Employees',

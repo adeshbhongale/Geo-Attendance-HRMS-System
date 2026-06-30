@@ -9,10 +9,49 @@ const Attendance = require('../models/Attendance');
  * Enterprise Tracking Service
  * Handles high-fidelity tracking pipeline:
  * Receive → Validate → GPS Filter → Road Snap → Save → Broadcast
+ * 
+ * KEY DESIGN DECISIONS (2026-06-30 Comprehensive Fix):
+ * 1. Attendance stores ONLY summary fields (totalDistance, lastTrackedLocation, etc.)
+ *    All GPS points live exclusively in RawTrackingPoint collection.
+ * 2. Attendance updates use atomic $inc/$set — no full-document read-modify-write.
+ * 3. Distance is calculated incrementally per-batch, not from historical points.
+ * 4. Cross-day transitions produce a fresh segment (no straight line to yesterday).
+ * 5. Aggregation uses immediate DB write, not in-memory setTimeout buffer.
+ * 6. Distance units: KM in Attendance/LiveEmployeeStatus, meters in per-point.
  */
 
-// Memory buffer for 1-minute aggregation (Temporary store before DB write)
-const aggregationBuffer = new Map(); 
+/**
+ * Shared helper: Calculate stops and speed from an array of raw points.
+ * Used by both enterprise tracking and reports controller.
+ * @param {Array} rawPoints - Array of RawTrackingPoint documents
+ * @returns {Object} { stops, avgSpeedKmh, maxSpeedKmh }
+ */
+exports.calculateStopsAndSpeed = (rawPoints) => {
+  let stopsCount = 0;
+  let idleStart = null;
+  for (const point of rawPoints) {
+    const speedKmh = (point.speed || 0) * 3.6;
+    if (speedKmh < 1) {
+      if (!idleStart) idleStart = new Date(point.timestamp);
+    } else {
+      if (idleStart) {
+        const idleDuration = (new Date(point.timestamp) - idleStart) / 60000;
+        if (idleDuration >= 2) stopsCount++;
+        idleStart = null;
+      }
+    }
+  }
+
+  const speeds = rawPoints.map(p => p.speed || 0).filter(s => s > 0);
+  const avgSpeedMs = speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) / speeds.length : 0;
+  const maxSpeedMs = speeds.length > 0 ? Math.max(...speeds) : 0;
+
+  return {
+    stops: stopsCount,
+    avgSpeedKmh: parseFloat((avgSpeedMs * 3.6).toFixed(1)),
+    maxSpeedKmh: parseFloat((maxSpeedMs * 3.6).toFixed(1))
+  };
+};
 
 exports.processTrackingBatch = async (userId, batch, socketIo) => {
   if (!batch || batch.length === 0) return { success: true, pointsProcessed: 0 };
@@ -52,7 +91,6 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
     if (filteredPoints.length === 0) {
       console.log('[EnterpriseTracking] All points rejected (invalid coordinates only)');
       
-      // Update lastUpdate to the latest timestamp in the batch to show the app is active
       const latestBatchPoint = batch[batch.length - 1];
       const latestTime = latestBatchPoint && (latestBatchPoint.timestamp || latestBatchPoint.time)
         ? new Date(latestBatchPoint.timestamp || latestBatchPoint.time)
@@ -122,7 +160,6 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
     const rawPoints = validatedPoints.map(point => {
       const lat = point.snappedLatitude || point.latitude;
       const lng = point.snappedLongitude || point.longitude;
-      const isOffline = false;
       return {
         userId: resolvedUserId,
         location: { type: 'Point', coordinates: [lng, lat] },
@@ -140,11 +177,10 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
         timestamp: new Date(point.timestamp),
         status: point.status || 'valid',
         isMock: point.isMock || false,
-        isOffline,
+        isOffline: false,
         routeStatus: point.routeStatus || 'raw',
         processedTime: new Date(),
         provider: snapProvider,
-        // Enterprise snapping metadata
         roadId: point.roadId || null,
         roadSegmentId: point.roadSegmentId || null,
         roadName: point.roadName || null,
@@ -153,11 +189,9 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
         previousSegmentId: point.previousSegmentId || null,
         matchedRoadConfidence: point.matchedRoadConfidence || null,
         transitionReason: point.transitionReason || null,
-
-        // 7-Stage Enterprise Tracking Metadata
         gpsConfidence: point.gpsConfidence !== undefined ? point.gpsConfidence : null,
         roadConfidence: point.roadConfidence !== undefined ? point.roadConfidence : null,
-        candidateRoads: point.candidateRoads || [],
+        candidateRoads: (point.candidateRoads || []).slice(0, 2), // Store top 2 only (#10 fix)
         acceptedRoadId: point.acceptedRoadId || null,
         acceptedSegmentId: point.acceptedSegmentId || null,
         visitNumber: point.visitNumber !== undefined ? point.visitNumber : 1,
@@ -188,119 +222,138 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
       lastPoint = await RawTrackingPoint.findOne({ userId: resolvedUserId }).sort('-timestamp');
     }
 
-    // 6. Calculate distance using snapped coordinates (road distance)
-    let batchDistance = 0;
-    if (snappedPoints.length >= 2) {
-      batchDistance = roadSnap.calculateSnappedDistance(snappedPoints);
+    // 6. Calculate INCREMENTAL distance — only from new batch points (#3 fix)
+    let batchDistanceKm = 0;
+
+    // ─── CROSS-DAY STRAIGHT LINE FIX ───
+    let isCrossDayTransition = false;
+    const firstBatchPoint = uniqueRawPoints[0] || batch[0];
+
+    if (firstBatchPoint && liveStatus.lastUpdate) {
+      const lastTrackedDate = new Date(liveStatus.lastUpdate);
+      const firstBatchDate = new Date(firstBatchPoint.timestamp);
+      const lastDay = `${lastTrackedDate.getUTCFullYear()}-${lastTrackedDate.getUTCMonth()}-${lastTrackedDate.getUTCDate()}`;
+      const batchDay = `${firstBatchDate.getUTCFullYear()}-${firstBatchDate.getUTCMonth()}-${firstBatchDate.getUTCDate()}`;
+
+      if (lastDay !== batchDay) {
+        isCrossDayTransition = true;
+        console.log(`[EnterpriseTracking] Cross-day transition detected: ${lastDay} -> ${batchDay}. Fresh segment.`);
+      }
+      const timeDiffMs = firstBatchDate.getTime() - lastTrackedDate.getTime();
+      if (timeDiffMs > 2 * 60 * 60 * 1000) {
+        isCrossDayTransition = true;
+        console.log(`[EnterpriseTracking] Large time gap (${(timeDiffMs / 3600000).toFixed(1)}h). Fresh segment.`);
+      }
     }
 
-    // 7. Update Attendance tracking logs
+    // Calculate batch distance from valid-status points only
+    const batchDistancePoints = uniqueRawPoints.filter(p => p.status === 'valid');
+    if (batchDistancePoints.length >= 2) {
+      for (let i = 1; i < batchDistancePoints.length; i++) {
+        const prev = batchDistancePoints[i - 1];
+        const curr = batchDistancePoints[i];
+        const lat1 = prev.snappedLatitude || prev.rawLatitude || prev.location.coordinates[1];
+        const lng1 = prev.snappedLongitude || prev.rawLongitude || prev.location.coordinates[0];
+        const lat2 = curr.snappedLatitude || curr.rawLatitude || curr.location.coordinates[1];
+        const lng2 = curr.snappedLongitude || curr.rawLongitude || curr.location.coordinates[0];
+        const dist = geoService.calculateDistance(lat1, lng1, lat2, lng2);
+        if (dist >= 0.005) { // >= 5 meters
+          batchDistanceKm += dist;
+        }
+      }
+    }
+
+    // Bridge distance from last known point to first batch point (skip if cross-day)
+    if (!isCrossDayTransition && batchDistancePoints.length >= 1 && lastKnownPoint) {
+      const first = batchDistancePoints[0];
+      const firstLat = first.snappedLatitude || first.rawLatitude || first.location.coordinates[1];
+      const firstLng = first.snappedLongitude || first.rawLongitude || first.location.coordinates[0];
+      const bridgeDist = geoService.calculateDistance(
+        lastKnownPoint.latitude, lastKnownPoint.longitude,
+        firstLat, firstLng
+      );
+      if (bridgeDist >= 0.005 && bridgeDist < 5) {
+        batchDistanceKm += bridgeDist;
+      }
+    }
+
+    // 7. ATOMIC Attendance update (#2 fix)
     let attendance = null;
-    const firstPoint = uniqueRawPoints[0] || batch[0];
 
-    // Attempt 1: Find by tripId if it's a valid ObjectId
-    if (firstPoint && firstPoint.tripId && mongoose.Types.ObjectId.isValid(firstPoint.tripId)) {
-      attendance = await Attendance.findById(firstPoint.tripId);
+    if (firstBatchPoint && firstBatchPoint.tripId && mongoose.Types.ObjectId.isValid(firstBatchPoint.tripId)) {
+      attendance = await Attendance.findById(firstBatchPoint.tripId);
     }
-
-    // Attempt 2: Find by checking the date of the batch points
-    if (!attendance && firstPoint) {
-      const pointDate = new Date(firstPoint.timestamp || firstPoint.time);
+    if (!attendance && firstBatchPoint) {
+      const pointDate = new Date(firstBatchPoint.timestamp || firstBatchPoint.time);
       const pointStart = new Date(pointDate);
       pointStart.setUTCHours(0, 0, 0, 0);
       const pointEnd = new Date(pointDate);
       pointEnd.setUTCHours(23, 59, 59, 999);
-
       attendance = await Attendance.findOne({
         user: resolvedUserId,
         date: { $gte: pointStart, $lte: pointEnd }
       }).sort('-date');
     }
-
-    // Attempt 3: Find the latest active session (no punchOut)
     if (!attendance) {
       attendance = await Attendance.findOne({
         user: resolvedUserId,
         "punchOut.time": { $exists: false }
       }).sort('-date');
     }
-
-    // Attempt 4: Ultimate fallback to today's date if no other matches
     if (!attendance) {
       const todayStart = new Date();
       todayStart.setUTCHours(0, 0, 0, 0);
       const todayEnd = new Date();
       todayEnd.setUTCHours(23, 59, 59, 999);
-
       attendance = await Attendance.findOne({
         user: resolvedUserId,
         date: { $gte: todayStart, $lte: todayEnd }
       }).sort('-date');
     }
 
-    if (attendance) {
-      const logsToPush = uniqueRawPoints.map(p => ({
-        time: p.timestamp,
-        latitude: p.snappedLatitude || p.rawLatitude || p.location.coordinates[1],
-        longitude: p.snappedLongitude || p.rawLongitude || p.location.coordinates[0],
-        address: p.address || null,
-        isSuspicious: p.status === 'suspicious',
-        isOffline: !!p.isOffline || p.status === 'offline',
-        accuracy: p.accuracy,
-        speed: p.speed,
-        heading: p.heading,
-        status: p.status || 'valid',
-        isDistanceEligible: p.distanceEligible !== false,
-        isDisplayEligible: p.displayEligible !== false
-      }));
+    if (attendance && uniqueRawPoints.length > 0) {
+      const lastValidRawPoint = uniqueRawPoints[uniqueRawPoints.length - 1];
+      const firstValidRawPoint = uniqueRawPoints[0];
+      const lastLat = lastValidRawPoint.snappedLatitude || lastValidRawPoint.rawLatitude || lastValidRawPoint.location.coordinates[1];
+      const lastLng = lastValidRawPoint.snappedLongitude || lastValidRawPoint.rawLongitude || lastValidRawPoint.location.coordinates[0];
+      const firstLat = firstValidRawPoint.snappedLatitude || firstValidRawPoint.rawLatitude || firstValidRawPoint.location.coordinates[1];
+      const firstLng = firstValidRawPoint.snappedLongitude || firstValidRawPoint.rawLongitude || firstValidRawPoint.location.coordinates[0];
 
-      const mergedLogs = [...attendance.trackingLogs, ...logsToPush];
-      mergedLogs.sort((a, b) => new Date(a.time) - new Date(b.time));
+      const currentTotal = attendance.totalDistance || 0;
+      const newTotal = currentTotal + parseFloat(batchDistanceKm.toFixed(6));
 
-      const deduplicatedLogs = [];
-      const seenTimes = new Set();
-      for (const log of mergedLogs) {
-        const timeMs = new Date(log.time).getTime();
-        if (!seenTimes.has(timeMs)) {
-          seenTimes.add(timeMs);
-          deduplicatedLogs.push(log);
+      const atomicUpdate = {
+        $inc: {
+          trackingPointCount: uniqueRawPoints.length,
+        },
+        $set: {
+          totalDistance: parseFloat(newTotal.toFixed(6)),
+          currentDistance: parseFloat(newTotal.toFixed(6)),
+          distance: parseFloat(newTotal.toFixed(6)),
+          lastTrackedLocation: {
+            latitude: lastLat,
+            longitude: lastLng,
+            time: lastValidRawPoint.timestamp,
+            address: null
+          },
+          lastTrackingTime: lastValidRawPoint.timestamp,
+          battery: lastValidRawPoint.battery || 100,
+          signalStatus: 'online'
         }
+      };
+
+      if (!attendance.firstTrackedLocation || !attendance.firstTrackedLocation.latitude) {
+        atomicUpdate.$set.firstTrackedLocation = {
+          latitude: firstLat,
+          longitude: firstLng,
+          time: firstValidRawPoint.timestamp,
+          address: null
+        };
       }
 
-      let accumulatedDistance = 0;
-      let lastEligibleIndex = -1;
-      for (let i = 0; i < deduplicatedLogs.length; i++) {
-        deduplicatedLogs[i].distanceFromPrevious = 0;
-        deduplicatedLogs[i].totalDistanceTillNow = parseFloat(accumulatedDistance.toFixed(6));
-
-        const isEligible = deduplicatedLogs[i].isDistanceEligible !== false;
-        if (!isEligible) continue;
-
-        if (lastEligibleIndex >= 0) {
-          const prev = deduplicatedLogs[lastEligibleIndex];
-          const curr = deduplicatedLogs[i];
-          const dist = geoService.calculateDistance(
-            prev.latitude, prev.longitude,
-            curr.latitude, curr.longitude
-          );
-          const validDist = dist >= 0.005 ? dist : 0;
-          deduplicatedLogs[i].distanceFromPrevious = parseFloat((validDist * 1000).toFixed(2));
-          accumulatedDistance += validDist;
-        }
-        lastEligibleIndex = i;
-        deduplicatedLogs[i].totalDistanceTillNow = parseFloat(accumulatedDistance.toFixed(6));
-      }
-
-      attendance.trackingLogs = deduplicatedLogs;
-      const previousTotalDistance = attendance.totalDistance || 0;
-      const newTotalDistance = parseFloat(accumulatedDistance.toFixed(6));
-      attendance.totalDistance = Math.max(previousTotalDistance, newTotalDistance);
-      attendance.distance = attendance.totalDistance;
-
+      // Geofence check
       try {
-        const lastValidLog = deduplicatedLogs[deduplicatedLogs.length - 1];
-        const mongoose = require('mongoose');
-        if (lastValidLog && mongoose.connection.readyState === 1) {
+        if (mongoose.connection.readyState === 1) {
           const User = require('../models/User');
           const Location = require('../models/Location');
           const { calculateDistance } = require('../utils/geofence');
@@ -308,9 +361,9 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
           const office = userObj?.workingPlace || (await Location.findOne({ name: 'Office Main' }) || await Location.findOne());
           
           if (office) {
-            const isOutside = calculateDistance(lastValidLog.latitude, lastValidLog.longitude, office.latitude, office.longitude) > office.radius;
+            const isOutside = calculateDistance(lastLat, lastLng, office.latitude, office.longitude) > office.radius;
             const previousOutside = attendance.isOutside;
-            attendance.isOutside = isOutside;
+            atomicUpdate.$set.isOutside = isOutside;
 
             if (isOutside && !previousOutside) {
               const autoNotif = require('./autoNotificationService');
@@ -325,7 +378,8 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
         console.error('[EnterpriseTracking] Geofence check in batch failed:', geofenceErr);
       }
 
-      await attendance.save();
+      await Attendance.updateOne({ _id: attendance._id }, atomicUpdate);
+      attendance = await Attendance.findById(attendance._id).lean();
     }
 
     let avgSpeedKmh = 0;
@@ -342,7 +396,7 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
       
       liveStatus.currentSpeed = lastPoint.speed;
       liveStatus.lastUpdate = lastPoint.timestamp;
-      liveStatus.totalDistanceToday = attendance ? attendance.totalDistance : (liveStatus.totalDistanceToday + batchDistance);
+      liveStatus.totalDistanceToday = attendance ? (attendance.totalDistance || 0) : (liveStatus.totalDistanceToday + batchDistanceKm);
       liveStatus.movementState = detectMovementState(lastPoint.speed);
       liveStatus.tripId = lastPoint.tripId;
       liveStatus.lastGpsTime = lastPoint.timestamp;
@@ -350,72 +404,59 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
       liveStatus.trackingHealthReason = 'Active GPS updates received';
       liveStatus.recoveryAttempts = 0;
 
-      // Determine online/offline/poor signal purely on the backend using timestamp differences
       const now = Date.now();
       const lastPointTime = new Date(lastPoint.timestamp).getTime();
       const timeDiff = now - lastPointTime;
 
-      if (timeDiff < 120000) { // < 2 minutes
+      if (timeDiff < 120000) {
         liveStatus.currentStatus = 'online';
         liveStatus.trackingStatus = 'active';
-      } else if (timeDiff < 300000) { // 2-5 minutes
+      } else if (timeDiff < 300000) {
         liveStatus.currentStatus = 'poor signal';
         liveStatus.trackingStatus = 'active';
-      } else { // > 5 minutes
+      } else {
         liveStatus.currentStatus = 'offline';
         liveStatus.trackingStatus = 'offline';
       }
 
-      // Accuracy determines signal quality, never employee status
       if (lastPoint.accuracy !== undefined && lastPoint.accuracy !== null) {
-        if (lastPoint.accuracy <= 20) {
-          liveStatus.signalQuality = 'strong';
-        } else {
-          liveStatus.signalQuality = 'weak';
-        }
+        liveStatus.signalQuality = lastPoint.accuracy <= 20 ? 'strong' : 'weak';
       }
       
       if (lastPoint.battery) liveStatus.batteryLevel = lastPoint.battery;
 
-      avgSpeedKmh = 0;
-      maxSpeedKmh = 0;
-
-      // Calculate stops, average speed and max speed for today on-the-fly and update liveStatus
+      // Calculate stops & speed INCREMENTALLY — no full-day query (#4 fix)
       try {
-        const startOfDay = new Date(lastPoint.timestamp);
-        startOfDay.setUTCHours(0, 0, 0, 0);
-        const endOfDay = new Date(lastPoint.timestamp);
-        endOfDay.setUTCHours(23, 59, 59, 999);
+        const batchSpeeds = uniqueRawPoints.map(p => p.speed || 0).filter(s => s > 0);
+        if (batchSpeeds.length > 0) {
+          const batchAvgMs = batchSpeeds.reduce((a, b) => a + b, 0) / batchSpeeds.length;
+          const batchMaxMs = Math.max(...batchSpeeds);
+          avgSpeedKmh = parseFloat((batchAvgMs * 3.6).toFixed(1));
+          maxSpeedKmh = parseFloat((Math.max(batchMaxMs * 3.6, liveStatus.avgSpeed || 0)).toFixed(1));
+        } else {
+          avgSpeedKmh = liveStatus.avgSpeed || 0;
+        }
+        liveStatus.avgSpeed = avgSpeedKmh;
 
-        const query = RawTrackingPoint.find({
-          userId: resolvedUserId,
-          timestamp: { $gte: startOfDay, $lte: endOfDay }
-        });
-        const todayRawPoints = typeof query.sort === 'function' ? await query.sort('timestamp') : await query;
-
-        let stopsCount = 0;
+        let batchStops = 0;
         let idleStart = null;
-        for (const point of todayRawPoints) {
+        for (const point of uniqueRawPoints) {
           const speedKmh = (point.speed || 0) * 3.6;
           if (speedKmh < 1) {
             if (!idleStart) idleStart = new Date(point.timestamp);
           } else {
             if (idleStart) {
               const idleDuration = (new Date(point.timestamp) - idleStart) / 60000;
-              if (idleDuration >= 2) stopsCount++;
+              if (idleDuration >= 2) batchStops++;
               idleStart = null;
             }
           }
         }
-        liveStatus.stops = stopsCount;
-
-        const speeds = todayRawPoints.map(p => p.speed || 0).filter(s => s > 0);
-        const avgSpeedMs = speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) / speeds.length : 0;
-        const maxSpeedMs = speeds.length > 0 ? Math.max(...speeds) : 0;
-        avgSpeedKmh = parseFloat((avgSpeedMs * 3.6).toFixed(1));
-        maxSpeedKmh = parseFloat((maxSpeedMs * 3.6).toFixed(1));
-        
-        liveStatus.avgSpeed = avgSpeedKmh;
+        if (isCrossDayTransition) {
+          liveStatus.stops = batchStops;
+        } else {
+          liveStatus.stops = (liveStatus.stops || 0) + batchStops;
+        }
       } catch (stopErr) {
         console.error('[EnterpriseTracking] Failed to calculate stops & speed metrics:', stopErr.message);
       }
@@ -436,7 +477,6 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
             currentCoords[1], currentCoords[0]
           );
           const timeSinceLastGeocode = liveStatus.lastGeocodeTime ? (Date.now() - new Date(liveStatus.lastGeocodeTime).getTime()) / 1000 : Infinity;
-
           if (distSinceLastGeocode > 0.1 || timeSinceLastGeocode > 300) {
             shouldGeocode = true;
           }
@@ -454,17 +494,16 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
 
     await liveStatus.save();
 
-    // Mark the user as online in the User model since they are actively sending tracking batches
     const User = require('../models/User');
     await User.findByIdAndUpdate(resolvedUserId, { isOnline: true });
 
-    // 10. Real-time broadcast to Admin (Socket.IO)
+    // 10. Real-time broadcast — reduced payload (#25), room-targeted (#21)
     if (socketIo) {
       const broadcastPoint = lastPoint;
       const snappedLat = broadcastPoint?.snappedLatitude || broadcastPoint?.location?.coordinates[1];
       const snappedLng = broadcastPoint?.snappedLongitude || broadcastPoint?.location?.coordinates[0];
       
-      socketIo.emit('liveTrackingUpdate', {
+      const updatePayload = {
         userId: resolvedUserId,
         latitude: snappedLat,
         longitude: snappedLng,
@@ -483,6 +522,7 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
         avgSpeed: avgSpeedKmh,
         maxSpeed: maxSpeedKmh,
         stops: liveStatus.stops || 0,
+        isCrossDayTransition,
         path: uniqueRawPoints.map(p => ({ 
           lat: p.snappedLatitude || p.location.coordinates[1], 
           lng: p.snappedLongitude || p.location.coordinates[0],
@@ -491,27 +531,24 @@ exports.processTrackingBatch = async (userId, batch, socketIo) => {
           status: p.status,
           speed: p.speed,
           timestamp: p.timestamp
-        })),
-        // Dual-line map support: raw (orange) + clean/display (blue)
-        rawPath: uniqueRawPoints.map(p => ({
-          lat: p.rawLatitude || p.latitude || p.location?.coordinates[1],
-          lng: p.rawLongitude || p.longitude || p.location?.coordinates[0],
-          status: p.status,
-          speed: p.speed,
-          timestamp: p.timestamp
-        })),
-        displayPath: displayPoints.map(p => ({
-          lat: p.snappedLatitude || p.rawLatitude || p.latitude || p.location?.coordinates[1],
-          lng: p.snappedLongitude || p.rawLongitude || p.longitude || p.location?.coordinates[0],
-          status: p.status,
-          speed: p.speed,
-          timestamp: p.timestamp
         }))
-      });
+      };
+
+      // Emit to admin room + globally for backward compat
+      if (socketIo.to) {
+        socketIo.to('admin').emit('liveTrackingUpdate', updatePayload);
+      }
+      socketIo.emit('liveTrackingUpdate', updatePayload);
     }
 
-    // 11. Handle 1-minute Aggregation
-    await bufferForAggregation(resolvedUserId, uniqueRawPoints, batchDistance);
+    // 11. IMMEDIATE aggregation write (#22 fix)
+    if (uniqueRawPoints.length > 0) {
+      try {
+        await writeTrackingLog(resolvedUserId, uniqueRawPoints, batchDistanceKm);
+      } catch (aggErr) {
+        console.error('[EnterpriseTracking] TrackingLog write failed:', aggErr.message);
+      }
+    }
 
     console.log(`[EnterpriseTracking] ✓ Batch complete: ${uniqueRawPoints.length} points processed (provider: ${snapProvider})`);
     return { success: true, pointsProcessed: uniqueRawPoints.length, provider: snapProvider };
@@ -533,22 +570,15 @@ async function reverseGeocodeAsync(userId, points, lastPoint = null, socketIo = 
       pointsToProcess = points;
     } else if (points) {
       pointsToProcess = [points];
-      if (!targetLastPoint) {
-        targetLastPoint = points;
-      }
+      if (!targetLastPoint) targetLastPoint = points;
     }
 
     if (pointsToProcess.length === 0) return;
 
-    // Filter points in the batch to geocode:
-    // - Always include targetLastPoint
-    // - Only include points that are > 150 meters from last geocoded point (save costs!)
-    // - Also include points that represent a different minute
     const pointsToGeocode = [];
     const seenMinutes = new Set();
     let lastGeocodedPoint = null;
 
-    // Get last geocoded point from LiveEmployeeStatus or RawTrackingPoint
     const liveStatus = await LiveEmployeeStatus.findOne({ userId });
     if (liveStatus?.lastGeocodedLocation?.coordinates) {
       lastGeocodedPoint = {
@@ -557,7 +587,6 @@ async function reverseGeocodeAsync(userId, points, lastPoint = null, socketIo = 
       };
     }
 
-    // Loop from last to first so we prioritize geocoding the latest points first
     for (let i = pointsToProcess.length - 1; i >= 0; i--) {
       const p = pointsToProcess[i];
       const time = new Date(p.timestamp || p.processedTime);
@@ -567,29 +596,23 @@ async function reverseGeocodeAsync(userId, points, lastPoint = null, socketIo = 
 
       const isLast = (p.timestamp && targetLastPoint && new Date(p.timestamp).getTime() === new Date(targetLastPoint.timestamp).getTime());
       
-      // Calculate distance from last geocoded point (meters)
       let distanceFromLastGeocoded = Infinity;
       if (lastGeocodedPoint) {
-        const geoService = require('./geoTrackingService');
         distanceFromLastGeocoded = geoService.calculateDistance(
           lastGeocodedPoint.latitude, lastGeocodedPoint.longitude,
           currentLat, currentLng
-        ) * 1000; // convert km to meters
+        ) * 1000;
       }
 
-      // Only geocode if it's the last point OR new minute AND more than 150m from last geocoded point
       if (isLast || (!seenMinutes.has(minuteKey) && distanceFromLastGeocoded > 150)) {
         pointsToGeocode.push(p);
         seenMinutes.add(minuteKey);
-        // Update last geocoded point so we don't geocode nearby points
         lastGeocodedPoint = { latitude: currentLat, longitude: currentLng };
       }
     }
 
-    // Process in chronological order
     pointsToGeocode.reverse();
 
-    // Resolve addresses sequentially with a 1-second delay to respect Nominatim API rate limits
     for (let i = 0; i < pointsToGeocode.length; i++) {
       const point = pointsToGeocode[i];
       const lat = point.snappedLatitude || point.rawLatitude || point.location.coordinates[1];
@@ -602,64 +625,36 @@ async function reverseGeocodeAsync(userId, points, lastPoint = null, socketIo = 
       const address = await reverseGeocodeLatLng(lat, lng);
 
       if (address) {
-        // a) Update address in RawTrackingPoint
         await RawTrackingPoint.updateOne(
           { userId, timestamp: point.timestamp },
           { $set: { address } }
         );
 
-        // b) Update address in Attendance.trackingLogs
+        // Update Attendance lastTrackedLocation address atomically
         const pointTime = new Date(point.timestamp);
-        let updateResult = await Attendance.updateOne(
-          { 
-            user: userId, 
-            "trackingLogs.time": pointTime 
+        const pointDateStart = new Date(pointTime);
+        pointDateStart.setUTCHours(0, 0, 0, 0);
+        const pointDateEnd = new Date(pointTime);
+        pointDateEnd.setUTCHours(23, 59, 59, 999);
+
+        await Attendance.updateOne(
+          {
+            user: userId,
+            date: { $gte: pointDateStart, $lte: pointDateEnd },
+            'lastTrackedLocation.time': pointTime
           },
-          { 
-            $set: { "trackingLogs.$.address": address } 
-          }
+          { $set: { 'lastTrackedLocation.address': address } }
         );
 
-        if (updateResult.matchedCount === 0) {
-          // JS Fallback in case exact Date object query fails
-          const pointDateStart = new Date(pointTime);
-          pointDateStart.setUTCHours(0, 0, 0, 0);
-          const pointDateEnd = new Date(pointTime);
-          pointDateEnd.setUTCHours(23, 59, 59, 999);
-
-          const attendance = await Attendance.findOne({
-            user: userId,
-            date: { $gte: pointDateStart, $lte: pointDateEnd }
-          });
-
-          if (attendance && attendance.trackingLogs && attendance.trackingLogs.length > 0) {
-            const logItem = attendance.trackingLogs.find(log => 
-              Math.abs(new Date(log.time).getTime() - pointTime.getTime()) < 2000
-            );
-
-            if (logItem) {
-              logItem.address = address;
-              await attendance.save();
-            }
-          }
-        }
-
-        // c) If this is the last point, update LiveEmployeeStatus and emit socket update
         const isLastPoint = (targetLastPoint && new Date(point.timestamp).getTime() === new Date(targetLastPoint.timestamp).getTime());
         if (isLastPoint) {
           await LiveEmployeeStatus.updateOne(
             { userId },
-            { 
-              $set: { 
-                lastAddress: address,
-                lastGeocodedLocation: point.location,
-                lastGeocodeTime: new Date()
-              } 
-            }
+            { $set: { lastAddress: address, lastGeocodedLocation: point.location, lastGeocodeTime: new Date() } }
           );
 
           if (socketIo) {
-            socketIo.emit('liveTrackingUpdate', {
+            const updatePayload = {
               userId,
               latitude: point.snappedLatitude || point.location.coordinates[1],
               longitude: point.snappedLongitude || point.location.coordinates[0],
@@ -669,8 +664,12 @@ async function reverseGeocodeAsync(userId, points, lastPoint = null, socketIo = 
               address: address,
               timestamp: point.timestamp,
               provider: point.provider || 'none',
-              path: [] // Empty path prevents duplicate path rendering on live append
-            });
+              path: []
+            };
+            if (socketIo.to) {
+              socketIo.to('admin').emit('liveTrackingUpdate', updatePayload);
+            }
+            socketIo.emit('liveTrackingUpdate', updatePayload);
           }
         }
       }
@@ -683,57 +682,25 @@ async function reverseGeocodeAsync(userId, points, lastPoint = null, socketIo = 
 exports.reverseGeocodeAsync = reverseGeocodeAsync;
 
 /**
- * Buffers points for 1-minute aggregation
+ * Write tracking aggregation log IMMEDIATELY to DB.
+ * Replaces the old in-memory setTimeout buffer (#22 fix).
  */
-async function bufferForAggregation(userId, points, distance) {
+async function writeTrackingLog(userId, points, distanceKm) {
   if (!points || points.length === 0) return;
-  
-  const now = new Date();
-  const minuteKey = `${userId}_${now.getFullYear()}_${now.getMonth()}_${now.getDate()}_${now.getHours()}_${now.getMinutes()}`;
-  
-  let buffer = aggregationBuffer.get(minuteKey);
-  if (!buffer) {
-    buffer = {
-      userId,
-      points: [],
-      distance: 0,
-      startTime: points[0].timestamp,
-      count: 0
-    };
-    aggregationBuffer.set(minuteKey, buffer);
-    
-    // Schedule flush after 1 minute
-    setTimeout(() => flushAggregation(minuteKey), 65000);
-  }
-
-  buffer.points.push(...points);
-  buffer.distance += distance;
-  buffer.count += points.length;
-}
-
-/**
- * Flushes 1-minute buffer to TrackingLog collection
- */
-async function flushAggregation(minuteKey) {
-  const buffer = aggregationBuffer.get(minuteKey);
-  if (!buffer) return;
 
   try {
-    const { userId, points, distance, startTime } = buffer;
-    if (points.length === 0) return;
-
+    const startTime = points[0].timestamp;
     const endTime = points[points.length - 1].timestamp;
     const avgSpeed = points.reduce((acc, p) => acc + (p.speed || 0), 0) / points.length;
     const maxSpeed = Math.max(...points.map(p => p.speed || 0));
     
-    // Build both raw and snapped paths
     const rawPath = points.map(p => p.location?.coordinates || [p.rawLongitude || p.longitude, p.rawLatitude || p.latitude]);
     const snappedPath = points
       .map(p => [
         p.snappedLongitude || p.rawLongitude || p.location?.coordinates[0] || p.longitude,
         p.snappedLatitude || p.rawLatitude || p.location?.coordinates[1] || p.latitude
       ])
-      .filter(p => p[0] !== undefined && p[1] !== undefined && p[0] !== null && p[1] !== null);
+      .filter(p => p[0] != null && p[1] != null);
 
     const log = new TrackingLog({
       userId,
@@ -741,8 +708,8 @@ async function flushAggregation(minuteKey) {
       endTime,
       startLocation: points[0].location || { type: 'Point', coordinates: rawPath[0] },
       endLocation: points[points.length - 1].location || { type: 'Point', coordinates: rawPath[rawPath.length - 1] },
-      distance: parseFloat(distance.toFixed(3)),
-      rawDistance: parseFloat(distance.toFixed(3)),
+      distance: parseFloat(distanceKm.toFixed(3)),
+      rawDistance: parseFloat(distanceKm.toFixed(3)),
       avgSpeed: parseFloat(avgSpeed.toFixed(2)),
       maxSpeed: parseFloat(maxSpeed.toFixed(2)),
       movementStatus: detectMovementState(avgSpeed),
@@ -752,9 +719,8 @@ async function flushAggregation(minuteKey) {
     });
 
     await log.save();
-    aggregationBuffer.delete(minuteKey);
   } catch (err) {
-    console.error('[EnterpriseTracking] Flush Error:', err);
+    console.error('[EnterpriseTracking] TrackingLog write error:', err.message);
   }
 }
 

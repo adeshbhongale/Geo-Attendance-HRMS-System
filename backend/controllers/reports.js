@@ -42,12 +42,22 @@ const resolveMissingAddresses = (logs) => {
     return item;
   });
 
-  const validLogs = resolvedLogs.filter(candidate => {
-    return candidate.address &&
-      candidate.address !== 'Address not resolved' &&
-      candidate.address !== 'Live Tracking...' &&
-      candidate.address !== 'Address not found';
-  });
+  // FIX #8: Pre-sort valid logs by time for O(n*log(m)) binary search instead of O(n*m)
+  const validLogs = resolvedLogs
+    .filter(candidate => {
+      return candidate.address &&
+        candidate.address !== 'Address not resolved' &&
+        candidate.address !== 'Live Tracking...' &&
+        candidate.address !== 'Address not found';
+    })
+    .sort((a, b) => {
+      const ta = new Date(a.time || a.timestamp || a.processedTime).getTime();
+      const tb = new Date(b.time || b.timestamp || b.processedTime).getTime();
+      return ta - tb;
+    });
+
+  // Pre-extract times for binary search
+  const validTimes = validLogs.map(l => new Date(l.time || l.timestamp || l.processedTime).getTime());
 
   for (let i = 0; i < resolvedLogs.length; i++) {
     const current = resolvedLogs[i];
@@ -57,27 +67,35 @@ const resolveMissingAddresses = (logs) => {
       current.address === 'Address not found';
 
     if (isInvalid) {
-      let closestAddress = null;
-      let minTimeDiff = Infinity;
       const currentLat = current.latitude || current.snappedLatitude || (current.location?.coordinates && current.location.coordinates[1]) || 0;
       const currentLng = current.longitude || current.snappedLongitude || (current.location?.coordinates && current.location.coordinates[0]) || 0;
-      const currentTime = current.time || current.timestamp || current.processedTime;
+      const currentTimeMs = new Date(current.time || current.timestamp || current.processedTime).getTime();
 
-      for (let j = 0; j < validLogs.length; j++) {
-        const candidate = validLogs[j];
-        const candidateLat = candidate.latitude || candidate.snappedLatitude || (candidate.location?.coordinates && candidate.location.coordinates[1]) || 0;
-        const candidateLng = candidate.longitude || candidate.snappedLongitude || (candidate.location?.coordinates && candidate.location.coordinates[0]) || 0;
-        const candidateTime = candidate.time || candidate.timestamp || candidate.processedTime;
+      // Binary search for nearest time in validLogs
+      let closestAddress = null;
+      let minTimeDiff = Infinity;
 
-        const timeDiff = Math.abs(new Date(currentTime).getTime() - new Date(candidateTime).getTime());
+      if (validTimes.length > 0) {
+        // Binary search for insertion point
+        let lo = 0, hi = validTimes.length - 1;
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1;
+          if (validTimes[mid] < currentTimeMs) lo = mid + 1;
+          else hi = mid - 1;
+        }
 
-        // Spatial check: approximate degree difference (0.009 degrees is ~1km)
-        const latDiff = Math.abs(currentLat - candidateLat);
-        const lngDiff = Math.abs(currentLng - candidateLng);
-        const isNearby = latDiff < 0.009 && lngDiff < 0.009;
+        // Check neighbors around insertion point (lo and lo-1)
+        for (let k = Math.max(0, lo - 1); k <= Math.min(validTimes.length - 1, lo + 1); k++) {
+          const candidate = validLogs[k];
+          const candidateLat = candidate.latitude || candidate.snappedLatitude || (candidate.location?.coordinates && candidate.location.coordinates[1]) || 0;
+          const candidateLng = candidate.longitude || candidate.snappedLongitude || (candidate.location?.coordinates && candidate.location.coordinates[0]) || 0;
 
-        if (isNearby && timeDiff < 600000) { // 10 minutes
-          if (timeDiff < minTimeDiff) {
+          const timeDiff = Math.abs(currentTimeMs - validTimes[k]);
+          const latDiff = Math.abs(currentLat - candidateLat);
+          const lngDiff = Math.abs(currentLng - candidateLng);
+          const isNearby = latDiff < 0.009 && lngDiff < 0.009;
+
+          if (isNearby && timeDiff < 600000 && timeDiff < minTimeDiff) {
             minTimeDiff = timeDiff;
             closestAddress = candidate.address;
           }
@@ -106,12 +124,20 @@ const resolveMissingAddressesForSlice = (slice, allLogs) => {
     return typeof log.toObject === 'function' ? log.toObject() : { ...log };
   });
 
-  const validLogs = fullLogs.filter(candidate => {
-    return candidate.address &&
-      candidate.address !== 'Address not resolved' &&
-      candidate.address !== 'Live Tracking...' &&
-      candidate.address !== 'Address not found';
-  });
+  const validLogs = fullLogs
+    .filter(candidate => {
+      return candidate.address &&
+        candidate.address !== 'Address not resolved' &&
+        candidate.address !== 'Live Tracking...' &&
+        candidate.address !== 'Address not found';
+    })
+    .sort((a, b) => {
+      const ta = new Date(a.time || a.timestamp || a.processedTime).getTime();
+      const tb = new Date(b.time || b.timestamp || b.processedTime).getTime();
+      return ta - tb;
+    });
+
+  const validTimes = validLogs.map(l => new Date(l.time || l.timestamp || l.processedTime).getTime());
 
   for (let i = 0; i < resolvedSlice.length; i++) {
     const current = resolvedSlice[i];
@@ -121,26 +147,32 @@ const resolveMissingAddressesForSlice = (slice, allLogs) => {
       current.address === 'Address not found';
 
     if (isInvalid) {
-      let closestAddress = null;
-      let minTimeDiff = Infinity;
       const currentLat = current.latitude || current.snappedLatitude || (current.location?.coordinates && current.location.coordinates[1]) || 0;
       const currentLng = current.longitude || current.snappedLongitude || (current.location?.coordinates && current.location.coordinates[0]) || 0;
-      const currentTime = current.time || current.timestamp || current.processedTime;
+      const currentTimeMs = new Date(current.time || current.timestamp || current.processedTime).getTime();
 
-      for (let j = 0; j < validLogs.length; j++) {
-        const candidate = validLogs[j];
-        const candidateLat = candidate.latitude || candidate.snappedLatitude || (candidate.location?.coordinates && candidate.location.coordinates[1]) || 0;
-        const candidateLng = candidate.longitude || candidate.snappedLongitude || (candidate.location?.coordinates && candidate.location.coordinates[0]) || 0;
-        const candidateTime = candidate.time || candidate.timestamp || candidate.processedTime;
+      let closestAddress = null;
+      let minTimeDiff = Infinity;
 
-        const timeDiff = Math.abs(new Date(currentTime).getTime() - new Date(candidateTime).getTime());
+      if (validTimes.length > 0) {
+        let lo = 0, hi = validTimes.length - 1;
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1;
+          if (validTimes[mid] < currentTimeMs) lo = mid + 1;
+          else hi = mid - 1;
+        }
 
-        const latDiff = Math.abs(currentLat - candidateLat);
-        const lngDiff = Math.abs(currentLng - candidateLng);
-        const isNearby = latDiff < 0.009 && lngDiff < 0.009;
+        for (let k = Math.max(0, lo - 1); k <= Math.min(validTimes.length - 1, lo + 1); k++) {
+          const candidate = validLogs[k];
+          const candidateLat = candidate.latitude || candidate.snappedLatitude || (candidate.location?.coordinates && candidate.location.coordinates[1]) || 0;
+          const candidateLng = candidate.longitude || candidate.snappedLongitude || (candidate.location?.coordinates && candidate.location.coordinates[0]) || 0;
 
-        if (isNearby && timeDiff < 600000) {
-          if (timeDiff < minTimeDiff) {
+          const timeDiff = Math.abs(currentTimeMs - validTimes[k]);
+          const latDiff = Math.abs(currentLat - candidateLat);
+          const lngDiff = Math.abs(currentLng - candidateLng);
+          const isNearby = latDiff < 0.009 && lngDiff < 0.009;
+
+          if (isNearby && timeDiff < 600000 && timeDiff < minTimeDiff) {
             minTimeDiff = timeDiff;
             closestAddress = candidate.address;
           }
@@ -1300,492 +1332,301 @@ exports.getEmployeePersonalDetails = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 // GET /api/reports/track-details/:userId
 // ─────────────────────────────────────────────────────────────
-exports.getEmployeeTrackDetails = async (req, res) => {
-  try {
-    const { date, excludeLogs, onlyLogs, page, limit, search } = req.query;
-    const targetDate = date ? parseUTCDate(date) : todayUTC();
-    const projection = excludeLogs === 'true' ? { trackingLogs: 0 } : {};
-    const attendance = await Attendance.findOne({ user: req.params.userId, date: getSingleDateRangeQuery(targetDate) }, projection).populate({
-      path: 'user',
-      select: 'name department designation shift battery signalStatus mobile profileImage',
-      populate: { path: 'shift', select: 'name' }
-    });
-    const liveStatus = await LiveEmployeeStatus.findOne({ userId: req.params.userId });
-    if (!attendance) return res.json({ success: true, data: { exists: false, message: 'No tracking data' } });
+// Helper for unified track details calculation (#13 fix)
+const _getTrackDetailsInternal = async (userId, query, reqUser) => {
+  const { date, excludeLogs, onlyLogs, page, limit, search } = query;
+  const targetDate = date ? parseUTCDate(date) : todayUTC();
+  
+  // Find attendance for the date range
+  const attendance = await Attendance.findOne({ 
+    user: userId, 
+    date: getSingleDateRangeQuery(targetDate) 
+  }).populate({
+    path: 'user',
+    select: 'name department designation shift battery signalStatus mobile profileImage',
+    populate: { path: 'shift', select: 'name' }
+  });
 
-    if (onlyLogs === 'true') {
-      const pageNum = parseInt(page) || 1;
-      const limitNum = parseInt(limit) || 10;
-      const searchStr = (search || '').toLowerCase();
+  const liveStatus = await LiveEmployeeStatus.findOne({ userId });
+  if (!attendance) return { exists: false };
 
-      let logs = attendance.trackingLogs || [];
+  // Fetch RawTrackingPoints for high-fidelity path representation
+  const startOfDay = new Date(targetDate);
+  startOfDay.setUTCHours(0, 0, 0, 0);
+  const endOfDay = new Date(targetDate);
+  endOfDay.setUTCHours(23, 59, 59, 999);
 
-      // Sort logs reverse chronological (latest first)
-      logs = [...logs].reverse();
+  const rawPoints = await RawTrackingPoint.find({
+    userId,
+    timestamp: { $gte: startOfDay, $lte: endOfDay }
+  }).sort('timestamp');
 
-      // Apply 5-minute grouping
-      const grouped = [];
-      const minuteMap = new Set();
-      for (const log of logs) {
-        const time = new Date(log.time);
-        const minutes = time.getMinutes();
-        const roundedMinutes = Math.floor(minutes / 5) * 5;
-        const minuteKey = `${time.getFullYear()}-${time.getMonth()}-${time.getDate()} ${time.getHours()}:${roundedMinutes}`;
+  // Map rawPoints to the structure expected by logs
+  const allLogs = rawPoints.map(p => ({
+    time: p.timestamp,
+    latitude: p.snappedLatitude || p.rawLatitude || p.location.coordinates[1],
+    longitude: p.snappedLongitude || p.rawLongitude || p.location.coordinates[0],
+    address: p.address,
+    isSuspicious: p.status === 'suspicious',
+    isOffline: p.status === 'offline',
+    accuracy: p.accuracy,
+    speed: p.speed,
+    heading: p.heading,
+    distanceFromPrevious: 0,
+    totalDistanceTillNow: 0
+  }));
 
-        if (!minuteMap.has(minuteKey)) {
-          grouped.push(log);
-          minuteMap.add(minuteKey);
-        }
+  // Calculate distance accumulators for logs
+  const geoService = require('../services/geoTrackingService');
+  let accumulatedDistance = 0;
+  for (let i = 0; i < allLogs.length; i++) {
+    if (i > 0) {
+      const prev = allLogs[i - 1];
+      const curr = allLogs[i];
+      const dist = geoService.calculateDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+      allLogs[i].distanceFromPrevious = parseFloat((dist * 1000).toFixed(2));
+      accumulatedDistance += dist;
+    }
+    allLogs[i].totalDistanceTillNow = parseFloat(accumulatedDistance.toFixed(6));
+  }
+
+  if (onlyLogs === 'true') {
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 10;
+    const searchStr = (search || '').toLowerCase();
+
+    let logs = [...allLogs].reverse();
+
+    // Apply 5-minute grouping
+    const grouped = [];
+    const minuteMap = new Set();
+    for (const log of logs) {
+      const time = new Date(log.time);
+      const minutes = time.getMinutes();
+      const roundedMinutes = Math.floor(minutes / 5) * 5;
+      const minuteKey = `${time.getFullYear()}-${time.getMonth()}-${time.getDate()} ${time.getHours()}:${roundedMinutes}`;
+
+      if (!minuteMap.has(minuteKey)) {
+        grouped.push(log);
+        minuteMap.add(minuteKey);
       }
-
-      // Filter by search string
-      let filtered = grouped;
-      if (searchStr) {
-        // If searching, resolve addresses first to allow matching by resolved address
-        const resolvedGrouped = resolveMissingAddresses(grouped);
-        filtered = resolvedGrouped.filter(log =>
-          (log.address || '').toLowerCase().includes(searchStr)
-        );
-      }
-
-      const totalCount = filtered.length;
-      const startIndex = (pageNum - 1) * limitNum;
-      const endIndex = pageNum * limitNum;
-      const slice = filtered.slice(startIndex, endIndex);
-
-      // Resolve addresses only for the current paginated slice (huge speedup!)
-      const resolvedSlice = searchStr ? slice : resolveMissingAddressesForSlice(slice, logs);
-
-      return res.json({
-        success: true,
-        data: {
-          exists: true,
-          logs: resolvedSlice,
-          pagination: {
-            total: totalCount,
-            page: pageNum,
-            limit: limitNum,
-            pages: Math.ceil(totalCount / limitNum)
-          }
-        }
-      });
     }
 
-
-    // Fetch RawTrackingPoints for high-fidelity path representation
-    const startOfDay = new Date(targetDate);
-    startOfDay.setUTCHours(0, 0, 0, 0);
-    const endOfDay = new Date(targetDate);
-    endOfDay.setUTCHours(23, 59, 59, 999);
-
-    const rawPoints = await RawTrackingPoint.find({
-      userId: req.params.userId,
-      timestamp: { $gte: startOfDay, $lte: endOfDay }
-    }).sort('timestamp');
-
-    const speeds = rawPoints.map(p => p.speed || 0).filter(s => s > 0);
-    const avgSpeedMs = speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) / speeds.length : 0;
-    const maxSpeedMs = speeds.length > 0 ? Math.max(...speeds) : 0;
-    const avgSpeed = parseFloat((avgSpeedMs * 3.6).toFixed(1));
-    const maxSpeed = parseFloat((maxSpeedMs * 3.6).toFixed(1));
-
-    let stops = 0;
-    let idleStart = null;
-    for (const point of rawPoints) {
-      const speedKmh = (point.speed || 0) * 3.6;
-      if (speedKmh < 1) {
-        if (!idleStart) idleStart = new Date(point.timestamp);
-      } else {
-        if (idleStart) {
-          const idleDuration = (new Date(point.timestamp) - idleStart) / 60000;
-          if (idleDuration >= 2) stops++;
-          idleStart = null;
-        }
-      }
+    // Filter by search string
+    let filtered = grouped;
+    if (searchStr) {
+      const resolvedGrouped = resolveMissingAddresses(grouped);
+      filtered = resolvedGrouped.filter(log =>
+        (log.address || '').toLowerCase().includes(searchStr)
+      );
     }
-    const provider = rawPoints.find(p => p.provider && p.provider !== 'none')?.provider || 'none';
 
-    // No filtering: use all raw points as per user requirement
-    const cleanedPoints = rawPoints;
+    const totalCount = filtered.length;
+    const startIndex = (pageNum - 1) * limitNum;
+    const endIndex = pageNum * limitNum;
+    const slice = filtered.slice(startIndex, endIndex);
 
-    const rawPath = cleanedPoints.map(p => ({
-      latitude: p.rawLatitude || p.location.coordinates[1],
-      longitude: p.rawLongitude || p.location.coordinates[0],
-      rawLatitude: p.rawLatitude || p.location.coordinates[1],
-      rawLongitude: p.rawLongitude || p.location.coordinates[0],
-      snappedLatitude: p.snappedLatitude || null,
-      snappedLongitude: p.snappedLongitude || null,
+    const resolvedSlice = searchStr ? slice : resolveMissingAddressesForSlice(slice, allLogs);
+
+    return {
+      exists: true,
+      onlyLogs: true,
+      logs: resolvedSlice,
+      pagination: {
+        total: totalCount,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.ceil(totalCount / limitNum)
+      }
+    };
+  }
+
+  // Shared Stops/Speed calculation (#14 fix)
+  const enterpriseTracking = require('../services/enterpriseTrackingService');
+  const speedStats = enterpriseTracking.calculateStopsAndSpeed(rawPoints);
+  const avgSpeed = speedStats.avgSpeedKmh;
+  const maxSpeed = speedStats.maxSpeedKmh;
+  const stops = speedStats.stops;
+
+  const provider = rawPoints.find(p => p.provider && p.provider !== 'none')?.provider || 'none';
+
+  const rawPath = rawPoints.map(p => ({
+    latitude: p.rawLatitude || p.location.coordinates[1],
+    longitude: p.rawLongitude || p.location.coordinates[0],
+    rawLatitude: p.rawLatitude || p.location.coordinates[1],
+    rawLongitude: p.rawLongitude || p.location.coordinates[0],
+    snappedLatitude: p.snappedLatitude || null,
+    snappedLongitude: p.snappedLongitude || null,
+    timestamp: p.timestamp,
+    accuracy: p.accuracy,
+    speed: p.speed,
+    status: p.status,
+    routeStatus: p.routeStatus || 'raw',
+    provider: p.provider || 'none',
+    isMock: p.isMock,
+    address: p.address
+  }));
+
+  const snappedRoute = rawPoints
+    .map(p => ({
+      latitude: p.snappedLatitude || p.rawLatitude || p.location.coordinates[1],
+      longitude: p.snappedLongitude || p.rawLongitude || p.location.coordinates[0],
       timestamp: p.timestamp,
-      accuracy: p.accuracy,
-      speed: p.speed,
       status: p.status,
-      routeStatus: p.routeStatus || 'raw',
-      provider: p.provider || 'none',
-      isMock: p.isMock,
-      address: p.address
-    }));
+      speed: p.speed,
+      accuracy: p.accuracy
+    }))
+    .filter(p => p.latitude !== undefined && p.longitude !== undefined && p.latitude !== null && p.longitude !== null);
 
-    // Build separate snapped route using snapped coordinates
-    const snappedRoute = cleanedPoints
-      .map(p => ({
-        latitude: p.snappedLatitude || p.rawLatitude || p.location.coordinates[1],
-        longitude: p.snappedLongitude || p.rawLongitude || p.location.coordinates[0],
-        timestamp: p.timestamp,
-        status: p.status,
-        speed: p.speed,
-        accuracy: p.accuracy
-      }))
-      .filter(p => p.latitude !== undefined && p.longitude !== undefined && p.latitude !== null && p.longitude !== null);
-
-    const routeReconstructService = require('../services/routeReconstructionService');
-    let roadGeometry = [];
-    let reconstructionSuccess = true;
-    const pointsToReconstruct = rawPath.map(p => ({ latitude: p.latitude || p.lat, longitude: p.longitude || p.lng }));
-    if (pointsToReconstruct.length > 0) {
-      try {
-        const reconstruction = await routeReconstructService.reconstructRoute(pointsToReconstruct);
-        roadGeometry = reconstruction.geometry || [];
-        reconstructionSuccess = reconstruction.success;
-      } catch (reconErr) {
-        console.error('[Reports] Route reconstruction failed in track details:', reconErr.message);
-        roadGeometry = pointsToReconstruct.map(p => ({
-          latitude: p.latitude || p.lat,
-          longitude: p.longitude || p.lng
-        }));
-        reconstructionSuccess = true; // Still success even if reconstruct failed, use raw
-      }
-    }
-    // If roadGeometry is still empty, use pointsToReconstruct directly
-    if (roadGeometry.length === 0 && pointsToReconstruct.length > 0) {
+  const routeReconstructService = require('../services/routeReconstructionService');
+  let roadGeometry = [];
+  let reconstructionSuccess = true;
+  const pointsToReconstruct = rawPath.map(p => ({ latitude: p.latitude || p.lat, longitude: p.longitude || p.lng }));
+  if (pointsToReconstruct.length > 0) {
+    try {
+      const reconstruction = await routeReconstructService.reconstructRoute(pointsToReconstruct);
+      roadGeometry = reconstruction.geometry || [];
+      reconstructionSuccess = reconstruction.success;
+    } catch (reconErr) {
+      console.error('[Reports] Route reconstruction failed in track details internal:', reconErr.message);
       roadGeometry = pointsToReconstruct.map(p => ({
         latitude: p.latitude || p.lat,
         longitude: p.longitude || p.lng
       }));
+      reconstructionSuccess = true;
     }
+  }
+  if (roadGeometry.length === 0 && pointsToReconstruct.length > 0) {
+    roadGeometry = pointsToReconstruct.map(p => ({
+      latitude: p.latitude || p.lat,
+      longitude: p.longitude || p.lng
+    }));
+  }
 
-    // Fast lastKnownLocation: scan backwards without calling resolveMissingAddresses
-    let lastKnownLocation = null;
-    if (attendance.trackingLogs && attendance.trackingLogs.length > 0) {
-      const allLogs = attendance.trackingLogs;
-      const absoluteLastLog = allLogs[allLogs.length - 1];
-      const lastLogObj = typeof absoluteLastLog.toObject === 'function' ? absoluteLastLog.toObject() : { ...absoluteLastLog };
-
-      // Find last log with a valid address via simple reverse scan (O(N) worst case, usually O(1))
-      let addr = null;
-      if (lastLogObj.address && lastLogObj.address !== 'Live Tracking...' && lastLogObj.address !== 'Address not resolved' && lastLogObj.address !== 'Address not found') {
-        addr = lastLogObj.address;
-      } else {
-        for (let i = allLogs.length - 2; i >= 0; i--) {
-          const log = typeof allLogs[i].toObject === 'function' ? allLogs[i].toObject() : allLogs[i];
-          if (log.address && log.address !== 'Live Tracking...' && log.address !== 'Address not resolved' && log.address !== 'Address not found') {
-            addr = log.address;
-            break;
-          }
+  // Fast lastKnownLocation
+  let lastKnownLocation = null;
+  if (allLogs.length > 0) {
+    const absoluteLastLog = allLogs[allLogs.length - 1];
+    
+    let addr = null;
+    if (absoluteLastLog.address && absoluteLastLog.address !== 'Live Tracking...' && absoluteLastLog.address !== 'Address not resolved' && absoluteLastLog.address !== 'Address not found') {
+      addr = absoluteLastLog.address;
+    } else {
+      for (let i = allLogs.length - 2; i >= 0; i--) {
+        const log = allLogs[i];
+        if (log.address && log.address !== 'Live Tracking...' && log.address !== 'Address not resolved' && log.address !== 'Address not found') {
+          addr = log.address;
+          break;
         }
       }
-
-      if (!addr) {
-        addr = `Location near ${lastLogObj.latitude.toFixed(6)}, ${lastLogObj.longitude.toFixed(6)}`;
-      }
-
-      lastKnownLocation = {
-        time: lastLogObj.time,
-        latitude: lastLogObj.latitude,
-        longitude: lastLogObj.longitude,
-        address: addr,
-        speed: lastLogObj.speed,
-        accuracy: lastLogObj.accuracy
-      };
-    } else {
-      lastKnownLocation = attendance.punchIn?.location;
     }
 
-    let employeeOffice = null;
-    const mongoose = require('mongoose');
-    if (mongoose.connection.readyState === 1) {
-      try {
-        const Location = require('../models/Location');
-        const User = require('../models/User');
-        const userObj = await User.findById(req.params.userId).populate('workingPlace');
-        employeeOffice = userObj?.workingPlace || (await Location.findOne({ name: 'Office Main' }) || await Location.findOne());
-      } catch (dbErr) {
-        console.error('[Reports] Failed to fetch employee office details:', dbErr.message);
-      }
+    if (!addr) {
+      addr = `Location near ${absoluteLastLog.latitude.toFixed(6)}, ${absoluteLastLog.longitude.toFixed(6)}`;
     }
 
-    res.json({
+    lastKnownLocation = {
+      time: absoluteLastLog.time,
+      latitude: absoluteLastLog.latitude,
+      longitude: absoluteLastLog.longitude,
+      address: addr,
+      speed: absoluteLastLog.speed,
+      accuracy: absoluteLastLog.accuracy
+    };
+  } else {
+    lastKnownLocation = attendance.punchIn?.location;
+  }
+
+  let employeeOffice = null;
+  const mongoose = require('mongoose');
+  if (mongoose.connection.readyState === 1) {
+    try {
+      const Location = require('../models/Location');
+      const User = require('../models/User');
+      const userObj = await User.findById(userId).populate('workingPlace');
+      employeeOffice = userObj?.workingPlace || (await Location.findOne({ name: 'Office Main' }) || await Location.findOne());
+    } catch (dbErr) {
+      console.error('[Reports] Failed to fetch employee office details:', dbErr.message);
+    }
+  }
+
+  return {
+    exists: true,
+    onlyLogs: false,
+    employee: attendance.user,
+    office: employeeOffice,
+    summary: {
+      totalDistance: attendance.totalDistance || 0,
+      workingHours: statsService.calculateWorkingHours(attendance),
+      lastKnownLocation,
+      avgSpeed,
+      maxSpeed,
+      stops,
+      provider,
+      currentStatus: liveStatus?.currentStatus || 'offline',
+      signalQuality: liveStatus?.signalQuality || 'strong',
+      batteryLevel: liveStatus?.batteryLevel || null,
+      liveLocation: liveStatus?.lastLocation?.coordinates ? {
+        latitude: liveStatus.lastLocation.coordinates[1],
+        longitude: liveStatus.lastLocation.coordinates[0]
+      } : null
+    },
+    logs: excludeLogs === 'true' ? [] : resolveMissingAddresses(allLogs),
+    rawPath,
+    snappedRoute,
+    roadGeometry,
+    reconstructionSuccess,
+    punchIn: attendance.punchIn,
+    punchOut: attendance.punchOut
+  };
+};
+
+// GET /api/reports/track-details/:userId
+exports.getEmployeeTrackDetails = async (req, res) => {
+  try {
+    const result = await _getTrackDetailsInternal(req.params.userId, req.query, req.user);
+    if (!result.exists) {
+      return res.json({ success: true, data: { exists: false, message: 'No tracking data' } });
+    }
+    if (result.onlyLogs) {
+      return res.json({
+        success: true,
+        data: {
+          exists: true,
+          logs: result.logs,
+          pagination: result.pagination
+        }
+      });
+    }
+    return res.json({
       success: true,
-      data: {
-        exists: true,
-        employee: attendance.user,
-        office: employeeOffice,
-        summary: {
-          totalDistance: attendance.totalDistance || 0,
-          workingHours: statsService.calculateWorkingHours(attendance),
-          lastKnownLocation,
-          avgSpeed,
-          maxSpeed,
-          stops,
-          provider,
-          currentStatus: liveStatus?.currentStatus || 'offline',
-          signalQuality: liveStatus?.signalQuality || 'strong',
-          batteryLevel: liveStatus?.batteryLevel || null,
-          liveLocation: liveStatus?.lastLocation?.coordinates ? {
-            latitude: liveStatus.lastLocation.coordinates[1],
-            longitude: liveStatus.lastLocation.coordinates[0]
-          } : null
-        },
-        logs: excludeLogs === 'true' ? [] : resolveMissingAddresses(attendance.trackingLogs || []),
-        rawPath,
-        snappedRoute,
-        roadGeometry,
-        reconstructionSuccess,
-        punchIn: attendance.punchIn,
-        punchOut: attendance.punchOut
-      }
+      data: result
     });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
 };
 
-// ─────────────────────────────────────────────────────────────
 // GET /api/reports/track-details-me
-// ─────────────────────────────────────────────────────────────
 exports.getEmployeeTrackDetailsMe = async (req, res) => {
   try {
-    const { date, excludeLogs, onlyLogs, page, limit, search } = req.query;
-    const targetDate = date ? parseUTCDate(date) : todayUTC();
-    const projection = excludeLogs === 'true' ? { trackingLogs: 0 } : {};
-    const attendance = await Attendance.findOne({ user: req.user.id, date: getSingleDateRangeQuery(targetDate) }, projection);
-    const liveStatus = await LiveEmployeeStatus.findOne({ userId: req.user.id });
-    if (!attendance) return res.json({ success: true, data: { exists: false, message: 'No tracking data' } });
-
-    if (onlyLogs === 'true') {
-      const pageNum = parseInt(page) || 1;
-      const limitNum = parseInt(limit) || 10;
-      const searchStr = (search || '').toLowerCase();
-
-      let logs = attendance.trackingLogs || [];
-
-      // Sort logs reverse chronological
-      logs = [...logs].reverse();
-
-      // Apply 5-minute grouping
-      const grouped = [];
-      const minuteMap = new Set();
-      for (const log of logs) {
-        const time = new Date(log.time);
-        const minutes = time.getMinutes();
-        const roundedMinutes = Math.floor(minutes / 5) * 5;
-        const minuteKey = `${time.getFullYear()}-${time.getMonth()}-${time.getDate()} ${time.getHours()}:${roundedMinutes}`;
-
-        if (!minuteMap.has(minuteKey)) {
-          grouped.push(log);
-          minuteMap.add(minuteKey);
-        }
-      }
-
-      // Filter by search string
-      let filtered = grouped;
-      if (searchStr) {
-        const resolvedGrouped = resolveMissingAddresses(grouped);
-        filtered = resolvedGrouped.filter(log =>
-          (log.address || '').toLowerCase().includes(searchStr)
-        );
-      }
-
-      const totalCount = filtered.length;
-      const startIndex = (pageNum - 1) * limitNum;
-      const endIndex = pageNum * limitNum;
-      const slice = filtered.slice(startIndex, endIndex);
-
-      const resolvedSlice = searchStr ? slice : resolveMissingAddressesForSlice(slice, logs);
-
+    const result = await _getTrackDetailsInternal(req.user.id, req.query, req.user);
+    if (!result.exists) {
+      return res.json({ success: true, data: { exists: false, message: 'No tracking data' } });
+    }
+    if (result.onlyLogs) {
       return res.json({
         success: true,
         data: {
           exists: true,
-          logs: resolvedSlice,
-          pagination: {
-            total: totalCount,
-            page: pageNum,
-            limit: limitNum,
-            pages: Math.ceil(totalCount / limitNum)
-          }
+          logs: result.logs,
+          pagination: result.pagination
         }
       });
     }
-
-
-    const startOfDay = new Date(targetDate);
-    startOfDay.setUTCHours(0, 0, 0, 0);
-    const endOfDay = new Date(targetDate);
-    endOfDay.setUTCHours(23, 59, 59, 999);
-
-    const rawPoints = await RawTrackingPoint.find({
-      userId: req.user.id,
-      timestamp: { $gte: startOfDay, $lte: endOfDay }
-    }).sort('timestamp');
-
-    const speeds = rawPoints.map(p => p.speed || 0).filter(s => s > 0);
-    const avgSpeedMs = speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) / speeds.length : 0;
-    const maxSpeedMs = speeds.length > 0 ? Math.max(...speeds) : 0;
-    const avgSpeed = parseFloat((avgSpeedMs * 3.6).toFixed(1));
-    const maxSpeed = parseFloat((maxSpeedMs * 3.6).toFixed(1));
-
-    let stops = 0;
-    let idleStart = null;
-    for (const point of rawPoints) {
-      const speedKmh = (point.speed || 0) * 3.6;
-      if (speedKmh < 1) {
-        if (!idleStart) idleStart = new Date(point.timestamp);
-      } else {
-        if (idleStart) {
-          const idleDuration = (new Date(point.timestamp) - idleStart) / 60000;
-          if (idleDuration >= 2) stops++;
-          idleStart = null;
-        }
-      }
-    }
-    const provider = rawPoints.find(p => p.provider && p.provider !== 'none')?.provider || 'none';
-
-    // No filtering: use all raw points as per user requirement
-    const cleanedPoints = rawPoints;
-
-    const rawPath = cleanedPoints.map(p => ({
-      latitude: p.rawLatitude || p.location.coordinates[1],
-      longitude: p.rawLongitude || p.location.coordinates[0],
-      rawLatitude: p.rawLatitude || p.location.coordinates[1],
-      rawLongitude: p.rawLongitude || p.location.coordinates[0],
-      snappedLatitude: p.snappedLatitude || null,
-      snappedLongitude: p.snappedLongitude || null,
-      timestamp: p.timestamp,
-      accuracy: p.accuracy,
-      speed: p.speed,
-      status: p.status,
-      routeStatus: p.routeStatus || 'raw',
-      provider: p.provider || 'none',
-      isMock: p.isMock,
-      address: p.address
-    }));
-
-    const snappedRoute = cleanedPoints
-      .map(p => ({
-        latitude: p.snappedLatitude || p.rawLatitude || p.location.coordinates[1],
-        longitude: p.snappedLongitude || p.rawLongitude || p.location.coordinates[0],
-        timestamp: p.timestamp,
-        status: p.status,
-        speed: p.speed,
-        accuracy: p.accuracy
-      }))
-      .filter(p => p.latitude !== undefined && p.longitude !== undefined && p.latitude !== null && p.longitude !== null);
-
-    const routeReconstructService = require('../services/routeReconstructionService');
-    let roadGeometry = [];
-    let reconstructionSuccess = true;
-    const pointsToReconstruct = rawPath.map(p => ({ latitude: p.latitude || p.lat, longitude: p.longitude || p.lng }));
-    if (pointsToReconstruct.length > 0) {
-      try {
-        const reconstruction = await routeReconstructService.reconstructRoute(pointsToReconstruct);
-        roadGeometry = reconstruction.geometry || [];
-        reconstructionSuccess = reconstruction.success;
-      } catch (reconErr) {
-        console.error('[Reports] Route reconstruction failed in track details me:', reconErr.message);
-        roadGeometry = pointsToReconstruct.map(p => ({
-          latitude: p.latitude || p.lat,
-          longitude: p.longitude || p.lng
-        }));
-        reconstructionSuccess = true; // Still success even if reconstruct failed, use raw
-      }
-    }
-    // If roadGeometry is still empty, use pointsToReconstruct directly
-    if (roadGeometry.length === 0 && pointsToReconstruct.length > 0) {
-      roadGeometry = pointsToReconstruct.map(p => ({
-        latitude: p.latitude || p.lat,
-        longitude: p.longitude || p.lng
-      }));
-    }
-
-    // Fast lastKnownLocation: scan backwards without calling resolveMissingAddresses
-    let lastKnownLocation = null;
-    if (attendance.trackingLogs && attendance.trackingLogs.length > 0) {
-      const allLogs = attendance.trackingLogs;
-      const absoluteLastLog = allLogs[allLogs.length - 1];
-      const lastLogObj = typeof absoluteLastLog.toObject === 'function' ? absoluteLastLog.toObject() : { ...absoluteLastLog };
-
-      // Find last log with a valid address via simple reverse scan
-      let addr = null;
-      if (lastLogObj.address && lastLogObj.address !== 'Live Tracking...' && lastLogObj.address !== 'Address not resolved' && lastLogObj.address !== 'Address not found') {
-        addr = lastLogObj.address;
-      } else {
-        for (let i = allLogs.length - 2; i >= 0; i--) {
-          const log = typeof allLogs[i].toObject === 'function' ? allLogs[i].toObject() : allLogs[i];
-          if (log.address && log.address !== 'Live Tracking...' && log.address !== 'Address not resolved' && log.address !== 'Address not found') {
-            addr = log.address;
-            break;
-          }
-        }
-      }
-
-      if (!addr) {
-        addr = `Location near ${lastLogObj.latitude.toFixed(6)}, ${lastLogObj.longitude.toFixed(6)}`;
-      }
-
-      lastKnownLocation = {
-        time: lastLogObj.time,
-        latitude: lastLogObj.latitude,
-        longitude: lastLogObj.longitude,
-        address: addr,
-        speed: lastLogObj.speed,
-        accuracy: lastLogObj.accuracy
-      };
-    } else {
-      lastKnownLocation = attendance.punchIn?.location;
-    }
-
-    let employeeOffice = null;
-    const mongoose = require('mongoose');
-    if (mongoose.connection.readyState === 1) {
-      try {
-        const Location = require('../models/Location');
-        const User = require('../models/User');
-        const userObj = await User.findById(req.user.id).populate('workingPlace');
-        employeeOffice = userObj?.workingPlace || (await Location.findOne({ name: 'Office Main' }) || await Location.findOne());
-      } catch (dbErr) {
-        console.error('[Reports] Failed to fetch employee office details:', dbErr.message);
-      }
-    }
-
-    res.json({
+    return res.json({
       success: true,
-      data: {
-        exists: true,
-        office: employeeOffice,
-        summary: {
-          totalDistance: attendance.totalDistance || 0,
-          workingHours: statsService.calculateWorkingHours(attendance),
-          lastKnownLocation,
-          avgSpeed,
-          maxSpeed,
-          stops,
-          provider,
-          currentStatus: liveStatus?.currentStatus || 'offline',
-          signalQuality: liveStatus?.signalQuality || 'strong',
-          batteryLevel: liveStatus?.batteryLevel || null,
-          liveLocation: liveStatus?.lastLocation?.coordinates ? {
-            latitude: liveStatus.lastLocation.coordinates[1],
-            longitude: liveStatus.lastLocation.coordinates[0]
-          } : null
-        },
-        logs: excludeLogs === 'true' ? [] : resolveMissingAddresses(attendance.trackingLogs || []),
-        rawPath,
-        snappedRoute,
-        roadGeometry,
-        reconstructionSuccess,
-        punchIn: attendance.punchIn,
-        punchOut: attendance.punchOut
-      }
+      data: result
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -1917,3 +1758,7 @@ exports.getTripDetails = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// Export helper functions for testing purposes
+exports.resolveMissingAddresses = resolveMissingAddresses;
+exports.resolveMissingAddressesForSlice = resolveMissingAddressesForSlice;

@@ -174,77 +174,107 @@ async function fetchCandidatesWithGoogle(points) {
 }
 
 /**
- * Snap points using OSRM nearest service to get candidate roads
+ * Snap points using OSRM match service (BATCH API) to get candidate roads.
+ * FIX #6: Uses single /match request instead of per-point /nearest requests.
+ * This dramatically reduces network calls from N to 1.
  */
 async function fetchCandidatesWithOSRM(points) {
   try {
     const geoService = require('./geoTrackingService');
 
-    const promises = points.map(async (original) => {
-      const url = `https://router.project-osrm.org/nearest/v1/driving/${original.longitude},${original.latitude}`;
-      try {
-        const response = await axios.get(url, {
-          params: {
-            number: 5
-          },
-          timeout: 3000 // Increased timeout per point to 3 seconds
-        });
+    // Build batch coordinates: lng,lat;lng,lat;...
+    const coordsParam = points
+      .map(p => `${p.longitude},${p.latitude}`)
+      .join(';');
 
-        if (response.data && response.data.code === 'Ok' && response.data.waypoints) {
-          const waypoints = response.data.waypoints;
+    // Build timestamps for better matching accuracy
+    const timestamps = points
+      .map(p => Math.floor(new Date(p.timestamp || Date.now()).getTime() / 1000))
+      .join(';');
 
-          const candidateRoads = waypoints.map(w => {
-            const dist = geoService.calculateDistance(original.latitude, original.longitude, w.location[1], w.location[0]) * 1000;
-            return {
-              placeId: w.hint || `${w.location[0].toFixed(5)}_${w.location[1].toFixed(5)}`,
-              roadName: w.name || 'Unnamed Road',
-              heading: null, // heading will be validated against route history
-              distance: parseFloat(dist.toFixed(1)),
-              latitude: w.location[1],
-              longitude: w.location[0]
-            };
-          });
+    const response = await axios.get(`${OSRM_MATCH_API}/${coordsParam}`, {
+      params: {
+        timestamps: timestamps,
+        geometries: 'geojson',
+        overview: 'full',
+        radiuses: points.map(() => '50').join(';'),
+        annotations: 'true'
+      },
+      timeout: 8000 // Single batch request can take longer
+    });
 
-          candidateRoads.sort((a, b) => a.distance - b.distance);
+    if (response.data && response.data.code === 'Ok' && response.data.matchings) {
+      const tracepoints = response.data.tracepoints || [];
+      const allSnapped = [];
 
-          return {
+      for (let i = 0; i < points.length; i++) {
+        const original = points[i];
+        const tracepoint = tracepoints[i];
+
+        if (tracepoint && tracepoint.location) {
+          const dist = geoService.calculateDistance(
+            original.latitude, original.longitude,
+            tracepoint.location[1], tracepoint.location[0]
+          ) * 1000;
+
+          const candidateRoads = [{
+            placeId: tracepoint.hint || `${tracepoint.location[0].toFixed(5)}_${tracepoint.location[1].toFixed(5)}`,
+            roadName: tracepoint.name || 'Unnamed Road',
+            heading: null,
+            distance: parseFloat(dist.toFixed(1)),
+            latitude: tracepoint.location[1],
+            longitude: tracepoint.location[0]
+          }];
+
+          allSnapped.push({
             ...original,
             rawLatitude: original.latitude,
             rawLongitude: original.longitude,
-            candidateRoads: candidateRoads.slice(0, 5),
-            snappedLatitude: candidateRoads[0]?.latitude || null,
-            snappedLongitude: candidateRoads[0]?.longitude || null,
+            candidateRoads: candidateRoads.slice(0, 2), // Top 2 only (#10 fix)
+            snappedLatitude: tracepoint.location[1],
+            snappedLongitude: tracepoint.location[0],
             provider: 'osrm',
-            routeStatus: candidateRoads.length > 0 ? 'snapped' : 'raw'
-          };
+            routeStatus: 'snapped'
+          });
+        } else {
+          // Tracepoint null = point couldn't be matched
+          allSnapped.push({
+            ...original,
+            rawLatitude: original.latitude,
+            rawLongitude: original.longitude,
+            candidateRoads: [],
+            snappedLatitude: null,
+            snappedLongitude: null,
+            provider: 'osrm',
+            routeStatus: 'raw'
+          });
         }
-      } catch (err) {
-        // Individual point query failed, log it but continue
-        console.warn(`[RoadSnap] OSRM nearest failed for point (${original.latitude}, ${original.longitude}):`, err.message);
       }
 
-      // If snapping failed for this point, return raw
       return {
-        ...original,
-        rawLatitude: original.latitude,
-        rawLongitude: original.longitude,
+        snappedPoints: allSnapped,
+        provider: 'osrm',
+        success: allSnapped.some(p => p.routeStatus === 'snapped')
+      };
+    }
+
+    // No matchings returned — fallback to raw
+    return {
+      snappedPoints: points.map(p => ({
+        ...p,
+        rawLatitude: p.latitude,
+        rawLongitude: p.longitude,
         candidateRoads: [],
         snappedLatitude: null,
         snappedLongitude: null,
         provider: 'osrm',
         routeStatus: 'raw'
-      };
-    });
-
-    const allSnapped = await Promise.all(promises);
-    return {
-      snappedPoints: allSnapped,
+      })),
       provider: 'osrm',
-      success: true
+      success: false
     };
   } catch (err) {
-    console.error('[RoadSnap] OSRM candidates API error (batch):', err.message);
-    // Fallback to raw points for entire batch
+    console.error('[RoadSnap] OSRM batch match API error:', err.message);
     return {
       snappedPoints: points.map(p => ({
         ...p,
@@ -478,7 +508,8 @@ exports.calculateSnappedDistance = (points) => {
  * @returns {Object} { provider, rateLimited, available }
  */
 exports.getProviderStatus = () => {
-  const provider = process.env.ROAD_SNAP_PROVIDER || 'google';
+  // FIX #17: Default to 'osrm' to match snapToRoad() default
+  const provider = process.env.ROAD_SNAP_PROVIDER || 'osrm';
   return {
     provider,
     rateLimited: isRateLimited,

@@ -5,6 +5,7 @@
   "scripts": {
     "build": "npx expo export",
     "start": "expo start -c",
+    "dev": "expo start -c --go",
     "android": "expo start --android --no-dev",
     "ios": "expo start --ios --no-dev",
     "web": "expo start --web --no-dev"

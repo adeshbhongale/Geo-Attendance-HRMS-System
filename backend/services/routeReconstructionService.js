@@ -381,68 +381,8 @@ function calculateStraightLineDistance(coords) {
   return parseFloat(total.toFixed(6));
 }
 
-/**
- * Prunes U-turn loops from a route geometry
- * (i.e. detects sections that double-back on themselves and cuts them out)
- */
-function pruneUturnLoops(geometry) {
-  if (!geometry || geometry.length < 5) return geometry;
-
-  let result = [...geometry];
-  let changed = true;
-  let iterations = 0;
-
-  // Keep pruning until no more loops are found, safety cap at 5 iterations
-  while (changed && iterations < 5) {
-    changed = false;
-    iterations++;
-
-    // Calculate cumulative distance along the current geometry
-    const cumulativeDist = [0];
-    for (let i = 1; i < result.length; i++) {
-      const d = geoService.calculateDistance(
-        result[i - 1].latitude, result[i - 1].longitude,
-        result[i].latitude, result[i].longitude
-      ) * 1000; // in meters
-      cumulativeDist.push(cumulativeDist[cumulativeDist.length - 1] + d);
-    }
-
-    let bestI = -1;
-    let bestJ = -1;
-    let maxSavedDist = 0;
-
-    // Find the pair of points that are geographically close (< 20m)
-    // but far apart along the route (> 80m) to prune the loop
-    for (let i = 0; i < result.length; i++) {
-      for (let j = i + 2; j < result.length; j++) {
-        const pathDist = cumulativeDist[j] - cumulativeDist[i];
-        if (pathDist > 80) {
-          const geoDist = geoService.calculateDistance(
-            result[i].latitude, result[i].longitude,
-            result[j].latitude, result[j].longitude
-          ) * 1000; // in meters
-
-          if (geoDist < 20) {
-            const savedDist = pathDist - geoDist;
-            if (savedDist > maxSavedDist) {
-              maxSavedDist = savedDist;
-              bestI = i;
-              bestJ = j;
-            }
-          }
-        }
-      }
-    }
-
-    if (bestI !== -1 && bestJ !== -1) {
-      // Prune the points in between, keeping result[bestI] and result[bestJ]
-      result.splice(bestI + 1, bestJ - bestI - 1);
-      changed = true;
-    }
-  }
-
-  return result;
-}
+// NOTE: pruneUturnLoops() has been removed (2026-06-30, #16 fix).
+// It was dead code — never called at runtime.
 
 // Export decodePolyline for unit test access
 exports.decodePolyline = decodePolyline;

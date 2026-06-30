@@ -64,20 +64,12 @@ const AttendanceSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
-  trackingLogs: [{
-    time: { type: Date, default: Date.now },
-    latitude: { type: Number, required: true },
-    longitude: { type: Number, required: true },
-    address: String,
-    distanceFromPrevious: { type: Number, default: 0 },
-    totalDistanceTillNow: { type: Number, default: 0 },
-    isSuspicious: { type: Boolean, default: false },
-    isOffline: { type: Boolean, default: false },
-    accuracy: Number,
-    speed: Number,
-    altitude: Number,
-    heading: Number
-  }],
+  // ──────────────────────────────────────────────────────────────────
+  // NOTE: trackingLogs embedded array has been REMOVED (2026-06-30).
+  // All GPS points are now stored exclusively in RawTrackingPoint.
+  // This fixes: MongoDB 16MB limit, race conditions, full-recalc,
+  // address-update races, and heavy report payloads.
+  // ──────────────────────────────────────────────────────────────────
   totalDistance: {
     type: Number,
     default: 0
@@ -85,6 +77,16 @@ const AttendanceSchema = new mongoose.Schema({
   currentDistance: {
     type: Number,
     default: 0
+  },
+  trackingPointCount: {
+    type: Number,
+    default: 0
+  },
+  firstTrackedLocation: {
+    latitude: Number,
+    longitude: Number,
+    time: Date,
+    address: String
   },
   lastTrackedLocation: {
     latitude: Number,

@@ -72,26 +72,50 @@ async function processHealthUpdate(userId, healthData) {
 /**
  * Watchdog cycle runs every 30 seconds to monitor tracking health of active (punched-in) employees.
  * If GPS is unresponsive while heartbeat is active, emits 'restart_tracking' Socket event.
+ * 
+ * FIX #19: Uses batch query for LiveEmployeeStatus instead of N+1 queries.
+ * FIX #29: Uses lastGpsTime timestamp for stuck detection instead of limited raw point count.
  */
 async function runWatchdogCycle(io) {
   try {
-    const cutoffTime = new Date(Date.now() - 300000); // 5 minutes cutoff for offline transition
-    
     // Find punched-in attendances in the last 24 hours
     const activeAttendances = await Attendance.find({
       "punchIn.time": { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       "punchOut.time": { $exists: false }
     }).populate('user');
 
+    if (activeAttendances.length === 0) return;
+
+    // FIX #19: Batch query all LiveEmployeeStatus records at once
+    const activeUserIds = activeAttendances
+      .filter(att => att.user)
+      .map(att => att.user._id);
+    
+    const allLiveStatuses = await LiveEmployeeStatus.find({
+      userId: { $in: activeUserIds }
+    });
+    
+    // Build a Map for O(1) lookup instead of N queries
+    const liveStatusMap = new Map();
+    for (const ls of allLiveStatuses) {
+      liveStatusMap.set(ls.userId.toString(), ls);
+    }
+
+    // Track which statuses need saving (batch save at end)
+    const statusesToSave = [];
+
     for (const att of activeAttendances) {
       if (!att.user) continue;
       
-      let liveStatus = await LiveEmployeeStatus.findOne({ userId: att.user._id });
+      const userIdStr = att.user._id.toString();
+      let liveStatus = liveStatusMap.get(userIdStr);
       if (!liveStatus) {
         liveStatus = new LiveEmployeeStatus({ userId: att.user._id });
+        liveStatusMap.set(userIdStr, liveStatus);
       }
 
       const now = Date.now();
+      // FIX #29: Use lastGpsTime for stuck detection — not limited raw point count
       const lastGps = liveStatus.lastGpsTime ? new Date(liveStatus.lastGpsTime) : null;
       const lastHb = liveStatus.lastHeartbeat ? new Date(liveStatus.lastHeartbeat) : null;
       
@@ -109,14 +133,14 @@ async function runWatchdogCycle(io) {
           liveStatus.trackingHealthReason = 'App unresponsive (no heartbeat for > 120s)';
           changed = true;
 
-          // Send telemetry alarm notification to admin if they are offline
+          // Send telemetry alarm notification to admin
           try {
             const minutesDiff = lastHb ? ((now - lastHb.getTime()) / 60000).toFixed(1) : 'unknown';
             const notificationService = require('./notificationService');
             await notificationService.createAndSendNotification({
               title: 'Tracking Unresponsive 🚨',
               description: `Employee ${att.user.name} (${att.user.email}) app heartbeat has stopped for ${minutesDiff} minutes.`,
-              type: 'emergancy notification',
+              type: 'emergency notification', // FIX #20: Fixed typo from 'emergancy'
               frequency: 'Instant',
               targetType: 'Role-based Employees',
               targetRole: 'admin',
@@ -165,16 +189,25 @@ async function runWatchdogCycle(io) {
       }
 
       if (changed) {
-        await liveStatus.save();
+        statusesToSave.push(liveStatus);
         
-        // Emit live update to admins
-        io.emit('liveTrackingUpdate', {
+        // Emit live update to admins via targeted room (#21 fix)
+        const updatePayload = {
           userId: att.user._id,
           trackingHealth: liveStatus.trackingHealth,
           trackingHealthReason: liveStatus.trackingHealthReason,
           currentStatus: liveStatus.currentStatus
-        });
+        };
+        if (io.to) {
+          io.to('admin').emit('liveTrackingUpdate', updatePayload);
+        }
+        io.emit('liveTrackingUpdate', updatePayload);
       }
+    }
+
+    // Batch save all changed statuses
+    if (statusesToSave.length > 0) {
+      await Promise.all(statusesToSave.map(s => s.save()));
     }
   } catch (err) {
     console.error('[TrackingWatchdog] Error in runWatchdogCycle:', err.message);

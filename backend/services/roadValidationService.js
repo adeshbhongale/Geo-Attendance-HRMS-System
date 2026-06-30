@@ -537,7 +537,17 @@ function validateTransitions(batch, history = []) {
     let decisionReason = '';
     let transitionType = 'same_road';
 
-    if (!lastAccepted) {
+    if (!bestCandidate) {
+      finalAcceptedRoadId = lastAccepted ? lastAccepted.acceptedRoadId : 'initial';
+      finalAcceptedRoadName = lastAccepted ? lastAccepted.roadName : 'Unknown Road';
+      finalLat = curr.latitude;
+      finalLng = curr.longitude;
+      decisionReason = 'No candidate road matched; using raw coordinate';
+      transitionType = lastAccepted ? 'raw_fallback' : 'initial';
+
+      consensusRoadId = null;
+      consensusPointsQueue = [];
+    } else if (!lastAccepted) {
       // First point of session, initialize directly
       finalAcceptedRoadId = proposedRoadId || 'initial';
       finalAcceptedRoadName = proposedRoadName;
@@ -797,8 +807,8 @@ function validateTransitions(batch, history = []) {
           const timeOnNewRoadSec = (new Date(curr.timestamp) - firstQueuedTime) / 1000;
           const meetsTimeConsensus = (consensusPointsQueue.length >= 2 && timeOnNewRoadSec >= 8);
 
-          // Trigger switch only if we have achieved point-based or time-based consensus
-          if (consensusPointsQueue.length >= requiredPoints || meetsTimeConsensus) {
+          // Trigger switch only if we have achieved point-based or time-based consensus AND speed is >= 3 km/h (prevents drift snapping when stationary/walking)
+          if (currSpeedKmh >= 3 && (consensusPointsQueue.length >= requiredPoints || meetsTimeConsensus)) {
             const consensusReason = isTurnDetected
               ? 'Instant turn switch'
               : (meetsTimeConsensus ? `Time-based consensus achieved (${timeOnNewRoadSec.toFixed(1)}s)` : `Point-based consensus achieved (${consensusPointsQueue.length}/${requiredPoints})`);

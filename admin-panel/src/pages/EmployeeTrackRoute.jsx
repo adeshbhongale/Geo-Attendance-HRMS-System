@@ -140,11 +140,20 @@ const EmployeeTrackRoute = () => {
             status: payload.isSuspicious ? 'suspicious' : 'valid'
           };
 
+          const nextLogs = prev.logs ? [...prev.logs, newLog] : [newLog];
+          const nextRawPath = prev.rawPath ? [...prev.rawPath, newRawPoint] : [newRawPoint];
+          const nextRoadGeometry = prev.roadGeometry ? [...prev.roadGeometry, newRoadPoint] : [newRoadPoint];
+
+          // Cap arrays at 5000 entries to prevent browser memory leak (#9 fix)
+          if (nextLogs.length > 5000) nextLogs.shift();
+          if (nextRawPath.length > 5000) nextRawPath.shift();
+          if (nextRoadGeometry.length > 5000) nextRoadGeometry.shift();
+
           return {
             ...prev,
-            logs: [...prev.logs, newLog],
-            rawPath: prev.rawPath ? [...prev.rawPath, newRawPoint] : [newRawPoint],
-            roadGeometry: prev.roadGeometry ? [...prev.roadGeometry, newRoadPoint] : [newRoadPoint],
+            logs: nextLogs,
+            rawPath: nextRawPath,
+            roadGeometry: nextRoadGeometry,
             summary: {
               ...prev.summary,
               totalDistance: payload.totalDistance,
@@ -165,7 +174,7 @@ const EmployeeTrackRoute = () => {
     };
 
     const handleLiveUpdate = (payload) => {
-      // payload: { userId, latitude, longitude, speed, distance, status, path, provider }
+      // payload: { userId, latitude, longitude, speed, distance, status, path, provider, isCrossDayTransition }
       if (payload.userId === userId) {
         if (!payload.path || !Array.isArray(payload.path)) {
           // Update stats only if path is missing (e.g. tracking health updates)
@@ -229,11 +238,25 @@ const EmployeeTrackRoute = () => {
             status: p.status
           }));
 
+          // If cross-day transition, start fresh! (Reset arrays to avoid drawing straight lines to yesterday)
+          const logsBase = payload.isCrossDayTransition ? [] : (prev.logs || []);
+          const rawPathBase = payload.isCrossDayTransition ? [] : (prev.rawPath || []);
+          const roadGeometryBase = payload.isCrossDayTransition ? [] : (prev.roadGeometry || []);
+
+          const nextLogs = [...logsBase, ...newLogs];
+          const nextRawPath = [...rawPathBase, ...newRawPoints];
+          const nextRoadGeometry = [...roadGeometryBase, ...newRoadGeometry];
+
+          // Cap arrays at 5000 entries to prevent browser memory leak (#9 fix)
+          if (nextLogs.length > 5000) nextLogs.splice(0, nextLogs.length - 5000);
+          if (nextRawPath.length > 5000) nextRawPath.splice(0, nextRawPath.length - 5000);
+          if (nextRoadGeometry.length > 5000) nextRoadGeometry.splice(0, nextRoadGeometry.length - 5000);
+
           return {
             ...prev,
-            logs: [...prev.logs, ...newLogs],
-            rawPath: prev.rawPath ? [...prev.rawPath, ...newRawPoints] : newRawPoints,
-            roadGeometry: prev.roadGeometry ? [...prev.roadGeometry, ...newRoadGeometry] : newRoadGeometry,
+            logs: nextLogs,
+            rawPath: nextRawPath,
+            roadGeometry: nextRoadGeometry,
             summary: {
               ...prev.summary,
               totalDistance: payload.distance !== undefined ? payload.distance : prev.summary?.totalDistance,
@@ -507,7 +530,61 @@ const EmployeeTrackRoute = () => {
   const updateLayers = () => {
     if (!leafletMap.current || !window.L) return;
 
-    const rawLatLngs = path.map(p => [p.rawLatitude || p.lat, p.rawLongitude || p.lng]);
+    // Build raw segments by detecting large time gaps (> 2 hours) to avoid straight lines
+    const rawSegments = [];
+    const flatRawLatLngs = [];
+    let currentRawSegment = [];
+    
+    for (let i = 0; i < path.length; i++) {
+      const p = path[i];
+      const lat = p.rawLatitude || p.lat;
+      const lng = p.rawLongitude || p.lng;
+      const pt = [lat, lng];
+      
+      if (i > 0) {
+        const prev = path[i - 1];
+        const prevTime = new Date(prev.timestamp || prev.time).getTime();
+        const currTime = new Date(p.timestamp || p.time).getTime();
+        if (Math.abs(currTime - prevTime) > 2 * 60 * 60 * 1000) { // 2 hours gap
+          if (currentRawSegment.length > 0) {
+            rawSegments.push(currentRawSegment);
+            currentRawSegment = [];
+          }
+        }
+      }
+      currentRawSegment.push(pt);
+      flatRawLatLngs.push(pt);
+    }
+    if (currentRawSegment.length > 0) {
+      rawSegments.push(currentRawSegment);
+    }
+
+    // Build snapped segments by detecting large time gaps (> 2 hours)
+    const snappedSegments = [];
+    const flatSnappedLatLngs = [];
+    let currentSnappedSegment = [];
+
+    for (let i = 0; i < simulationPath.length; i++) {
+      const p = simulationPath[i];
+      const pt = [p.lat, p.lng];
+
+      if (i > 0) {
+        const prev = simulationPath[i - 1];
+        const prevTime = new Date(prev.timestamp || prev.time).getTime();
+        const currTime = new Date(p.timestamp || p.time).getTime();
+        if (Math.abs(currTime - prevTime) > 2 * 60 * 60 * 1000) { // 2 hours gap
+          if (currentSnappedSegment.length > 0) {
+            snappedSegments.push(currentSnappedSegment);
+            currentSnappedSegment = [];
+          }
+        }
+      }
+      currentSnappedSegment.push(pt);
+      flatSnappedLatLngs.push(pt);
+    }
+    if (currentSnappedSegment.length > 0) {
+      snappedSegments.push(currentSnappedSegment);
+    }
 
     if (polylineRef.current) polylineRef.current.remove();
     if (rawPolylineRef.current) rawPolylineRef.current.remove();
@@ -550,9 +627,8 @@ const EmployeeTrackRoute = () => {
     }
 
     // 1. Draw Raw GPS Route (thin orange dashed line)
-    const totalDistKm = data?.summary?.totalDistance || 0;
-    if (showRaw && rawLatLngs.length >= 1) {
-      rawPolylineRef.current = window.L.polyline(rawLatLngs, {
+    if (showRaw && rawSegments.length >= 1) {
+      rawPolylineRef.current = window.L.polyline(rawSegments, {
         color: '#f97316',
         weight: 3,
         opacity: 0.7,
@@ -560,12 +636,9 @@ const EmployeeTrackRoute = () => {
       }).addTo(leafletMap.current);
     }
 
-    // 2. Draw Snapped Route (thick indigo line) - Fail-safe snapped route drawing
-    const snappedLatLngs = simulationPath
-      .map(p => [p.lat, p.lng]);
-
-    if (showSnapped && snappedLatLngs.length >= 1) {
-      polylineRef.current = window.L.polyline(snappedLatLngs, {
+    // 2. Draw Snapped Route (thick indigo line)
+    if (showSnapped && snappedSegments.length >= 1) {
+      polylineRef.current = window.L.polyline(snappedSegments, {
         color: '#4f46e5',
         weight: 5,
         opacity: 0.9
@@ -620,12 +693,10 @@ const EmployeeTrackRoute = () => {
       const endPoint = simulationPath[simulationPath.length - 1];
       const endCoords = [endPoint.lat, endPoint.lng];
 
-      // Draw Last Location Marker (Orange) at the end of the route path
       endMarkerRef.current = window.L.marker(endCoords, { icon: orangeIcon })
         .addTo(leafletMap.current)
         .bindPopup(`<b>LAST RECORDED ROUTE LOCATION</b><br/>Time: ${new Date(endPoint.timestamp).toLocaleTimeString()}<br/>Address: ${endPoint.address || 'Address not resolved'}`);
 
-      // Draw Current Live Location Marker (Green Pulse) at summary liveLocation or lastKnownLocation
       const liveLoc = getLiveLocation();
       if (liveLoc) {
         window.currentLocationMarker = window.L.marker(liveLoc, { icon: liveIcon })
@@ -633,7 +704,7 @@ const EmployeeTrackRoute = () => {
           .bindPopup(`<b>EMPLOYEE CURRENT LOCATION (LIVE)</b><br/>Time: ${new Date(data?.summary?.lastKnownLocation?.time || data?.summary?.lastKnownLocation?.timestamp || Date.now()).toLocaleTimeString()}<br/>Address: ${data?.summary?.lastKnownLocation?.address || 'Live Tracking...'}`);
       }
 
-      const boundsLatLngs = showRaw ? rawLatLngs : (showSnapped ? snappedLatLngs : []);
+      const boundsLatLngs = showRaw ? flatRawLatLngs : (showSnapped ? flatSnappedLatLngs : []);
       if (boundsLatLngs.length > 0 && !hasFittedBounds.current) {
         const bounds = window.L.latLngBounds(boundsLatLngs);
         leafletMap.current.fitBounds(bounds, { padding: [50, 50] });
